@@ -1,5 +1,8 @@
 name: Deploy to GitHub Pages
 
+# StructuralSketcher es un único index.html autocontenido (sin build, sin
+# dependencias): este workflow solo lo publica tal cual en Pages.
+
 on:
   push:
     branches: [main]
@@ -19,20 +22,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - name: Check inline script syntax
+        run: |
+          sed -n '/<script>/,/<\/script>/p' index.html | sed '1d;$d' > /tmp/inline.js
+          node --check /tmp/inline.js
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
       - uses: actions/configure-pages@v5
         with:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: _site
 
   deploy:
     needs: build

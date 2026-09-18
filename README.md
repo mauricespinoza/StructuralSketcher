@@ -1,68 +1,55 @@
-# StructuralSketcher — Balance & Kinematics
+# StructuralSketcher
 
-Editor vectorial técnico para geología estructural: digitalización de secciones
-geológicas, capas bloqueables, medición, corte de líneas contra fallas y
-balance por unidad geológica (estilo *Section Analysis* de MOVE). Responsive
-para PC, iPad y iPhone (mouse, teclado y touch con pinch-zoom).
+Vector editor for structural geology cross-sections: digitize horizons,
+faults, contacts and dip data over an imported image or from scratch, then
+measure, split, extend, transform and export the section.
 
-**App en línea:** https://mauricespinoza.github.io/StructuralSketcher/
+**Live app:** https://mauricespinoza.github.io/StructuralSketcher/
 
-## Uso local
+## Running it
+
+Single self-contained `index.html` — no build step, no dependencies, no
+network access of any kind. Open it directly from disk (double-click) or
+serve it with any static file server:
 
 ```bash
-npm install
-npm run dev        # http://localhost:5173
-npm run test       # tests de geometría y balance (Vitest)
-npm run typecheck  # tsc --noEmit
-npm run build      # build de producción (dist/)
+python3 -m http.server 8080   # then open http://localhost:8080
 ```
 
-## Estado — Fase 1 (MVP)
+## Interface
 
-- ✅ Lienzo SVG con grilla adaptativa 1-2-5, barra de escala y zoom
-  (rueda / pinch dos dedos) + paneo (dos dedos, botón central,
-  espacio+arrastre o herramienta Mover).
-- ✅ Capas Referencia / Interpretación / Fallas con visibilidad y bloqueo.
-- ✅ Herramientas: Selección (recolorear, falla activa), Horizonte,
-  Falla inversa (dientes) / normal (tics), Regla (Σ longitud, ángulo en vivo,
-  bisectriz auxiliar materializable), Corte (por punto / trazo / intersección).
-- ✅ Snapping vértice > segmento con indicador e interruptor.
-- ✅ Generador layer-cake e importación de imagen de fondo con opacidad.
-- ✅ Análisis: balance por unidad (longitudes, espesor medio, cortes
-  horizonte–falla deduplicados por ubicación).
-- ✅ Persistencia: autosave en localStorage, export/import JSON,
-  export SVG y PNG.
-- 🚧 **Fase 2 (pendiente)**: modelado cinemático forward — fault-bend fold
-  (Suppe 1983), fault-propagation fold (Suppe & Medwedeff 1990), detachment,
-  trishear (Erslev 1991, con P/S y ángulo) y simple shear; clasificación de
-  hangingwall por buzamiento; slip −800…+800 m; flechas de movimiento
-  opuesto. El panel Cinemática ya expone la UI como placeholder.
+Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
 
-## Atajos
+- **Header** — new/open/save/save as, image import, section setup, undo/redo,
+  SVG/PNG export, and toggles for the tool rail, side panels, fullscreen and
+  settings.
+- **Second bar** — vertical exaggeration, zoom, zoom-to-extent, and
+  visibility toggles for the grid, labels, frame and scale bars.
+- **Tool rail** (left, resizable, collapsible) — grouped by task: Navigate
+  (pan, select, lasso), Draw (digitize horizons/faults/contacts/topography/
+  axial traces/sketches, with snapping), Edit (split, extend, free transform,
+  duplicate, simplify, Bézier smoothing), Dip data, Kink method (fault-bend
+  style construction from dip readings), and Measure & scale (ruler, fault
+  throw, two-axis calibration).
+- **Canvas** — the section itself; floating Finish/Cancel buttons appear on
+  touch devices in place of right-click/Esc.
+- **Side panels** (right, collapsible) — Units, Images & scale, Properties
+  of the current selection, and a Line-Length table.
+- **Footer** — live readouts: cursor position, elevation, scale status,
+  measurement, angle, tool hint and last action.
 
-| Acción | PC | Touch |
-|---|---|---|
-| Añadir vértice | clic | tap |
-| Cerrar polilínea | Enter · doble clic · clic derecho · clic fuera | doble tap · tap fuera |
-| Cancelar | Esc | — |
-| Zoom | rueda | pinch |
-| Paneo | botón central · espacio+arrastre · herramienta Mover | dos dedos |
-| Borrar selección | Supr | botón ✕ en panel Capas |
-| Deshacer / rehacer | Ctrl+Z / Ctrl+Y | botones ↶ ↷ |
+On touch devices (or a mouse+touchscreen hybrid), controls grow to
+44px-class tap targets automatically; below ~1250px wide the header
+collapses to icon-only buttons so it still fits in one row.
 
-## Arquitectura
+## Data
 
-- Vite + React 18 + TypeScript + Zustand.
-- `src/geometry/` — funciones puras testeadas (longitud, ángulo, bisectriz,
-  intersección, punto más cercano, splits, snap).
-- `src/analysis/balance.ts` — balance por unidad geológica.
-- `src/canvas/` — lienzo SVG (viewBox = vista; coordenadas de mundo en metros;
-  trazos con `vector-effect: non-scaling-stroke`).
-- `src/tools/actions.ts` — dispatcher de herramientas sobre los stores.
-- `src/persistence/` — autosave, JSON, exportadores SVG/PNG.
+Projects save as `.sketch.json` (Save / Save as…, Ctrl+S / Ctrl+Shift+S);
+`Open` loads one back. Dip data exports to CSV. The section exports as a
+vector SVG or a PNG image of the current view.
 
-## Despliegue
+## Deployment
 
-Cada push a `main` dispara `.github/workflows/deploy.yml`: corre typecheck +
-tests, construye con Vite (`base: /StructuralSketcher/`) y publica `dist/`
-en GitHub Pages.
+Every push to `main` runs `.github/workflows/deploy.yml`, which checks the
+inline script's syntax and publishes `index.html` to GitHub Pages — no
+build step involved.
