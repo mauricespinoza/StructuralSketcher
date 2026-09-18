@@ -2875,18 +2875,122 @@ SW.kink = (function () {
     if (this.axis_dip > 90) this.axis_dip = 180 - this.axis_dip;
   }
 
-  KinkAxis.prototype.intersectRay = function (origin, dipDeg, direction) {
+  /* Punto donde el RAYO (origin, dipDeg, direction) corta la RECTA
+   * (anchor, dir) — misma fórmula que KinkAxis.prototype.intersectRay,
+   * factorizada aparte porque buildAxisNetwork/resolveAxisHit la aplican
+   * también sobre nodos fundidos que no son instancias de KinkAxis. */
+  function intersectLineRay(anchor, dir, origin, dipDeg, direction) {
     const a = dipDeg * DEG;
     const rs = direction * Math.cos(a);
     const rz = -direction * Math.sin(a);
-    const axs = this.direction[0], axz = this.direction[1];
+    const axs = dir[0], axz = dir[1];
     const denom = rs * axz - rz * axs;
     if (Math.abs(denom) < EPS) return null;
-    const dx = this.anchor[0] - origin[0];
-    const dz = this.anchor[1] - origin[1];
+    const dx = anchor[0] - origin[0];
+    const dz = anchor[1] - origin[1];
     const t = (dx * axz - dz * axs) / denom;
     return [origin[0] + t * rs, origin[1] + t * rz];
+  }
+
+  KinkAxis.prototype.intersectRay = function (origin, dipDeg, direction) {
+    return intersectLineRay(this.anchor, this.direction, origin, dipDeg, direction);
   };
+
+  /* Bisectriz de dos DIRECCIONES de traza axial ya construidas (no de dos
+   * buzamientos): la generalización de axialDir para cuando el "dato" que
+   * se bisecta ya no es la normal a un plano de estratificación sino otra
+   * traza axial — ver buildAxisNetwork. */
+  function bisectDirections(d1, d2) {
+    let ds = d1[0] + d2[0], dz = d1[1] + d2[1];
+    let norm = Math.hypot(ds, dz);
+    if (norm < EPS) {
+      // direcciones opuestas (limbos que se cierran del todo): la
+      // bisectriz es la perpendicular a cualquiera de las dos
+      ds = -d1[1]; dz = d1[0];
+      norm = Math.hypot(ds, dz);
+      if (norm < EPS) return [0, 1];
+    }
+    ds /= norm; dz /= norm;
+    if (dz < 0) { ds = -ds; dz = -dz; }
+    return [ds, dz];
+  }
+
+  /* Acuñamiento de dominios: más allá de los datos, dos trazas axiales
+   * VECINAS (ejes i, i+1) pueden cruzarse hacia el techo o hacia la base —
+   * ahí el dominio que separaban (el panel entre ambas) se cierra a
+   * espesor cero, y de ahí en más el límite entre los dos dominios que
+   * quedan a los lados sigue como la BISECTRIZ DE ESAS DOS TRAZAS (no como
+   * si se recalculara de nuevo a partir de sus buzamientos: son los ejes
+   * mismos, no los datos, los que se bisectan). El dominio cerrado
+   * desaparece de la sección de ahí en adelante.
+   *
+   * Se resuelve por niveles igual que consolidateDomains funde dominios:
+   * mientras haya un cruce pendiente, se funde el primer par vecino que lo
+   * tenga y se reintenta contra el resultado, así un tren de paneles
+   * delgados cierra en cascada tanto hacia arriba como hacia abajo. Cada
+   * eje crudo queda con upParent/downParent: el eje fundido (o, si ese a
+   * su vez se fundió con otro, el siguiente de la cadena) que lo reemplaza
+   * más allá de upBound/downBound — resolveAxisHit sube por esa cadena
+   * cuando el rayo cruzaría el eje crudo fuera de su tramo válido. */
+  function buildAxisNetwork(axes) {
+    function pass(signZ, boundKey, parentKey) {
+      const initial = axes.map(function (ax) {
+        return { left: ax.left, right: ax.right, anchor: ax.anchor,
+                 direction: ax.direction,
+                 bound: signZ > 0 ? Infinity : -Infinity,
+                 parent: null, ref: ax };
+      });
+      const nodes = initial.slice();
+      let changed = true;
+      while (changed && nodes.length > 1) {
+        changed = false;
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const a = nodes[i], b = nodes[i + 1];
+          const cross = lineIntersect(a.anchor, a.direction, b.anchor, b.direction);
+          if (!cross) continue;
+          const beyondA = signZ > 0 ? cross[1] > a.anchor[1] + EPS
+                                    : cross[1] < a.anchor[1] - EPS;
+          const beyondB = signZ > 0 ? cross[1] > b.anchor[1] + EPS
+                                    : cross[1] < b.anchor[1] - EPS;
+          if (!beyondA || !beyondB) continue;
+          a.bound = cross[1]; b.bound = cross[1];
+          const merged = { left: a.left, right: b.right, anchor: cross,
+                            direction: bisectDirections(a.direction, b.direction),
+                            bound: signZ > 0 ? Infinity : -Infinity, parent: null };
+          a.parent = merged; b.parent = merged;
+          nodes.splice(i, 2, merged);
+          changed = true;
+          break;
+        }
+      }
+      for (const w of initial) { w.ref[boundKey] = w.bound; w.ref[parentKey] = w.parent; }
+    }
+    pass(+1, "upBound", "upParent");
+    pass(-1, "downBound", "downParent");
+    return axes;
+  }
+
+  /* Golpe del rayo (origin=pos, dipDeg, direction) contra el eje `axis`,
+   * subiendo por su cadena de acuñamiento (ver buildAxisNetwork) cuando el
+   * golpe con la traza cruda cae más allá de donde sigue siendo válida.
+   * Devuelve el punto y el rango [left,right) de dominios que el eje
+   * resuelto realmente separa (> 1 dominio de ancho si absorbió paneles
+   * acuñados), o null si el rayo no cruza ninguna traza de la cadena. */
+  function resolveAxisHit(axis, pos, dipDeg, direction) {
+    const raw = intersectLineRay(axis.anchor, axis.direction, pos, dipDeg, direction);
+    if (raw === null) return null;
+    const above = raw[1] > axis.anchor[1];
+    let bound = above ? axis.upBound : axis.downBound;
+    let parent = above ? axis.upParent : axis.downParent;
+    let left = axis.left, right = axis.right, hit = raw;
+    while (parent && (above ? hit[1] > bound + EPS : hit[1] < bound - EPS)) {
+      hit = intersectLineRay(parent.anchor, parent.direction, pos, dipDeg, direction);
+      if (hit === null) return null;
+      left = parent.left; right = parent.right;
+      bound = parent.bound; parent = parent.parent;
+    }
+    return { point: hit, left: left, right: right };
+  }
 
   /* tadpoles: [[s, z, apparent_dip], ...] ordenables por s. */
   function groupDomains(tadpoles, tolDeg) {
@@ -3070,9 +3174,13 @@ SW.kink = (function () {
       // mano: dato → ortogonal → charnela → bisectriz
       axes[i].aux_points = [pLeft.slice(), pRight.slice()];
       axes[i].hinge = hinge ? hinge.slice() : null;
+      axes[i].left = i;
+      axes[i].right = i + 1;
       prevAnchor = anchor;
     }
-    return axes;
+    // acuñamiento: encadena, en cada eje, la traza fundida que lo reemplaza
+    // más allá del punto donde se cruza con su vecino — ver buildAxisNetwork
+    return buildAxisNetwork(axes);
   }
 
   /* Lado con signo de `point` respecto a la RECTA del eje (>0 = derecha):
@@ -3092,18 +3200,19 @@ SW.kink = (function () {
       const pts = [];
       let pos = seed;
       let idx = seedIdx;
-      const axisIdx = [];
-      if (direction > 0)
-        for (let ai = seedIdx; ai < axes.length; ai++) axisIdx.push(ai);
-      else
-        for (let ai = seedIdx - 1; ai >= 0; ai--) axisIdx.push(ai);
-      for (const ai of axisIdx) {
-        const hit = axes[ai].intersectRay(pos, domains[idx].dip, direction);
-        if (hit === null) break;
+      // el índice de eje avanza según cuántos dominios haya absorbido el
+      // tramo fundido que de verdad se cruzó (resolveAxisHit), no siempre
+      // de a uno: un panel acuñado se salta entero
+      let ai = direction > 0 ? seedIdx : seedIdx - 1;
+      while (ai >= 0 && ai < axes.length) {
+        const resolved = resolveAxisHit(axes[ai], pos, domains[idx].dip, direction);
+        if (resolved === null) break;
+        const hit = resolved.point;
         if ((hit[0] - pos[0]) * direction <= EPS) break;
         pts.push(hit);
         pos = hit;
-        idx = direction > 0 ? ai + 1 : ai;
+        idx = direction > 0 ? resolved.right : resolved.left;
+        ai = direction > 0 ? resolved.right : resolved.left - 1;
       }
       const a = domains[idx].dip * DEG;
       const targetS = direction > 0 ? sMax : sMin;
@@ -3130,6 +3239,7 @@ SW.kink = (function () {
   return {
     groupDomains, kinkAxes, traceHorizon, constructHorizon,
     beddingDir, normalDir, axialDir, lineIntersect, crossSegment, sideOfAxis,
+    bisectDirections, resolveAxisHit,
   };
 })();
 
