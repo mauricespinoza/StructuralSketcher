@@ -2931,8 +2931,15 @@ SW.kink = (function () {
    * eje crudo queda con upParent/downParent: el eje fundido (o, si ese a
    * su vez se fundió con otro, el siguiente de la cadena) que lo reemplaza
    * más allá de upBound/downBound — resolveAxisHit sube por esa cadena
-   * cuando el rayo cruzaría el eje crudo fuera de su tramo válido. */
-  function buildAxisNetwork(axes) {
+   * cuando el rayo cruzaría el eje crudo fuera de su tramo válido.
+   *
+   * Cuando tres o más ejes convergen casi al mismo punto puede haber más
+   * de un par vecino listo para fundirse a la vez — cuál se funde primero
+   * cambia la charnela final (aunque no cuál dominio queda acuñado), así
+   * que ahí es donde de verdad importa `ltr`: escanea desde el extremo
+   * elegido hacia el otro, igual que a mano se construye eje por eje desde
+   * un lado y se deja el resto para cuando el anterior ya está resuelto. */
+  function buildAxisNetwork(axes, ltr) {
     function pass(signZ, boundKey, parentKey) {
       const initial = axes.map(function (ax) {
         return { left: ax.left, right: ax.right, anchor: ax.anchor,
@@ -2944,7 +2951,9 @@ SW.kink = (function () {
       let changed = true;
       while (changed && nodes.length > 1) {
         changed = false;
-        for (let i = 0; i < nodes.length - 1; i++) {
+        const start = ltr ? 0 : nodes.length - 2;
+        const step = ltr ? 1 : -1;
+        for (let i = start; i >= 0 && i <= nodes.length - 2; i += step) {
           const a = nodes[i], b = nodes[i + 1];
           const cross = lineIntersect(a.anchor, a.direction, b.anchor, b.direction);
           if (!cross) continue;
@@ -2992,9 +3001,21 @@ SW.kink = (function () {
     return { point: hit, left: left, right: right };
   }
 
+  // cada dato de buzamiento conserva su propio manteo entre las dos
+  // superficies axiales que lo limitan (ver buildAxisNetwork): agrupar
+  // datos VECINOS en un solo dominio sólo porque sus manteos caen a menos
+  // de tolDeg uno de otro promediaba dos lecturas realmente distintas en
+  // una sola — borrando el eje entre ellas y, en cascada, contaminando con
+  // ese promedio la ortogonal que el siguiente eje debía tomar del dato
+  // vecino. El único acuñamiento válido es el GEOMÉTRICO (dos trazas
+  // axiales que de verdad se cruzan, ya resuelto en buildAxisNetwork), así
+  // que tolDeg por defecto sólo colapsa duplicados numéricos del mismo
+  // punto, no lecturas distintas que simplemente se parecen.
+  const DEFAULT_DIP_TOL_DEG = 1e-6;
+
   /* tadpoles: [[s, z, apparent_dip], ...] ordenables por s. */
   function groupDomains(tadpoles, tolDeg) {
-    tolDeg = tolDeg === undefined ? 3.0 : tolDeg;
+    tolDeg = tolDeg === undefined ? DEFAULT_DIP_TOL_DEG : tolDeg;
     if (!tadpoles.length) return [];
     const ordered = tadpoles.slice().sort((a, b) => a[0] - b[0]);
     const domains = [];
@@ -3144,15 +3165,23 @@ SW.kink = (function () {
     const n = domains.length - 1;
     if (n <= 0) return [];
     const axes = new Array(n);
-    const ltr = direction !== "rtl";
-    const order = [];
-    if (ltr) {
-      for (let i = 0; i < n; i++) order.push(i);
-    } else {
-      for (let i = n - 1; i >= 0; i--) order.push(i);
-    }
-    let prevAnchor = null;
-    for (const i of order) {
+    // cada eje se construye SOLO de sus dos dominios contiguos — nunca
+    // depende de dónde cayó el ancla del eje vecino. Antes había acá una
+    // salvaguarda ("prevAnchor"/"behind") que, si el ancla de un eje caía
+    // "detrás" de la del eje anterior en s, lo reanclaba al punto medio de
+    // pLeft/pRight — un punto que en general NO está sobre la bisectriz
+    // real (el punto medio del segmento entre dos datos no tiene por qué
+    // coincidir con el cruce de la bisectriz con ese segmento), así que
+    // aunque la DIRECCIÓN del eje seguía siendo axialDir(left,right), la
+    // RECTA quedaba desplazada de la charnela real — la ortogonal de ese
+    // dato dejaba de respetarse. Esa salvaguarda existía para evitar que
+    // la marcha del horizonte cruzara ejes fuera de orden cerca de los
+    // propios datos; ahora ese caso (dos ejes vecinos que de verdad se
+    // cruzan) lo resuelve correctamente buildAxisNetwork fundiéndolos en
+    // su charnela real, así que ya no hace falta — y forzarlo aquí, con
+    // un simple criterio de orden en s, corrompía ejes que no tenían
+    // ningún cruce genuino.
+    for (let i = 0; i < n; i++) {
       const left = domains[i], right = domains[i + 1];
       const pLeft = [left.s_max, left.z_max];
       const pRight = [right.s_min, right.z_min];
@@ -3161,13 +3190,11 @@ SW.kink = (function () {
       const dir = axialDir(left.dip, right.dip);
       const hinge = lineIntersect(pLeft, normalDir(left.dip),
                                   pRight, normalDir(right.dip));
+      // sólo cae al punto medio en el caso realmente degenerado: sin
+      // charnela (ortogonales paralelas) o con una bisectriz que no llega
+      // a cruzar el segmento entre los dos datos
       let anchor = hinge ? crossSegment(hinge, dir, pLeft, pRight) : null;
       if (anchor === null) anchor = mid;
-      if (prevAnchor !== null) {
-        const behind = ltr ? anchor[0] < prevAnchor[0]
-                           : anchor[0] > prevAnchor[0];
-        if (behind) anchor = mid;
-      }
       axes[i] = new KinkAxis(anchor, left.dip, right.dip);
       // los dos datos de buzamiento contiguos cuyas ORTOGONALES se cruzan
       // en la charnela — la UI dibuja la construcción exactamente como a
@@ -3176,11 +3203,13 @@ SW.kink = (function () {
       axes[i].hinge = hinge ? hinge.slice() : null;
       axes[i].left = i;
       axes[i].right = i + 1;
-      prevAnchor = anchor;
     }
     // acuñamiento: encadena, en cada eje, la traza fundida que lo reemplaza
-    // más allá del punto donde se cruza con su vecino — ver buildAxisNetwork
-    return buildAxisNetwork(axes);
+    // más allá del punto donde se cruza con su vecino — ver buildAxisNetwork.
+    // acá SÍ importa la dirección elegida: si dos fusiones son posibles a
+    // la vez (tres o más ejes convergiendo cerca), se resuelve primero la
+    // del extremo elegido y se avanza hacia el otro, igual que a mano.
+    return buildAxisNetwork(axes, direction !== "rtl");
   }
 
   /* Lado con signo de `point` respecto a la RECTA del eje (>0 = derecha):
@@ -8314,7 +8343,7 @@ window.SW = window.SW || {};
     const dir = SW.view.state.kinkDirection;
     for (const d of dips) {
       try {
-        const res = SW.kink.constructHorizon(tps, [d.s, d.z], lims, 3.0, dir);
+        const res = SW.kink.constructHorizon(tps, [d.s, d.z], lims, undefined, dir);
         previews.push({ verts: res.vertices, key: d.key });
       } catch (err) { /* dip degenerado: sin preview para ese punto */ }
     }
@@ -8352,7 +8381,7 @@ window.SW = window.SW || {};
     const results = new Array(dips.length);
     dips.forEach(function (d, i) {
       SW.bridge.call("constructKink", {
-        tadpoles: tps, seed: [d.s, d.z], tol_deg: 3.0,
+        tadpoles: tps, seed: [d.s, d.z],
         direction: SW.view.state.kinkDirection,
       }, function (res) {
         results[i] = (res && res.ok !== false && res.line) ? res : null;
