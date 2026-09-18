@@ -401,6 +401,12 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-throw" viewBox="0 0 24 24"><path d="M4 8h7M13 16h7"/><path d="M12 3v18m-3-15l3-3 3 3m-6 12l3 3 3-3"/></symbol>
   <symbol id="i-dip" viewBox="0 0 24 24"><circle cx="7" cy="8" r="3"/><path d="M9.5 9.8L20 17"/><path d="M3 20h18"/></symbol>
   <symbol id="i-scale" viewBox="0 0 24 24"><path d="M2 12h20"/><path d="M2 8v8M22 8v8"/><path d="M8 10v4M16 10v4"/></symbol>
+  <symbol id="i-polygons" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v8l9 5 9-5V8"/></symbol>
+  <symbol id="i-well" viewBox="0 0 24 24"><path d="M3 6h18"/><rect x="9" y="6" width="6" height="15"/><path d="M9 11h6M9 16h6"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 21L21 3"/><path d="M2 13h7"/><path d="M15 20h7"/><path d="M14.5 9.5L10 14m0 0h3.2M10 14v-3.2"/></symbol>
+  <symbol id="i-unfold" viewBox="0 0 24 24"><path d="M2 9l5-5 5 6 5-5 5 4"/><path d="M2 21h20"/><path d="M12 13v5m0 0l-2.4-2.4M12 18l2.4-2.4"/></symbol>
+  <symbol id="i-resample" viewBox="0 0 24 24"><path d="M3 17l6-9 5 6 4-6 3 4"/><circle cx="3" cy="17" r="1.4"/><circle cx="6" cy="12.5" r="1.4"/><circle cx="9" cy="8" r="1.4"/><circle cx="11.5" cy="11" r="1.4"/><circle cx="14" cy="14" r="1.4"/><circle cx="16" cy="11" r="1.4"/><circle cx="18" cy="8" r="1.4"/><circle cx="21" cy="12" r="1.4"/></symbol>
+  <symbol id="i-join" viewBox="0 0 24 24"><path d="M4 6h9a4 4 0 0 1 4 4v8"/><path d="M4 18h9a4 4 0 0 0 4-4V6"/><circle cx="4" cy="6" r="2"/><circle cx="4" cy="18" r="2"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 8h11a6 6 0 0 1 0 12h-4"/><path d="M7 4L3 8l4 4"/></symbol>
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="M21 8H10a6 6 0 0 0 0 12h4"/><path d="M17 4l4 4-4 4"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2l1.6 2.6 3-.7.5 3 2.8 1.2-1.3 2.8 1.9 2.4-2.5 1.8.3 3.1-3-.2-1.6 2.6-2.8-1.4-2.8 1.4-1.6-2.6-3 .2.3-3.1L1.2 14l1.9-2.4L1.8 8.8l2.8-1.2.5-3 3 .7z"/></symbol>
@@ -457,6 +463,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <button id="labels-btn" class="active" title="Show/hide line, dip and scale-bar labels"><svg class="ic"><use href="#i-labels"/></svg>Labels</button>
   <button id="frame-btn" class="active" title="Show/hide the nominal section frame"><svg class="ic"><use href="#i-frame"/></svg>Frame</button>
   <button id="scalebar-btn" class="active" title="Show/hide the calibration scale bars"><svg class="ic"><use href="#i-scale"/></svg>Scale bars</button>
+  <button id="polygons-btn" class="active" title="Show/hide unit polygon fills"><svg class="ic"><use href="#i-polygons"/></svg>Fills</button>
+  <button id="wells-btn" class="active" title="Show/hide well columns"><svg class="ic"><use href="#i-well"/></svg>Wells</button>
 </div>
 
 <div id="main">
@@ -508,6 +516,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
         </label>
         <button data-tool="vertex" title="Edit vertices with snapping (X)"><svg class="ic"><use href="#i-vertex"/></svg>Vertices</button>
         <button data-tool="image" title="Select/move/resize imported images (I)"><svg class="ic"><use href="#i-image"/></svg>Image</button>
+        <button data-tool="well" title="Well: click on the section to drop a collar, then type its stratigraphy (thickness and lithology pattern per interval) in the Wells panel."><svg class="ic"><use href="#i-well"/></svg>Well</button>
       </div>
     </div>
     <div class="rail-sep"></div>
@@ -533,6 +542,11 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
         <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
         <button id="simplify-btn" title="Simplify nodes of the selected lines (Douglas–Peucker)"><svg class="ic"><use href="#i-simplify"/></svg>Simplify</button>
         <button id="bezier-btn" title="Smooth the selected lines with Bézier curves"><svg class="ic"><use href="#i-bezier"/></svg>Bézier</button>
+        <button id="resample-btn" class="mini" title="Densify the selected lines: split every segment longer than the spacing below, keeping the trace exactly as it is. Empty = halve each line's median segment."><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
+        <label class="rail-field" title="Maximum segment length after resampling, in metres. Leave empty for each line's own median segment / 2.">Spacing (m)
+          <input id="resample-spacing" type="number" min="0" step="10" placeholder="auto">
+        </label>
+        <button id="join-btn" class="mini" title="Join the selected lines end to end into one line. Ends within tolerance are welded; farther ones are bridged with a straight segment."><svg class="ic"><use href="#i-join"/></svg>Join</button>
       </div>
     </div>
     <div class="rail-sep"></div>
@@ -573,6 +587,34 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
     </div>
     <div class="rail-sep"></div>
     <div class="rail-group">
+      <div class="rail-title" data-group>Restoration</div>
+      <div class="rail-group-body">
+        <button data-tool="restore_fault" title="Fault Parallel Flow restoration: 1) click the fault, 2) select the hanging-wall lines to move, 3) type the slip and Apply."><svg class="ic"><use href="#i-restore"/></svg>FPF Restoration</button>
+        <label class="rail-field" id="restore-slip-field">Slip (m)
+          <input id="restore-slip" type="number" step="any" value="0">
+        </label>
+        <button id="restore-flip-btn" class="mini" title="Flip which side of the fault is the hanging wall">⇄ Flip HW side</button>
+        <button id="restore-apply-btn" class="primary mini" title="Move the selected hanging-wall lines by the slip above, parallel to the fault">Apply</button>
+        <div class="rail-sep"></div>
+        <button data-tool="unfold" title="Flexural-slip unfolding: 1) click the folded template bed, 2) select the lines to unfold with it, 3) set pin/datum and Apply."><svg class="ic"><use href="#i-unfold"/></svg>Unfold</button>
+        <label class="rail-field" id="unfold-pin-field">Pin (s)
+          <input id="unfold-pin" type="number" step="any" value="0">
+        </label>
+        <label class="rail-field" id="unfold-datum-field">Datum (z)
+          <input id="unfold-datum" type="number" step="any" value="0">
+        </label>
+        <button id="unfold-datum-btn" class="mini" title="Set the datum to the template bed's own highest point">↧ Datum from template</button>
+        <label class="rail-field" id="unfold-amount-field" title="How far to unfold: 100% is the full flexural-slip restoration, less leaves it partly folded.">Unfold (%)
+          <input id="unfold-amount" type="number" min="0" max="100" step="5" value="100">
+        </label>
+        <button id="unfold-apply-btn" class="primary mini" title="Unfold the selected lines onto the datum, pinned at the point above">Apply</button>
+        <div class="rail-note">Restoration and unfolding move the SELECTED
+          lines' vertices directly (one undo step). Rebuild unit polygons
+          afterwards from the Unit polygons panel.</div>
+      </div>
+    </div>
+    <div class="rail-sep"></div>
+    <div class="rail-group">
       <div class="rail-title" data-group>Measure &amp; scale</div>
       <div class="rail-group-body">
         <button data-tool="measure" title="Ruler — real length, unaffected by V.E. (M)"><svg class="ic"><use href="#i-ruler"/></svg>Ruler</button>
@@ -603,9 +645,21 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <h2>Units</h2>
       <div class="panel-body" id="panel-horizons-body"></div>
     </div>
+    <div class="panel" id="panel-polygons">
+      <h2>Unit polygons</h2>
+      <div class="panel-body" id="panel-polygons-body"></div>
+    </div>
+    <div class="panel collapsed" id="panel-wells">
+      <h2>Wells</h2>
+      <div class="panel-body" id="panel-wells-body"></div>
+    </div>
     <div class="panel" id="panel-images">
       <h2>Images &amp; scale</h2>
       <div class="panel-body" id="panel-images-body"></div>
+    </div>
+    <div class="panel collapsed" id="panel-restore">
+      <h2>Restoration</h2>
+      <div class="panel-body" id="panel-restore-body"></div>
     </div>
     <div class="panel" id="panel-properties">
       <h2>Properties</h2>
@@ -1642,6 +1696,1012 @@ SW.geom = (function () {
   };
 })();
 
+/* ==== js/geom_polygons.js ====
+ * StructuralSketcher — geometría adicional portada de sectionworks v0.26.0
+ * (join de polilíneas, densificado y corte de polígonos por polilínea):
+ * base de Unit polygons y de la restauración estructural. Se agrega al
+ * mismo SW.geom en vez de a un módulo aparte porque son las mismas
+ * funciones puras en (s, z) — ninguna toca sec/undo/vista. */
+"use strict";
+(function () {
+  const geom = SW.geom;
+  const EPS = 1e-9;
+
+  /* Encadenar varias polilíneas en UNA: en cada paso entra la pieza con el
+   * extremo LIBRE más cercano a alguno de los dos extremos de la cadena
+   * (invertida si hace falta), así el orden de digitalización no importa.
+   * Junturas a menos de `tol` se sueldan (se descarta la punta duplicada);
+   * las más lejanas se unen con un segmento recto y su distancia se
+   * reporta en `gaps`. `ve` escala z al medir, igual que Tidy. */
+  function joinPolylines(pieces, tol, ve) {
+    tol = tol || 0;
+    ve = ve || 1;
+    if (Math.abs(ve - 1) > 1e-9) {
+      const scaled = pieces.map(p => p.map(v => [v[0], v[1] * ve]));
+      const r = joinPolylines(scaled, tol, 1);
+      return { vertices: r.vertices.map(v => [v[0], v[1] / ve]), gaps: r.gaps };
+    }
+    const parts = pieces.filter(p => p.length >= 2).map(p => p.map(v => v.slice()));
+    if (parts.length < 2) return { vertices: [], gaps: [] };
+    let chain = parts.shift();
+    const gaps = [];
+    while (parts.length) {
+      let best = null;   // [d, index, oriented, prepend]
+      parts.forEach(function (piece, i) {
+        for (const oriented of [piece, piece.slice().reverse()])
+          for (const prepend of [false, true]) {
+            const d = prepend ? geom.dist(chain[0], oriented[oriented.length - 1])
+                              : geom.dist(chain[chain.length - 1], oriented[0]);
+            if (!best || d < best[0]) best = [d, i, oriented.slice(), prepend];
+          }
+      });
+      const [d, i, oriented, prepend] = best;
+      parts.splice(i, 1);
+      const weld = d <= tol;
+      if (!weld) gaps.push(d);
+      chain = prepend
+        ? (weld ? oriented.slice(0, -1) : oriented).concat(chain)
+        : chain.concat(weld ? oriented.slice(1) : oriented);
+    }
+    return { vertices: chain, gaps: gaps };
+  }
+
+  /* Densificar: conserva todos los vértices originales y sólo parte los
+   * segmentos más largos que `spacing` en tramos iguales — la traza no
+   * cambia, sólo sube la densidad de vértices (lo que necesita la
+   * restauración, que muestrea falla y plantilla segmento a segmento). */
+  const RESAMPLE_MAX_PER_SEGMENT = 2000, RESAMPLE_MAX_VERTICES = 20000;
+  function resamplePolyline(verts, spacing) {
+    const pts = verts.map(v => v.slice());
+    if (pts.length < 2 || !(spacing > 0)) return pts;
+    const out = [pts[0].slice()];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const ax = pts[i][0], ay = pts[i][1];
+      const bx = pts[i + 1][0], by = pts[i + 1][1];
+      const seg = Math.hypot(bx - ax, by - ay);
+      let n = seg > EPS ? Math.ceil(seg / spacing) : 1;
+      n = Math.max(1, Math.min(n, RESAMPLE_MAX_PER_SEGMENT));
+      for (let k = 1; k < n; k++) {
+        const t = k / n;
+        out.push([ax + t * (bx - ax), ay + t * (by - ay)]);
+      }
+      out.push([bx, by]);
+      if (out.length >= RESAMPLE_MAX_VERTICES) {
+        for (let k = i + 2; k < pts.length; k++) out.push(pts[k].slice());
+        break;
+      }
+    }
+    return out;
+  }
+
+  /* Dónde un extremo de `verts`, prolongado en su PROPIA dirección hasta
+   * `maxReach`, se topa con la primera de `others`. Usado por la
+   * restauración para soldar un horizonte dibujado hasta poco antes de la
+   * falla, en vez de dejar el hueco. */
+  function continueEndToLines(verts, end, others, maxReach) {
+    if (verts.length < 2 || !(maxReach > 0)) return null;
+    const tip = end === "start" ? verts[0] : verts[verts.length - 1];
+    const prev = end === "start" ? verts[1] : verts[verts.length - 2];
+    let dx = tip[0] - prev[0], dy = tip[1] - prev[1];
+    const L = Math.hypot(dx, dy);
+    if (L < EPS) return null;
+    dx /= L; dy /= L;
+    const far = [tip[0] + dx * maxReach, tip[1] + dy * maxReach];
+    let best = null, bestD = Infinity;
+    for (const other of others) {
+      for (let k = 0; k < other.length - 1; k++) {
+        const hit = geom.segmentIntersection(tip, far, other[k], other[k + 1]);
+        if (!hit) continue;
+        const d = hit[0] * maxReach;
+        if (d > EPS && d < bestD) { bestD = d; best = hit[2]; }
+      }
+    }
+    return best;
+  }
+
+  /* -- polígonos: área, centroide y punto de rótulo ------------------------ */
+  function polygonArea(ring) {
+    let total = 0;
+    for (let i = 0, n = ring.length; i < n; i++) {
+      const a = ring[i], b = ring[(i + 1) % n];
+      total += a[0] * b[1] - b[0] * a[1];
+    }
+    return total / 2;
+  }
+
+  function polygonCentroid(ring) {
+    let a = 0, cs = 0, cz = 0;
+    for (let i = 0, n = ring.length; i < n; i++) {
+      const p = ring[i], q = ring[(i + 1) % n];
+      const f = p[0] * q[1] - q[0] * p[1];
+      a += f; cs += (p[0] + q[0]) * f; cz += (p[1] + q[1]) * f;
+    }
+    if (Math.abs(a) < 1e-12) {
+      let s0 = Infinity, s1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (const p of ring) {
+        s0 = Math.min(s0, p[0]); s1 = Math.max(s1, p[0]);
+        z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]);
+      }
+      return [(s0 + s1) / 2, (z0 + z1) / 2];
+    }
+    return [cs / (3 * a), cz / (3 * a)];
+  }
+
+  /* Punto donde rotular un polígono de unidad: conserva la `s` del
+   * centroide de área (donde el cuerpo tiene más peso horizontal) pero
+   * recalcula la elevación como el centro de la franja vertical del
+   * polígono a esa distancia, así el rótulo queda garantizado DENTRO
+   * incluso en un pliegue cerrado donde el centroide cae fuera del cuerpo. */
+  function polygonLabelPoint(ring) {
+    const c = polygonCentroid(ring);
+    const crossings = [];
+    for (let i = 0, n = ring.length; i < n; i++) {
+      const p = ring[i], q = ring[(i + 1) % n];
+      if ((p[0] <= c[0] && q[0] > c[0]) || (q[0] <= c[0] && p[0] > c[0])) {
+        const t = (c[0] - p[0]) / ((q[0] - p[0]) || 1e-12);
+        crossings.push(p[1] + t * (q[1] - p[1]));
+      }
+    }
+    crossings.sort((a, b) => a - b);
+    let best = null, bestD = Infinity;
+    for (let i = 0; i + 1 < crossings.length; i += 2) {
+      const mid = (crossings[i] + crossings[i + 1]) / 2;
+      const d = Math.abs(mid - c[1]);
+      if (d < bestD) { bestD = d; best = mid; }
+    }
+    return best === null ? c : [c[0], best];
+  }
+
+  /* -- corte de un polígono con polilíneas (fallas) ------------------------
+   * Corte de CUCHILLO, no booleano: la polilínea (traza de falla) es
+   * abierta, así que lo que importa es la CUERDA — el tramo que atraviesa
+   * el polígono, de donde entra al anillo a donde sale — y cada cuerda lo
+   * parte en dos siguiendo los vértices propios de la falla. Una falla que
+   * entra y muere adentro (punta ciega) no corta: no hay segunda orilla. */
+  const CLIP_MIN_AREA = 1e-6, CLIP_REL_EPS = 1e-4;
+
+  function autoEps(ring) {
+    let s0 = Infinity, s1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const p of ring) {
+      s0 = Math.min(s0, p[0]); s1 = Math.max(s1, p[0]);
+      z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]);
+    }
+    return Math.max(Math.hypot(s1 - s0, z1 - z0) * CLIP_REL_EPS, 1e-9);
+  }
+
+  function distanceToRing(ring, pt) {
+    let best = Infinity;
+    for (let i = 0, n = ring.length; i < n; i++) {
+      const a = ring[i], b = ring[(i + 1) % n];
+      const ds = b[0] - a[0], dz = b[1] - a[1];
+      const L2 = ds * ds + dz * dz;
+      const t = L2 < EPS ? 0 : Math.max(0, Math.min(1,
+        ((pt[0] - a[0]) * ds + (pt[1] - a[1]) * dz) / L2));
+      best = Math.min(best, Math.hypot(pt[0] - (a[0] + t * ds),
+                                       pt[1] - (a[1] + t * dz)));
+    }
+    return best;
+  }
+
+  function pointStrictlyInside(ring, pt, eps) {
+    if (distanceToRing(ring, pt) <= eps) return false;
+    return geom.pointInPolygon(pt, ring);
+  }
+
+  function pointAtParam(poly, t) {
+    let i = Math.max(0, Math.min(Math.floor(t), poly.length - 2));
+    const local = t - i;
+    return [poly[i][0] + local * (poly[i + 1][0] - poly[i][0]),
+            poly[i][1] + local * (poly[i + 1][1] - poly[i][1])];
+  }
+
+  function dedupeRing(pts, eps) {
+    const out = [];
+    for (const p of pts) {
+      const last = out[out.length - 1];
+      if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > eps)
+        out.push(p);
+    }
+    while (out.length > 1 &&
+           Math.hypot(out[0][0] - out[out.length - 1][0],
+                      out[0][1] - out[out.length - 1][1]) <= eps)
+      out.pop();
+    return out;
+  }
+
+  function ringCrossings(ring, cutter) {
+    const n = ring.length, out = [];
+    for (let i = 0; i < cutter.length - 1; i++)
+      for (let j = 0; j < n; j++) {
+        const hit = geom.segmentIntersection(cutter[i], cutter[i + 1],
+                                             ring[j], ring[(j + 1) % n]);
+        if (hit) out.push([i + hit[0], j + hit[1], hit[2]]);
+      }
+    out.sort((a, b) => a[0] - b[0]);
+    const ded = [];
+    for (const item of out)
+      if (!ded.length || Math.abs(item[0] - ded[ded.length - 1][0]) >= 1e-9)
+        ded.push(item);
+    return ded;
+  }
+
+  function subPath(cutter, t0, t1, eps) {
+    const pts = [pointAtParam(cutter, t0)];
+    for (let k = Math.floor(t0) + 1; k <= Math.floor(t1); k++)
+      pts.push([cutter[k][0], cutter[k][1]]);
+    pts.push(pointAtParam(cutter, t1));
+    return dedupeRing(pts, eps);
+  }
+
+  function firstChord(ring, cutter, eps) {
+    const cross = ringCrossings(ring, cutter);
+    for (let i = 0; i + 1 < cross.length; i++) {
+      const a = cross[i], b = cross[i + 1];
+      if (!pointStrictlyInside(ring, pointAtParam(cutter, (a[0] + b[0]) / 2),
+                               eps)) continue;
+      const chord = subPath(cutter, a[0], b[0], eps);
+      if (chord.length < 2) continue;
+      return { keyIn: a[1], keyOut: b[1], chord: chord };
+    }
+    return null;
+  }
+
+  function ringArc(ring, keyFrom, keyTo, ptFrom, ptTo) {
+    const n = ring.length;
+    let span = (keyTo - keyFrom) % n;
+    if (span <= 0) span += n;
+    const between = [];
+    for (let i = 0; i < n; i++) {
+      const d = ((i - keyFrom) % n + n) % n;
+      if (d > 1e-12 && d < span - 1e-12)
+        between.push([d, [ring[i][0], ring[i][1]]]);
+    }
+    between.sort((a, b) => a[0] - b[0]);
+    return [ptFrom].concat(between.map(e => e[1]), [ptTo]);
+  }
+
+  function splitRing(ring, keyIn, keyOut, chord, eps) {
+    const ptIn = chord[0], ptOut = chord[chord.length - 1];
+    const interior = chord.slice(1, -1);
+    const fwd = ringArc(ring, keyIn, keyOut, ptIn, ptOut);
+    const bwd = ringArc(ring, keyOut, keyIn, ptOut, ptIn);
+    return [dedupeRing(fwd.concat(interior.slice().reverse()), eps),
+            dedupeRing(bwd.concat(interior), eps)]
+      .filter(p => p.length >= 3 && Math.abs(polygonArea(p)) >= CLIP_MIN_AREA);
+  }
+
+  function clipPolygonByPolyline(ring, cutter, eps, maxCuts) {
+    maxCuts = maxCuts === undefined ? 64 : maxCuts;
+    ring = ring.map(p => [+p[0], +p[1]]);
+    cutter = cutter.map(p => [+p[0], +p[1]]);
+    if (ring.length < 3 || cutter.length < 2) return [ring];
+    const tol = eps === undefined || eps === null ? autoEps(ring) : eps;
+    const todo = [ring], done = [];
+    let cuts = 0;
+    while (todo.length) {
+      const piece = todo.shift();
+      const chord = cuts >= maxCuts ? null : firstChord(piece, cutter, tol);
+      if (!chord) { done.push(piece); continue; }
+      cuts++;
+      const parts = splitRing(piece, chord.keyIn, chord.keyOut, chord.chord, tol);
+      if (!parts.length) { done.push(piece); continue; }
+      todo.push.apply(todo, parts);
+    }
+    return done;
+  }
+
+  function clipPolygonByPolylines(ring, cutters, eps, maxCuts) {
+    let pieces = [ring];
+    for (const cutter of cutters || []) {
+      if (!cutter || cutter.length < 2) continue;
+      const next = [];
+      for (const piece of pieces)
+        next.push.apply(next, clipPolygonByPolyline(piece, cutter, eps, maxCuts));
+      pieces = next;
+    }
+    return pieces;
+  }
+
+  Object.assign(SW.geom, {
+    joinPolylines, resamplePolyline, continueEndToLines,
+    polygonArea, polygonCentroid, polygonLabelPoint,
+    distanceToRing, pointStrictlyInside,
+    clipPolygonByPolyline, clipPolygonByPolylines,
+  });
+})();
+
+/* ==== js/restore.js ====
+ * StructuralSketcher — restauración estructural, portada de
+ * sectionworks v0.26.0 (core/restoration.py / js/restoration.js), sin
+ * ningún cambio de convención: trabaja en las mismas coordenadas (s, z)
+ * reales que el resto de la app. Dos algoritmos:
+ *  - Fault Parallel Flow (FPF): mueve puntos del bloque colgante a lo
+ *    largo de "láminas de flujo" paralelas a la falla — offsetPolyline con
+ *    un miter sin recortar, para que la lámina no se biselee en una
+ *    esquina — por la distancia `slip`.
+ *  - Flexural Slip unfolding: endereza una capa plegada (la "plantilla")
+ *    aplanándola sobre un dátum horizontal que pasa por un punto de pin
+ *    (s, z) de deslizamiento nulo, y lleva el resto de los puntos con ella
+ *    conservando su distancia perpendicular a la plantilla (longitud de
+ *    cama constante). */
+"use strict";
+window.SW = window.SW || {};
+
+SW.restore = (function () {
+  const geom = SW.geom;
+  const EPS = 1e-9;
+  const UNCLAMPED_MITER = 1.0e6;   // el clamp por defecto (4.0) biselaría
+                                    // la esquina de una lámina de flujo
+
+  function cumulativeLengths(verts) {
+    const cum = [0];
+    for (let i = 1; i < verts.length; i++)
+      cum.push(cum[i - 1] + geom.dist(verts[i - 1], verts[i]));
+    return cum;
+  }
+
+  function orientLR(vertices) {
+    if (vertices.length >= 2 && vertices[0][0] > vertices[vertices.length - 1][0])
+      return vertices.slice().reverse().map(v => v.slice());
+    return vertices.map(v => v.slice());
+  }
+
+  function extendEnds(vertices, margin) {
+    if (vertices.length < 2 || margin <= 0) return vertices.map(v => v.slice());
+    const verts = vertices.map(v => v.slice());
+    const x0 = verts[0][0], y0 = verts[0][1];
+    const x1 = verts[1][0], y1 = verts[1][1];
+    const d0 = Math.hypot(x1 - x0, y1 - y0);
+    if (d0 > EPS) {
+      const ux = (x0 - x1) / d0, uy = (y0 - y1) / d0;
+      verts.unshift([x0 + ux * margin, y0 + uy * margin]);
+    }
+    const xn0 = verts[verts.length - 2][0], yn0 = verts[verts.length - 2][1];
+    const xn1 = verts[verts.length - 1][0], yn1 = verts[verts.length - 1][1];
+    const d1 = Math.hypot(xn1 - xn0, yn1 - yn0);
+    if (d1 > EPS) {
+      const ux = (xn1 - xn0) / d1, uy = (yn1 - yn0) / d1;
+      verts.push([xn1 + ux * margin, yn1 + uy * margin]);
+    }
+    return verts;
+  }
+
+  function defaultMargin(vertices) {
+    const span = vertices.length >= 2 ? geom.polylineLength(vertices) : 0;
+    return Math.max(span, 1.0) * 2.0;
+  }
+
+  function leftNormal(vertices, segIndex) {
+    const x0 = vertices[segIndex][0], y0 = vertices[segIndex][1];
+    const x1 = vertices[segIndex + 1][0], y1 = vertices[segIndex + 1][1];
+    const dx = x1 - x0, dy = y1 - y0;
+    const L = Math.hypot(dx, dy);
+    if (L < EPS) return [0, 1];
+    return [-dy / L, dx / L];
+  }
+
+  function segmentAtArclength(vertices, u) {
+    const cums = cumulativeLengths(vertices);
+    if (u <= cums[0]) return [0, 0];
+    if (u >= cums[cums.length - 1]) return [vertices.length - 2, 1];
+    for (let i = 0; i < cums.length - 1; i++) {
+      if (cums[i] <= u && u <= cums[i + 1]) {
+        const seg = cums[i + 1] - cums[i];
+        const t = seg > EPS ? (u - cums[i]) / seg : 0;
+        return [i, t];
+      }
+    }
+    return [vertices.length - 2, 1];
+  }
+
+  function pointAtArclength(vertices, u) {
+    if (!vertices.length) throw new Error("pointAtArclength needs vertices");
+    if (vertices.length === 1) return vertices[0].slice();
+    const [i, t] = segmentAtArclength(vertices, u);
+    const x0 = vertices[i][0], y0 = vertices[i][1];
+    const x1 = vertices[i + 1][0], y1 = vertices[i + 1][1];
+    return [x0 + t * (x1 - x0), y0 + t * (y1 - y0)];
+  }
+
+  function arcLengthAt(vertices, segIndex, t) {
+    const cums = cumulativeLengths(vertices);
+    const x0 = vertices[segIndex][0], y0 = vertices[segIndex][1];
+    const x1 = vertices[segIndex + 1][0], y1 = vertices[segIndex + 1][1];
+    return cums[segIndex] + t * Math.hypot(x1 - x0, y1 - y0);
+  }
+
+  /* Inclinación del pin: tan() del ángulo respecto de la VERTICAL, positivo
+   * = la cabeza del pin se va hacia +s. */
+  const MAX_PIN_TILT_DEG = 85;
+  function pinShear(tiltDeg) {
+    const t = Math.max(-MAX_PIN_TILT_DEG, Math.min(MAX_PIN_TILT_DEG, +tiltDeg || 0));
+    return Math.tan(t * Math.PI / 180);
+  }
+
+  function pinCrossings(vertices, pinS, pinZ, shear) {
+    const f = p => p[0] - pinS - (p[1] - pinZ) * shear;
+    const out = [];
+    for (let i = 0; i < vertices.length - 1; i++) {
+      const f0 = f(vertices[i]), f1 = f(vertices[i + 1]);
+      if (Math.abs(f1 - f0) < EPS) {
+        if (Math.abs(f0) < EPS) out.push([i, 0]);
+        continue;
+      }
+      const t = f0 / (f0 - f1);
+      if (t >= -EPS && t <= 1 + EPS) out.push([i, Math.min(Math.max(t, 0), 1)]);
+    }
+    return out;
+  }
+
+  function pinArclength(tmplExt, pinS, pinZ, shear) {
+    pinZ = pinZ || 0; shear = shear || 0;
+    const crossings = pinCrossings(tmplExt, pinS, pinZ, shear);
+    if (!crossings.length) {
+      const cums = cumulativeLengths(tmplExt);
+      const firstS = pinS + (tmplExt[0][1] - pinZ) * shear;
+      const u = firstS <= tmplExt[0][0] ? cums[0] : cums[cums.length - 1];
+      return [u, 0];
+    }
+    const [i, t] = crossings[0];
+    return [arcLengthAt(tmplExt, i, t), crossings.length];
+  }
+
+  function nearestEnd(line, faultExt) {
+    const h0 = geom.nearestPointOnPolyline(faultExt, line[0]);
+    const h1 = geom.nearestPointOnPolyline(faultExt, line[line.length - 1]);
+    return h0[3] <= h1[3] ? [line[0].slice(), h0[3]] : [line[line.length - 1].slice(), h1[3]];
+  }
+
+  /* El corte de `line` con la falla: su cruce real si cruza; si no, el
+   * cruce de su segmento extremo CONTINUADO más allá de la punta (el caso
+   * normal de un horizonte digitalizado hasta un poco antes de la falla). */
+  function cutoffPoint(line, faultExt) {
+    if (!line.length) return null;
+    if (line.length < 2) return line[0].slice();
+    let hits = geom.polylineIntersections(line, faultExt);
+    if (hits.length) return hits[0][2];
+    const anchor = nearestEnd(line, faultExt)[0];
+    const lineExt = extendEnds(line, defaultMargin(faultExt));
+    hits = geom.polylineIntersections(lineExt, faultExt);
+    if (!hits.length) return anchor;
+    let best = hits[0], bestD = Infinity;
+    for (const h of hits) {
+      const d = Math.hypot(h[2][0] - anchor[0], h[2][1] - anchor[1]);
+      if (d < bestD) { bestD = d; best = h; }
+    }
+    return best[2];
+  }
+
+  function rayToFault(anchor, tip, faultExt, reach) {
+    const dx = tip[0] - anchor[0], dy = tip[1] - anchor[1];
+    const L = Math.hypot(dx, dy);
+    if (L < EPS) return null;
+    const far = [tip[0] + dx / L * reach, tip[1] + dy / L * reach];
+    const hits = geom.polylineIntersections([anchor.slice(), far], faultExt);
+    if (!hits.length) return null;
+    let best = hits[0], bestD = Infinity;
+    for (const h of hits) {
+      const d = Math.hypot(h[2][0] - tip[0], h[2][1] - tip[1]);
+      if (d < bestD) { bestD = d; best = h; }
+    }
+    return best[2];
+  }
+
+  /* Termina la línea EXACTAMENTE sobre la falla en el extremo que ya esté
+   * a menos de `tol` de ella. Devuelve {vertices, moved}. */
+  function snapEndsToFault(vertices, fault, tol, margin) {
+    const verts = vertices.map(v => v.slice());
+    if (verts.length < 2 || fault.length < 2 || tol <= 0)
+      return { vertices: verts, moved: 0 };
+    const faultLR = orientLR(fault);
+    const faultExt = extendEnds(faultLR,
+      margin === undefined || margin === null ? defaultMargin(faultLR) : margin);
+    let moved = 0;
+    const ends = [[0, 1], [verts.length - 1, verts.length - 2]];
+    for (const [end, neighbour] of ends) {
+      const tip = verts[end];
+      const near = geom.nearestPointOnPolyline(faultExt, tip);
+      if (near[3] > tol) continue;
+      const target = rayToFault(verts[neighbour], tip, faultExt, tol * 4) || near[2];
+      if (Math.hypot(target[0] - tip[0], target[1] - tip[1]) < EPS) continue;
+      verts[end] = [target[0], target[1]];
+      moved++;
+    }
+    return { vertices: verts, moved: moved };
+  }
+
+  /* -- Fault Parallel Flow --------------------------------------------------- */
+  function faultParallelFlow(fault, points, slip, hwSide, moveFootwall, margin) {
+    hwSide = hwSide === undefined ? 1 : hwSide;
+    moveFootwall = !!moveFootwall;
+    const pts = points.map(p => p.slice());
+    if (fault.length < 2 || !pts.length)
+      return { points: pts, info: { moved: 0, unmoved: pts.length, hw_side: hwSide } };
+
+    const faultLR = orientLR(fault);
+    const faultExt = extendEnds(faultLR,
+      margin === undefined || margin === null ? defaultMargin(faultLR) : margin);
+
+    const out = [];
+    let moved = 0, unmoved = 0;
+    for (const p of pts) {
+      const px = p[0], pz = p[1];
+      const [j, , q] = geom.nearestPointOnPolyline(faultExt, [px, pz]);
+      const [nx, ny] = leftNormal(faultExt, j);
+      const h = (px - q[0]) * nx + (pz - q[1]) * ny;
+      const side = h >= 0 ? 1 : -1;
+      if (side !== hwSide && !moveFootwall) { out.push([px, pz]); unmoved++; continue; }
+      const lamina = geom.offsetPolyline(faultExt, h, UNCLAMPED_MITER);
+      const [lj, lt] = geom.nearestPointOnPolyline(lamina, [px, pz]);
+      const u = arcLengthAt(lamina, lj, lt);
+      out.push(pointAtArclength(lamina, u + slip));
+      moved++;
+    }
+    return { points: out, info: { moved, unmoved, hw_side: hwSide } };
+  }
+
+  function signedOffsets(fault, points, margin) {
+    if (fault.length < 2 || !points.length) return [];
+    const faultLR = orientLR(fault);
+    const faultExt = extendEnds(faultLR,
+      margin === undefined || margin === null ? defaultMargin(faultLR) : margin);
+    return points.map(function (p) {
+      const [j, , q] = geom.nearestPointOnPolyline(faultExt, [p[0], p[1]]);
+      const [nx, ny] = leftNormal(faultExt, j);
+      return (p[0] - q[0]) * nx + (p[1] - q[1]) * ny;
+    });
+  }
+
+  /* De qué lado de la falla cae un conjunto de puntos, en la convención de
+   * hwSide de faultParallelFlow (+1 / -1; 0 = nada que decidir). Ponderado
+   * por distancia, no por conteo, para que los puntos casi encima de la
+   * falla (signo = ruido) no decidan por el cuerpo del estrato. */
+  function hangingWallSide(fault, points, margin) {
+    const hs = signedOffsets(fault, points, margin);
+    if (!hs.length) return 0;
+    const total = hs.reduce((a, h) => a + h, 0);
+    if (Math.abs(total) < EPS) return 0;
+    return total > 0 ? 1 : -1;
+  }
+
+  function slipFromCutoffs(fault, hwLine, fwLine, margin) {
+    if (fault.length < 2 || !hwLine.length || !fwLine.length) return null;
+    const faultLR = orientLR(fault);
+    const faultExt = extendEnds(faultLR,
+      margin === undefined || margin === null ? defaultMargin(faultLR) : margin);
+    const cutHw = cutoffPoint(hwLine, faultExt);
+    const cutFw = cutoffPoint(fwLine, faultExt);
+    if (!cutHw || !cutFw) return null;
+    const [jHw, , qHw] = geom.nearestPointOnPolyline(faultExt, cutHw);
+    const [nx, ny] = leftNormal(faultExt, jHw);
+    const h = (cutHw[0] - qHw[0]) * nx + (cutHw[1] - qHw[1]) * ny;
+    const lamina = Math.abs(h) < EPS ? faultExt
+      : geom.offsetPolyline(faultExt, h, UNCLAMPED_MITER);
+    const [lj, lt] = geom.nearestPointOnPolyline(lamina, cutHw);
+    const [fj, ft] = geom.nearestPointOnPolyline(lamina, cutFw);
+    const faultDir = [faultExt[jHw + 1][0] - faultExt[jHw][0],
+                      faultExt[jHw + 1][1] - faultExt[jHw][1]];
+    const result = geom.faultSeparation(cutHw, cutFw, faultDir);
+    result.slip = arcLengthAt(lamina, fj, ft) - arcLengthAt(lamina, lj, lt);
+    result.cut_hw = cutHw.slice();
+    result.cut_fw = cutFw.slice();
+    return result;
+  }
+
+  /* -- Flexural Slip ---------------------------------------------------------
+   * `amount` desdobla solo una parte del camino: 1 = restauración completa,
+   * 0 deja todo donde está — interpola el RESULTADO, no el mapa. */
+  function flexuralSlipUnfold(template, points, pinS, datumZ, margin, amount, pinTiltDeg) {
+    amount = amount === undefined || amount === null ? 1 : amount;
+    const pts = points.map(p => p.slice());
+    if (template.length < 2 || !pts.length)
+      return { points: pts, info: { moved: 0, beyond_curvature: 0, pin_ambiguous: false } };
+    const tmplLR = orientLR(template);
+    const tmplExt = extendEnds(tmplLR,
+      margin === undefined || margin === null ? defaultMargin(tmplLR) : margin);
+    const shear = pinShear(pinTiltDeg);
+    const [uPin, nCrossings] = pinArclength(tmplExt, pinS, datumZ, shear);
+    const out = [];
+    for (const p of pts) {
+      const px = p[0], pz = p[1];
+      const [j, t, q] = geom.nearestPointOnPolyline(tmplExt, [px, pz]);
+      const [nx, ny] = leftNormal(tmplExt, j);
+      const h = (px - q[0]) * nx + (pz - q[1]) * ny;
+      const u = arcLengthAt(tmplExt, j, t);
+      let tx = pinS + (u - uPin) + h * shear, tz = datumZ + h;
+      if (amount !== 1) { tx = px + amount * (tx - px); tz = pz + amount * (tz - pz); }
+      out.push([tx, tz]);
+    }
+    return { points: out, info: { moved: out.length, pin_ambiguous: nCrossings > 1 } };
+  }
+
+  return {
+    pointAtArclength, arcLengthAt,
+    faultParallelFlow, slipFromCutoffs, snapEndsToFault,
+    hangingWallSide, flexuralSlipUnfold, pinShear, MAX_PIN_TILT_DEG,
+    orientLR, leftNormal,
+  };
+})();
+
+/* ==== js/unit_polygons.js ====
+ * StructuralSketcher — polígonos de unidad, portados de
+ * sectionworks v0.26.0 (core/unit_polygons.py). Cada horizonte es el TECHO
+ * de una unidad y su BASE es el horizonte inmediato hacia abajo (por orden
+ * declarado en el panel Unidades si todos los horizontes están asignados,
+ * o si no por elevación media). El anillo reutiliza los vértices propios
+ * de las líneas de referencia; la unidad basal cierra a la elevación
+ * mínima de su propio techo. Cada cuerpo se recorta contra las fallas
+ * visibles, así una unidad atravesada por una falla queda como un
+ * polígono por bloque, terminado justo sobre la traza. */
+"use strict";
+window.SW = window.SW || {};
+
+SW.unitPolygons = (function () {
+  const geom = SW.geom;
+  const KIND = "horizon", FAULT_KIND = "fault";
+  const DEFAULT_FILL_OPACITY = 0.5, DEFAULT_STROKE_OPACITY = 1.0;
+  const DEFAULT_WIDTH = 2.0, DEFAULT_COLOR = [90, 90, 90];
+  const MIN_AREA = 1e-6, FAULT_SNAP_FRACTION = 0.005;
+
+  function meanZ(verts) {
+    let t = 0;
+    for (const v of verts) t += v[1];
+    return t / (verts.length || 1);
+  }
+
+  function leftToRight(verts) {
+    const out = verts.map(v => [+v[0], +v[1]]);
+    if (out.length >= 2 && out[out.length - 1][0] < out[0][0]) out.reverse();
+    return out;
+  }
+
+  function dedupe(ring) {
+    const out = [];
+    for (const pt of ring) {
+      const last = out[out.length - 1];
+      if (!last || Math.abs(pt[0] - last[0]) > 1e-9 || Math.abs(pt[1] - last[1]) > 1e-9)
+        out.push(pt);
+    }
+    while (out.length > 1 &&
+           Math.abs(out[0][0] - out[out.length - 1][0]) <= 1e-9 &&
+           Math.abs(out[0][1] - out[out.length - 1][1]) <= 1e-9)
+      out.pop();
+    return out;
+  }
+
+  function stratigraphicSort(lines, unitsById) {
+    const ls = lines.slice();
+    const allAssigned = ls.length && ls.every(l => l.unit_id && unitsById[l.unit_id]);
+    if (allAssigned) {
+      return ls.sort(function (a, b) {
+        const oa = unitsById[a.unit_id].order || 0;
+        const ob = unitsById[b.unit_id].order || 0;
+        return oa !== ob ? oa - ob : meanZ(b.vertices) - meanZ(a.vertices);
+      });
+    }
+    return ls.sort((a, b) => meanZ(b.vertices) - meanZ(a.vertices));
+  }
+
+  function zAt(verts, s) {
+    if (s < verts[0][0] || s > verts[verts.length - 1][0]) return null;
+    for (let i = 0; i < verts.length - 1; i++) {
+      const s0 = verts[i][0], z0 = verts[i][1];
+      const s1 = verts[i + 1][0], z1 = verts[i + 1][1];
+      if (Math.min(s0, s1) <= s && s <= Math.max(s0, s1)) {
+        if (Math.abs(s1 - s0) < 1e-9) return z0;
+        return z0 + (z1 - z0) * (s - s0) / (s1 - s0);
+      }
+    }
+    return null;
+  }
+
+  function overlap(a, b) {
+    const lo = Math.max(a[0][0], b[0][0]);
+    const hi = Math.min(a[a.length - 1][0], b[b.length - 1][0]);
+    return hi > lo ? [lo, hi] : null;
+  }
+
+  function crossesAny(p, q, cutters) {
+    for (const c of cutters)
+      for (let k = 0; k < c.length - 1; k++)
+        if (geom.segmentIntersection(p, q, c[k], c[k + 1])) return true;
+    return false;
+  }
+
+  function bboxDiagonal() {
+    let s0 = Infinity, s1 = -Infinity, z0 = Infinity, z1 = -Infinity, any = 0;
+    for (const verts of arguments) {
+      if (!verts) continue;
+      for (const p of verts) {
+        any = 1;
+        s0 = Math.min(s0, p[0]); s1 = Math.max(s1, p[0]);
+        z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]);
+      }
+    }
+    return any ? Math.hypot(s1 - s0, z1 - z0) : 0;
+  }
+
+  function pickBase(top, topVerts, prepared, cutters) {
+    let best = null;
+    for (const entry of prepared) {
+      const cand = entry[0], candVerts = entry[1];
+      if (cand.id === top.id) continue;
+      if (top.unit_id && cand.unit_id === top.unit_id) continue;
+      const span = overlap(topVerts, candVerts);
+      if (!span) continue;
+      const sMid = (span[0] + span[1]) / 2;
+      const zTop = zAt(topVerts, sMid), zCand = zAt(candVerts, sMid);
+      if (zTop === null || zCand === null || zCand >= zTop) continue;
+      const otherBlock = crossesAny([sMid, zTop], [sMid, zCand], cutters);
+      const key = [otherBlock ? 1 : 0, -zCand];
+      if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && key[1] < best.key[1]))
+        best = { key: key, line: cand, verts: candVerts };
+    }
+    return best ? [best.line, best.verts] : [null, null];
+  }
+
+  function faultSide(pFrom, pTo, cutters, tol) {
+    for (const c of cutters) {
+      const hFrom = geom.nearestPointOnPolyline(c, pFrom);
+      const hTo = geom.nearestPointOnPolyline(c, pTo);
+      if (!hFrom || !hTo || hFrom[3] > tol || hTo[3] > tol) continue;
+      const tFrom = hFrom[0] + hFrom[1], tTo = hTo[0] + hTo[1];
+      const lo = Math.min(tFrom, tTo), hi = Math.max(tFrom, tTo);
+      const pts = [];
+      for (let k = 0; k < c.length; k++) if (lo < k && k < hi) pts.push([c[k][0], c[k][1]]);
+      if (tFrom > tTo) pts.reverse();
+      return pts;
+    }
+    return [];
+  }
+
+  function ringOf(topVerts, baseVerts, cutters, faultSnap) {
+    let ring;
+    if (baseVerts) {
+      const right = faultSide(topVerts[topVerts.length - 1], baseVerts[baseVerts.length - 1],
+                              cutters || [], faultSnap || 0);
+      const left = faultSide(baseVerts[0], topVerts[0], cutters || [], faultSnap || 0);
+      ring = topVerts.concat(right, baseVerts.slice().reverse(), left);
+    } else {
+      let floor = Infinity;
+      for (const v of topVerts) floor = Math.min(floor, v[1]);
+      ring = topVerts.concat([[topVerts[topVerts.length - 1][0], floor],
+                              [topVerts[0][0], floor]]);
+    }
+    return dedupe(ring);
+  }
+
+  function colorOf(line, unit) {
+    if (unit && unit.color) return unit.color.slice();
+    const c = (line.style || {}).color;
+    return c ? c.slice() : DEFAULT_COLOR.slice();
+  }
+
+  function centroidS(ring) {
+    let a = 0, cs = 0;
+    for (let i = 0, n = ring.length; i < n; i++) {
+      const p = ring[i], q = ring[(i + 1) % n];
+      const f = p[0] * q[1] - q[0] * p[1];
+      a += f; cs += (p[0] + q[0]) * f;
+    }
+    if (Math.abs(a) < 1e-12) {
+      let s0 = Infinity, s1 = -Infinity;
+      for (const p of ring) { s0 = Math.min(s0, p[0]); s1 = Math.max(s1, p[0]); }
+      return (s0 + s1) / 2;
+    }
+    return cs / (3 * a);
+  }
+
+  /* Cuerpos de unidad de la pila de horizontes, del techo hacia abajo y,
+   * en cada cuerpo, de izquierda a derecha. `faults` son las trazas
+   * contra las que recortar; `opts`: {clip_faults, fill_opacity,
+   * stroke_opacity, show_label}. */
+  function build(lines, units, faults, opts) {
+    opts = opts || {};
+    const unitsById = {};
+    for (const u of units || []) unitsById[u.id] = u;
+    const usable = (lines || []).filter(l => l && l.kind === KIND && (l.vertices || []).length >= 2);
+    const ordered = stratigraphicSort(usable, unitsById);
+    const fillOp = opts.fill_opacity === undefined ? DEFAULT_FILL_OPACITY : +opts.fill_opacity;
+    const strokeOp = opts.stroke_opacity === undefined ? DEFAULT_STROKE_OPACITY : +opts.stroke_opacity;
+    const showLabel = opts.show_label === undefined ? true : !!opts.show_label;
+    const clip = opts.clip_faults === undefined ? true : !!opts.clip_faults;
+    const cutters = [];
+    if (clip) {
+      const seen = new Set();
+      for (const f of (lines || []).concat(faults || [])) {
+        if (!f || f.kind !== FAULT_KIND || (f.vertices || []).length < 2 || seen.has(f.id)) continue;
+        seen.add(f.id);
+        cutters.push(f.vertices.map(v => [+v[0], +v[1]]));
+      }
+    }
+    const prepared = ordered.map(l => [l, leftToRight(l.vertices)]);
+    const out = [];
+    for (const entry of prepared) {
+      const top = entry[0], topVerts = entry[1];
+      const picked = pickBase(top, topVerts, prepared, cutters);
+      const base = picked[0], baseVerts = picked[1];
+      const snap = bboxDiagonal(topVerts, baseVerts) * FAULT_SNAP_FRACTION;
+      const ring = ringOf(topVerts, baseVerts, cutters, snap);
+      if (ring.length < 3 || Math.abs(geom.polygonArea(ring)) < MIN_AREA) continue;
+      let pieces = cutters.length ? geom.clipPolygonByPolylines(ring, cutters) : [ring];
+      pieces = pieces.filter(p => p.length >= 3 && Math.abs(geom.polygonArea(p)) >= MIN_AREA);
+      pieces.sort((a, b) => centroidS(a) - centroidS(b));
+      const unit = unitsById[top.unit_id];
+      pieces.forEach(function (piece, part) {
+        out.push({
+          id: SW.model.genId(), name: unit ? unit.name : (top.name || "Unit"),
+          vertices: piece, unit_id: top.unit_id || null, color: colorOf(top, unit),
+          fill_opacity: fillOp, stroke_opacity: strokeOp,
+          width: +((top.style || {}).width) || DEFAULT_WIDTH,
+          visible: true, show_label: showLabel,
+          top_line_id: top.id, base_line_id: base ? base.id : null, part: part,
+        });
+      });
+    }
+    return out;
+  }
+
+  return { build, stratigraphicSort, leftToRight, KIND, FAULT_KIND,
+           DEFAULT_FILL_OPACITY, DEFAULT_STROKE_OPACITY };
+})();
+
+/* ==== js/well_patterns.js ====
+ * StructuralSketcher — rellenos litológicos de las columnas de sondaje,
+ * portados de sectionworks v0.26.0 (mismo vocabulario corto, estilo USGS).
+ * Cada patrón es una lista de primitivas en una baldosa TILE×TILE; de ahí
+ * salen la textura de canvas (CanvasPattern cacheado) y el <pattern> SVG
+ * de la exportación, con una sola definición. */
+"use strict";
+window.SW = window.SW || {};
+
+SW.wellPatterns = (function () {
+  const TILE = 24;
+  const INK = "rgba(35,35,35,0.8)";
+
+  const L = (x1, y1, x2, y2) => ({ t: "L", a: [x1, y1, x2, y2] });
+  const D = (cx, cy, r) => ({ t: "D", a: [cx, cy, r] });
+  const C = (cx, cy, r) => ({ t: "C", a: [cx, cy, r] });
+  const P = (pts, fill) => ({ t: "P", pts: pts, fill: !!fill });
+
+  const DEFS = {
+    none: { label: "— none —", prims: [] },
+    sandstone: { label: "Sandstone",
+      prims: [D(6, 6, 1.5), D(18, 6, 1.5), D(12, 12, 1.5), D(6, 18, 1.5), D(18, 18, 1.5)] },
+    siltstone: { label: "Siltstone",
+      prims: [D(6, 5, 1.1), D(18, 5, 1.1), L(2, 12, 10, 12), L(14, 12, 22, 12),
+              D(6, 19, 1.1), D(18, 19, 1.1)] },
+    shale: { label: "Shale / mudstone",
+      prims: [L(1, 4, 11, 4), L(13, 4, 23, 4), L(6, 10, 18, 10),
+              L(1, 16, 11, 16), L(13, 16, 23, 16), L(6, 22, 18, 22)] },
+    limestone: { label: "Limestone",
+      prims: [L(0, 8, 24, 8), L(0, 16, 24, 16), L(0, 24, 24, 24),
+              L(8, 0, 8, 8), L(16, 8, 16, 16), L(8, 16, 8, 24)] },
+    dolomite: { label: "Dolomite",
+      prims: [L(0, 8, 24, 4), L(0, 16, 24, 12), L(0, 24, 24, 20),
+              L(8, 6, 8, 14), L(18, 3, 18, 11), L(13, 14, 13, 22)] },
+    marl: { label: "Marl",
+      prims: [L(0, 8, 24, 8), L(0, 16, 24, 16), L(8, 0, 8, 8),
+              L(16, 8, 16, 16), D(4, 12, 1.2), D(20, 4, 1.2), D(12, 20, 1.2)] },
+    conglomerate: { label: "Conglomerate",
+      prims: [C(6, 7, 3.2), C(17, 5, 2.2), C(12, 14, 3.8), C(21, 16, 2.6), C(4, 19, 2.4)] },
+    breccia: { label: "Breccia",
+      prims: [P([[3, 3], [10, 5], [6, 10]], false), P([[14, 2], [21, 6], [15, 9]], false),
+              P([[4, 14], [11, 13], [9, 21], [3, 19]], false), P([[15, 13], [22, 16], [16, 21]], false)] },
+    coal: { label: "Coal",
+      prims: [L(0, 3, 24, 3), L(0, 8, 24, 8), L(0, 13, 24, 13), L(0, 18, 24, 18), L(0, 23, 24, 23)],
+      wash: "rgba(20,20,20,0.72)" },
+    evaporite: { label: "Evaporite / gypsum",
+      prims: [L(-2, 10, 10, -2), L(-2, 22, 22, -2), L(2, 26, 26, 2), L(14, 26, 26, 14)] },
+    intrusive: { label: "Intrusive (granitoid)",
+      prims: [L(3, 6, 9, 6), L(6, 3, 6, 9), L(15, 15, 21, 15), L(18, 12, 18, 18),
+              D(18, 5, 1.3), D(6, 18, 1.3)] },
+    volcanic: { label: "Volcanic",
+      prims: [P([[3, 4], [6, 10], [9, 4]], false), P([[14, 8], [17, 14], [20, 8]], false),
+              P([[6, 15], [9, 21], [12, 15]], false)] },
+    metamorphic: { label: "Metamorphic",
+      prims: [P([[0, 6], [6, 3], [12, 6], [18, 3], [24, 6]], false),
+              P([[0, 14], [6, 11], [12, 14], [18, 11], [24, 14]], false),
+              P([[0, 22], [6, 19], [12, 22], [18, 19], [24, 22]], false)] },
+  };
+
+  function keys() { return Object.keys(DEFS); }
+  function label(key) { return (DEFS[key] || DEFS.none).label; }
+
+  const cache = {};
+
+  function drawPrims(ctx, prims, scale) {
+    ctx.strokeStyle = INK; ctx.fillStyle = INK; ctx.lineWidth = 1; ctx.lineCap = "round";
+    for (const p of prims) {
+      if (p.t === "L") {
+        ctx.beginPath();
+        ctx.moveTo(p.a[0] * scale, p.a[1] * scale);
+        ctx.lineTo(p.a[2] * scale, p.a[3] * scale);
+        ctx.stroke();
+      } else if (p.t === "D") {
+        ctx.beginPath();
+        ctx.arc(p.a[0] * scale, p.a[1] * scale, p.a[2] * scale, 0, 7);
+        ctx.fill();
+      } else if (p.t === "C") {
+        ctx.beginPath();
+        ctx.arc(p.a[0] * scale, p.a[1] * scale, p.a[2] * scale, 0, 7);
+        ctx.stroke();
+      } else if (p.t === "P") {
+        ctx.beginPath();
+        p.pts.forEach((q, i) => i ? ctx.lineTo(q[0] * scale, q[1] * scale)
+                                  : ctx.moveTo(q[0] * scale, q[1] * scale));
+        if (p.fill) { ctx.closePath(); ctx.fill(); } else { ctx.stroke(); }
+      }
+    }
+  }
+
+  function canvasPattern(ctx, key, fillCss) {
+    const def = DEFS[key];
+    if (!def || !def.prims.length) return null;
+    const ck = key + "|" + fillCss;
+    if (cache[ck]) return cache[ck];
+    const tile = document.createElement("canvas");
+    tile.width = TILE; tile.height = TILE;
+    const tctx = tile.getContext("2d");
+    tctx.fillStyle = fillCss;
+    tctx.fillRect(0, 0, TILE, TILE);
+    if (def.wash) { tctx.fillStyle = def.wash; tctx.fillRect(0, 0, TILE, TILE); }
+    drawPrims(tctx, def.prims, 1);
+    const pat = ctx.createPattern(tile, "repeat");
+    cache[ck] = pat;
+    return pat;
+  }
+
+  function swatch(key, fillCss, size) {
+    size = size || 18;
+    const cv = document.createElement("canvas");
+    cv.width = size; cv.height = size;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = fillCss || "#d8d8d8";
+    ctx.fillRect(0, 0, size, size);
+    const def = DEFS[key] || DEFS.none;
+    if (def.wash) { ctx.fillStyle = def.wash; ctx.fillRect(0, 0, size, size); }
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, size, size); ctx.clip();
+    drawPrims(ctx, def.prims, size / TILE);
+    ctx.restore();
+    ctx.strokeStyle = "rgba(0,0,0,.35)";
+    ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+    return cv;
+  }
+
+  /* -- SVG: mismas primitivas como <pattern> tileable, para que la
+   * exportación no se aparte de lo que se ve en pantalla. */
+  function svgDef(key, fillCss, id) {
+    const def = DEFS[key];
+    if (!def || !def.prims.length) return "";
+    const body = [];
+    body.push('<rect width="' + TILE + '" height="' + TILE + '" fill="' + fillCss + '"/>');
+    if (def.wash)
+      body.push('<rect width="' + TILE + '" height="' + TILE + '" fill="' + def.wash + '"/>');
+    for (const p of def.prims) {
+      if (p.t === "L")
+        body.push('<line x1="' + p.a[0] + '" y1="' + p.a[1] + '" x2="' + p.a[2] +
+                  '" y2="' + p.a[3] + '" stroke="' + INK +
+                  '" stroke-width="1" stroke-linecap="round"/>');
+      else if (p.t === "D")
+        body.push('<circle cx="' + p.a[0] + '" cy="' + p.a[1] + '" r="' + p.a[2] +
+                  '" fill="' + INK + '"/>');
+      else if (p.t === "C")
+        body.push('<circle cx="' + p.a[0] + '" cy="' + p.a[1] + '" r="' + p.a[2] +
+                  '" fill="none" stroke="' + INK + '" stroke-width="1"/>');
+      else if (p.t === "P")
+        body.push('<pol' + (p.fill ? "ygon" : "yline") + ' points="' +
+                  p.pts.map(q => q[0] + "," + q[1]).join(" ") + '" fill="' +
+                  (p.fill ? INK : "none") + '" stroke="' + INK + '" stroke-width="1"/>');
+    }
+    return '<pattern id="' + id + '" width="' + TILE + '" height="' + TILE +
+      '" patternUnits="userSpaceOnUse">' + body.join("") + "</pattern>";
+  }
+
+  return { TILE, keys, label, canvasPattern, swatch, svgDef };
+})();
+
 /* ==== js/context_menu.js ==== */
 "use strict";
 /* SectionWorks — floating right-click context menu.
@@ -2171,6 +3231,13 @@ SW.model = (function () {
       horizons: [],
       images: [],
       scalebars: [],
+      // Polígonos de relleno construidos por Unit polygons (SW.unitPolygons)
+      // a partir de los horizontes; se reconstruyen con el botón "Build" del
+      // panel — no se editan a mano, así que no llevan undo por vértice.
+      polygons: [],
+      // Sondajes: collar (s, z_collar) + columna de intervalos con espesor
+      // y patrón litológico. Ver SW.wellPatterns.
+      wells: [],
       // Escala espacial declarada por el usuario, un registro por eje:
       // {real, unit, factor, image_id, at}. null = ese eje todavía no se
       // calibró, y hasta que lo esté las longitudes que mida la app son
@@ -2222,6 +3289,18 @@ SW.model = (function () {
                              image_id: null }, b);
     });
     sec.horizons = sec.horizons || [];
+    sec.polygons = (sec.polygons || []).map(function (p) {
+      return Object.assign({ id: genId(), name: "Unit", vertices: [],
+                             unit_id: null, color: [90, 90, 90],
+                             fill_opacity: 0.5, stroke_opacity: 1,
+                             width: 2, visible: true, show_label: true,
+                             top_line_id: null, base_line_id: null, part: 0 }, p);
+    });
+    sec.wells = (sec.wells || []).map(function (w) {
+      return Object.assign({ id: genId(), name: "W1", s: 0, z_collar: 0,
+                             intervals: [], visible: true, width_px: 18,
+                             show_labels: true }, w);
+    });
     sec.calibration = Object.assign({ h: null, v: null },
                                     sec.calibration || {});
     sec.display_units = Object.assign({ h: "km", v: "km" },
@@ -2462,6 +3541,36 @@ SW.model = (function () {
         syncUnitIds();
         break;
 
+      /* -- Unit polygons (rellenos): se reconstruyen enteros, no se editan
+       * vértice a vértice, así que un solo op basta para redo/undo. */
+      case "set_polygons":
+        sec.polygons = clone(op.polygons || []);
+        break;
+
+      /* -- sondajes ---------------------------------------------------- */
+      case "add_well":
+        sec.wells.push(clone(op.well));
+        break;
+      case "remove_well": {
+        const i = (sec.wells || []).findIndex(w => w.id === op.id);
+        if (i >= 0) sec.wells.splice(i, 1);
+        break;
+      }
+      case "restore_well": {
+        const idx = (op.index === undefined || op.index === null ||
+                     op.index > sec.wells.length) ? sec.wells.length : op.index;
+        sec.wells.splice(idx, 0, clone(op.well));
+        break;
+      }
+      case "set_well_props": {
+        const w = (sec.wells || []).find(x => x.id === op.id);
+        if (w)
+          for (const k of ["name", "s", "z_collar", "intervals", "visible",
+                           "width_px", "show_labels"])
+            if (k in (op.props || {})) w[k] = clone(op.props[k]);
+        break;
+      }
+
       default:
         console.warn("applyOp: unknown op", op.op);
     }
@@ -2488,6 +3597,9 @@ SW.model = (function () {
       b.p0 = [fs(b.p0[0]), fz(b.p0[1])];
       b.p1 = [fs(b.p1[0]), fz(b.p1[1])];
     }
+    for (const p of sec.polygons || [])
+      p.vertices = p.vertices.map(v => [fs(v[0]), fz(v[1])]);
+    for (const w of sec.wells || []) { w.s = fs(w.s); w.z_collar = fz(w.z_collar); }
     sec.length = Math.abs(as) * sec.length;
     const z0 = fz(sec.z_min), z1 = fz(sec.z_max);
     sec.z_min = Math.min(z0, z1); sec.z_max = Math.max(z0, z1);
@@ -2531,8 +3643,35 @@ SW.model = (function () {
     for (const b of M.sec.scalebars || []) {
       add(b.p0[0], b.p0[1]); add(b.p1[0], b.p1[1]);
     }
+    for (const p of M.sec.polygons || [])
+      for (const v of p.vertices) add(v[0], v[1]);
+    for (const w of M.sec.wells || []) {
+      add(w.s, w.z_collar);
+      let z = w.z_collar;
+      for (const iv of w.intervals || []) { z -= Math.abs(iv.thickness || 0); add(w.s, z); }
+    }
     if (!isFinite(s0)) return null;
     return { s0, s1, z0, z1 };
+  }
+
+  /* -- sondajes ------------------------------------------------------------- */
+  function getWell(id) {
+    return (M.sec.wells || []).find(w => w.id === id) || null;
+  }
+  function wellIndex(id) {
+    return (M.sec.wells || []).findIndex(w => w.id === id);
+  }
+  function nextWellName() {
+    let hi = 0;
+    for (const w of M.sec.wells || []) {
+      const m = /^W(\d+)\b/.exec(w.name || "");
+      if (m) hi = Math.max(hi, +m[1]);
+    }
+    return "W" + (hi + 1);
+  }
+  function newWell(s, zCollar) {
+    return { id: genId(), name: nextWellName(), s: s, z_collar: zCollar,
+             intervals: [], visible: true, width_px: 18, show_labels: true };
   }
 
   return {
@@ -2542,6 +3681,7 @@ SW.model = (function () {
     hexToRgb, KINDS,
     dips, getDip, dipIndex, newDip,
     getImage, imageIndex, getScalebar,
+    getWell, wellIndex, nextWellName, newWell,
     applyOp, applyGlobalTransform, invertTransform, syncUnitIds, contentBBox,
   };
 })();
@@ -3160,8 +4300,10 @@ SW.render = (function () {
     }
     if (st.showFrame) drawSectionFrame(ctx, sec);
     drawImages(ctx, sec);
+    if (st.showPolygons) drawPolygons(ctx, sec, st);
     drawLines(ctx, sec, st);
     drawDips(ctx, sec, st);
+    if (st.showWells) drawWells(ctx, sec, st);
     if (st.showScalebars) drawScalebars(ctx, sec, st);
     if (st.kinkShowConstruction) drawSelectedLineBisectors(ctx, st);
     if (SW.tools && SW.tools.drawOverlay) SW.tools.drawOverlay(ctx);
@@ -3207,6 +4349,85 @@ SW.render = (function () {
       ctx.save();
       ctx.globalAlpha = im.opacity === undefined ? 1 : im.opacity;
       ctx.drawImage(entry.img, x0, y0, x1 - x0, y1 - y0);
+      ctx.restore();
+    }
+  }
+
+  /* Rellenos de unidad (SW.unitPolygons): fondo semitransparente bajo las
+   * líneas, con su propio contorno y — si cabe — un rótulo en el punto que
+   * SW.geom.polygonLabelPoint garantiza dentro del cuerpo. Se reconstruyen
+   * con el botón del panel Unit polygons; acá sólo se dibujan. */
+  function drawPolygons(ctx, sec, st) {
+    const V = SW.view;
+    for (const p of sec.polygons || []) {
+      if (p.visible === false || (p.vertices || []).length < 3) continue;
+      const rgb = (p.color || [90, 90, 90]).join(",");
+      ctx.beginPath();
+      p.vertices.forEach((v, i) =>
+        i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+      ctx.closePath();
+      ctx.fillStyle = "rgba(" + rgb + "," + (p.fill_opacity === undefined ? 0.5 : p.fill_opacity) + ")";
+      ctx.fill();
+      if (p.stroke_opacity !== 0) {
+        ctx.strokeStyle = "rgba(" + rgb + "," + (p.stroke_opacity === undefined ? 1 : p.stroke_opacity) + ")";
+        ctx.lineWidth = p.width || 1.5;
+        ctx.stroke();
+      }
+      if (st.showLabels && p.show_label !== false && p.name) {
+        const lp = SW.geom.polygonLabelPoint(p.vertices);
+        ctx.font = "bold 10px 'Segoe UI', sans-serif";
+        ctx.fillStyle = "rgba(" + rgb + ",1)";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(p.name, V.sx(lp[0]), V.zy(lp[1]));
+      }
+    }
+  }
+
+  /* Columnas de sondaje (SW.wellPatterns): un rectángulo de ancho fijo en
+   * pantalla (no escala con el zoom/VE, igual que el radio del dip) por
+   * cada intervalo, relleno con su patrón litológico, más el collar y el
+   * nombre. */
+  function drawWells(ctx, sec, st) {
+    const V = SW.view;
+    for (const w of sec.wells || []) {
+      if (w.visible === false) continue;
+      const x = V.sx(w.s);
+      const halfW = (w.width_px || 18) / 2;
+      let z = w.z_collar;
+      let yTop = V.zy(z);
+      ctx.save();
+      ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1;
+      for (const iv of w.intervals || []) {
+        const thick = Math.abs(iv.thickness || 0);
+        if (thick <= 0) continue;
+        const zBot = z - thick;
+        const yBot = V.zy(zBot);
+        const fillCss = iv.color ? "rgb(" + iv.color.join(",") + ")" : "#d8d8d8";
+        const pat = iv.pattern && SW.wellPatterns
+          ? SW.wellPatterns.canvasPattern(ctx, iv.pattern, fillCss) : null;
+        ctx.fillStyle = pat || fillCss;
+        ctx.fillRect(x - halfW, yTop, halfW * 2, yBot - yTop);
+        ctx.strokeRect(x - halfW, yTop, halfW * 2, yBot - yTop);
+        if (st.showLabels && w.show_labels !== false && iv.name && (yBot - yTop) > 12) {
+          ctx.fillStyle = "#1a1a1a";
+          ctx.font = "9px 'Segoe UI', sans-serif";
+          ctx.textAlign = "left"; ctx.textBaseline = "middle";
+          ctx.fillText(iv.name, x + halfW + 4, (yTop + yBot) / 2);
+        }
+        z = zBot; yTop = yBot;
+      }
+      // collar: tick horizontal + nombre
+      ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - halfW - 4, V.zy(w.z_collar));
+      ctx.lineTo(x + halfW + 4, V.zy(w.z_collar));
+      ctx.stroke();
+      if (st.showLabels && w.name) {
+        ctx.fillStyle = "#000";
+        ctx.font = "bold 10px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+        ctx.fillText(w.name, x, V.zy(w.z_collar) - 4);
+      }
       ctx.restore();
     }
   }
@@ -3683,6 +4904,27 @@ SW.exporter = (function () {
                esc(im.data_url) + '"/>');
     }
 
+    // rellenos de unidad (Unit polygons)
+    if (st.showPolygons)
+      for (const poly of sec.polygons || []) {
+        if (poly.visible === false || (poly.vertices || []).length < 3) continue;
+        const rgb = (poly.color || [90, 90, 90]).join(",");
+        out.push('<polygon points="' + poly.vertices.map(v =>
+          sx(v[0]).toFixed(1) + "," + zy(v[1]).toFixed(1)).join(" ") +
+          '" fill="rgba(' + rgb + "," +
+          (poly.fill_opacity === undefined ? 0.5 : poly.fill_opacity) +
+          ')" stroke="rgba(' + rgb + "," +
+          (poly.stroke_opacity === undefined ? 1 : poly.stroke_opacity) +
+          ')" stroke-width="' + (poly.width || 1.5) + '"/>');
+        if (st.showLabels && poly.show_label !== false && poly.name) {
+          const lp = SW.geom.polygonLabelPoint(poly.vertices);
+          out.push('<text x="' + sx(lp[0]).toFixed(1) + '" y="' +
+                   zy(lp[1]).toFixed(1) + '" font-size="10" font-weight="bold" ' +
+                   'text-anchor="middle" dominant-baseline="middle" fill="rgb(' +
+                   rgb + ')">' + esc(poly.name) + "</text>");
+        }
+      }
+
     // líneas
     for (const line of sec.lines || []) {
       if (line.visible === false || (line.vertices || []).length < 2) continue;
@@ -3725,6 +4967,44 @@ SW.exporter = (function () {
                  '" font-size="10" text-anchor="middle" fill="' + fill +
                  '">' + esc(d.label) + "</text>");
     }
+
+    // sondajes
+    if (st.showWells)
+      for (const w of sec.wells || []) {
+        if (w.visible === false) continue;
+        const x = sx(w.s), halfW = (w.width_px || 18) / 2;
+        let z = w.z_collar;
+        for (const iv of w.intervals || []) {
+          const thick = Math.abs(iv.thickness || 0);
+          if (thick <= 0) continue;
+          const zBot = z - thick;
+          const yTop = zy(z), yBot = zy(zBot);
+          const fillCss = iv.color ? "rgb(" + iv.color.join(",") + ")" : "#d8d8d8";
+          const patId = "wp-" + w.id + "-" + iv.id;
+          const svgPat = SW.wellPatterns.svgDef
+            ? SW.wellPatterns.svgDef(iv.pattern, fillCss, patId) : "";
+          if (svgPat) out.push("<defs>" + svgPat + "</defs>");
+          out.push('<rect x="' + (x - halfW).toFixed(1) + '" y="' +
+                   yTop.toFixed(1) + '" width="' + (halfW * 2).toFixed(1) +
+                   '" height="' + (yBot - yTop).toFixed(1) + '" fill="' +
+                   (svgPat ? "url(#" + patId + ")" : fillCss) +
+                   '" stroke="#2a2a2a" stroke-width="1"/>');
+          if (st.showLabels && w.show_labels !== false && iv.name && (yBot - yTop) > 12)
+            out.push('<text x="' + (x + halfW + 4).toFixed(1) + '" y="' +
+                     ((yTop + yBot) / 2 + 3).toFixed(1) +
+                     '" font-size="9" fill="#1a1a1a">' + esc(iv.name) + "</text>");
+          z = zBot;
+        }
+        out.push('<line x1="' + (x - halfW - 4).toFixed(1) + '" y1="' +
+                 zy(w.z_collar).toFixed(1) + '" x2="' + (x + halfW + 4).toFixed(1) +
+                 '" y2="' + zy(w.z_collar).toFixed(1) +
+                 '" stroke="#000" stroke-width="2"/>');
+        if (st.showLabels && w.name)
+          out.push('<text x="' + x.toFixed(1) + '" y="' +
+                   (zy(w.z_collar) - 6).toFixed(1) +
+                   '" font-size="10" font-weight="bold" text-anchor="middle">' +
+                   esc(w.name) + "</text>");
+      }
 
     // barras de escala de la calibración
     if (st.showScalebars) {
@@ -4215,6 +5495,7 @@ SW.tools = (function () {
     }
     const t = active();
     if (t && t.activate) t.activate();
+    if (SW.panels && SW.panels.restore) SW.panels.restore.render();
     if (SW.view) SW.view.requestDraw();
   }
 
@@ -4912,6 +6193,96 @@ window.SW = window.SW || {};
     });
     SW.view.status("Smoothed " + redo.length + " line(s).");
     SW.view.requestDraw();
+  };
+
+  /* Densifica las líneas seleccionadas (SW.geom.resamplePolyline): la traza
+   * no cambia, sólo sube la densidad de vértices — lo que necesitan la
+   * restauración y el desplegado, que muestrean segmento a segmento.
+   * spacing vacío/0 = la mitad de la mediana de segmento de cada línea. */
+  SW.actions.resampleSelected = function (spacing) {
+    const lines = SW.view.selectedLines().filter(l => !l.locked && l.vertices.length >= 2);
+    if (!lines.length) { SW.view.status("Nothing to resample: no selection."); return; }
+    const redo = [], undo = [];
+    for (const line of lines) {
+      let sp = spacing;
+      if (!(sp > 0)) {
+        const segs = [];
+        for (let i = 1; i < line.vertices.length; i++)
+          segs.push(SW.geom.dist(line.vertices[i - 1], line.vertices[i]));
+        segs.sort((a, b) => a - b);
+        sp = (segs[Math.floor(segs.length / 2)] || SW.view.tolS(20)) / 2;
+      }
+      const out = SW.geom.resamplePolyline(line.vertices, sp);
+      if (out.length === line.vertices.length) continue;
+      redo.push({ op: "replace_vertices", id: line.id, vertices: out });
+      undo.push({ op: "replace_vertices", id: line.id, vertices: line.vertices });
+    }
+    if (!redo.length) { SW.view.status("Nothing to resample."); return; }
+    SW.undo.push({
+      label: redo.length > 1 ? "Resample " + redo.length + " lines" : "Resample line",
+      redo: redo, undo: undo,
+    });
+    SW.view.status("Resampled " + redo.length + " line(s).");
+    SW.view.requestDraw();
+  };
+
+  /* Encadena las líneas seleccionadas en UNA sola (SW.geom.joinPolylines):
+   * junturas a menos de `tol` se sueldan; las más lejanas se unen con un
+   * segmento recto (se avisa cuántas). La nueva línea toma el estilo de la
+   * primera línea seleccionada (por orden en sec.lines) y el resto se borra
+   * — un solo comando de undo para todo el lote. */
+  SW.actions.joinSelected = function (tol) {
+    const lines = SW.view.selectedLines().filter(l => !l.locked);
+    if (lines.length < 2) {
+      SW.view.status("Join needs at least two selected, unlocked lines.");
+      return;
+    }
+    const t = tol === undefined ? SW.view.tolS(10) : tol;
+    const ordered = lines.slice()
+      .sort((a, b) => SW.model.lineIndex(a.id) - SW.model.lineIndex(b.id));
+    const res = SW.geom.joinPolylines(ordered.map(l => l.vertices), t,
+                                      SW.view.state.ve || 1);
+    if (res.vertices.length < 2) { SW.view.status("Nothing to join."); return; }
+    const first = ordered[0];
+    const joined = SW.model.newLine(first.kind, res.vertices, "digitized");
+    joined.style = SW.model.clone(first.style);
+    joined.fault_style = SW.model.clone(first.fault_style || { sense: "none", flip: false });
+    joined.unit_id = first.unit_id;
+    const redo = [{ op: "add_line", line: joined }];
+    const undo = [{ op: "delete_line", id: joined.id }];
+    const withIdx = ordered.map(l => ({ line: l, index: SW.model.lineIndex(l.id) }))
+      .sort((a, b) => a.index - b.index);
+    for (const x of withIdx) {
+      redo.push({ op: "delete_line", id: x.line.id });
+      undo.push({ op: "restore_line", line: SW.model.clone(x.line), index: x.index });
+    }
+    SW.undo.push({ label: "Join " + ordered.length + " lines", redo: redo,
+                   undo: undo.reverse() });
+    SW.view.setSelection([{ type: "line", id: joined.id }]);
+    SW.view.status("Joined " + ordered.length + " lines" +
+      (res.gaps.length ? " (" + res.gaps.length + " gap(s) bridged straight)." : "."));
+    SW.view.requestDraw();
+  };
+
+  /* Construye los polígonos de unidad (SW.unitPolygons.build) a partir de
+   * los horizontes visibles y las fallas visibles, y reemplaza sec.polygons
+   * entero en un solo comando de undo. */
+  SW.actions.buildUnitPolygons = function (opts) {
+    const sec = SW.model.state.sec;
+    const before = SW.model.clone(sec.polygons || []);
+    const lines = (sec.lines || []).filter(l => l.visible !== false);
+    const after = SW.unitPolygons.build(lines, sec.horizons || [], lines, opts || {});
+    SW.undo.push({
+      label: "Build unit polygons",
+      redo: [{ op: "set_polygons", polygons: after }],
+      undo: [{ op: "set_polygons", polygons: before }],
+    });
+    SW.view.status(after.length
+      ? "Built " + after.length + " unit polygon piece(s)."
+      : "No unit polygons built: no horizon lines to fill between.");
+    SW.view.requestDraw();
+    if (SW.panels && SW.panels.polygons) SW.panels.polygons.render();
+    return after;
   };
 })();
 
@@ -7658,6 +9029,284 @@ window.SW = window.SW || {};
   });
 })();
 
+/* ==== js/tools/well.js ====
+ * Tool: Well — click en el lienzo deja un collar (s, z) y crea un sondaje
+ * vacío; la estratigrafía (intervalos, espesor, patrón) se teclea después
+ * en el panel Wells, que este tool abre y enfoca. */
+"use strict";
+window.SW = window.SW || {};
+
+(function () {
+  SW.tools.register("well", {
+    cursor: "crosshair",
+    hint: "Click on the section to drop a well collar, then type its " +
+          "stratigraphy in the Wells panel.",
+    onClick: function (e, pos) {
+      if (e.button !== 0) return;
+      const p = SW.view.toSection(pos);
+      const well = SW.model.newWell(p.s, p.z);
+      SW.undo.push({
+        label: "Add " + well.name,
+        redo: [{ op: "add_well", well: well }],
+        undo: [{ op: "remove_well", id: well.id }],
+      });
+      SW.view.status("Added " + well.name + " — edit its stratigraphy in " +
+                     "the Wells panel.");
+      if (SW.panels.wells) {
+        const panel = document.getElementById("panel-wells");
+        if (panel) panel.classList.remove("collapsed");
+        SW.panels.wells.select(well.id);
+      }
+      SW.view.requestDraw();
+    },
+  });
+})();
+
+/* ==== js/tools/restore_fault.js ====
+ * Tool: FPF Restoration — Fault Parallel Flow. Un clic elige la falla
+ * activa; los clics siguientes acumulan/quitan líneas de la selección
+ * (el bloque colgante a mover). El campo Slip y los botones Flip/Apply
+ * viven en el riel (ver wireUI en js/view.js) porque son numéricos, no
+ * gestos sobre el lienzo. */
+"use strict";
+window.SW = window.SW || {};
+
+(function () {
+  let fault = null;     // línea activa
+  let hwSide = 1;        // +1 / -1, ver SW.restore.faultParallelFlow
+
+  function reset() { fault = null; hwSide = 1; }
+
+  SW.tools.register("restore_fault", {
+    cursor: "crosshair",
+    hint: "Click the fault; then click lines to select the hanging-wall " +
+          "block; set the slip in the rail and press Apply. Esc to pick " +
+          "another fault.",
+    activate: reset,
+    deactivate: reset,
+    onClick: function (e, pos) {
+      if (e.button === 2) return;
+      const hit = SW.view.hitLine(pos, 10);
+      if (fault === null) {
+        if (!hit) { SW.view.status("Click on the fault line."); return; }
+        fault = hit.line;
+        hwSide = 1;
+        SW.view.status("Fault: " + (fault.name || "") + ". Now click the " +
+          "hanging-wall lines to move (Ctrl+click accumulates), set the " +
+          "slip and press Apply.");
+        SW.view.requestDraw();
+        return;
+      }
+      if (!hit || hit.line.id === fault.id) return;
+      SW.view.toggleSelection({ type: "line", id: hit.line.id });
+      SW.view.requestDraw();
+    },
+    onKey: function (e) {
+      if (e.key !== "Escape") return false;
+      reset();
+      SW.view.requestDraw();
+      return true;
+    },
+    getState: function () {
+      return { faultName: fault ? fault.name : null, hwSide: hwSide };
+    },
+    faultLine: function () { return fault; },
+    hwSide: function () { return hwSide; },
+    flipSide: function () { hwSide = -hwSide; SW.view.requestDraw(); },
+    drawOverlay: function (ctx) {
+      if (!fault || !fault.vertices || fault.vertices.length < 2) return;
+      const V = SW.view;
+      ctx.save();
+      ctx.strokeStyle = SW.render.COLORS.select;
+      ctx.lineWidth = 4; ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      fault.vertices.forEach((v, i) =>
+        i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+      ctx.stroke();
+      ctx.restore();
+      // lado marcado como bloque colgante: una etiqueta "HW" a mitad de
+      // falla, desplazada hacia el lado con signo hwSide
+      const mid = fault.vertices[Math.floor(fault.vertices.length / 2)];
+      const j = Math.max(0, Math.floor(fault.vertices.length / 2) - 1);
+      const [nx, ny] = SW.restore.leftNormal(fault.vertices, j);
+      const off = 22;
+      ctx.save();
+      ctx.fillStyle = SW.render.COLORS.select;
+      ctx.font = "bold 11px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("HW", V.sx(mid[0]) + nx * off * hwSide,
+                   V.zy(mid[1]) - ny * off * hwSide * (V.state.ve || 1));
+      ctx.restore();
+    },
+  });
+
+  SW.actions = SW.actions || {};
+  SW.actions.restoreFaultFlip = function () {
+    const t = SW.tools.get("restore_fault");
+    if (t) t.flipSide();
+  };
+
+  SW.actions.restoreFaultApply = function (slip) {
+    const t = SW.tools.get("restore_fault");
+    const fault = t && t.faultLine();
+    if (!fault) { SW.view.status("Pick the active fault first."); return; }
+    const side = t.hwSide();
+    const lines = SW.view.selectedLines()
+      .filter(l => l.id !== fault.id && !l.locked && l.vertices.length >= 1);
+    if (!lines.length) {
+      SW.view.status("Nothing to move: click the hanging-wall lines first.");
+      return;
+    }
+    if (!(Math.abs(slip) > 1e-9)) {
+      SW.view.status("The slip is 0 m — type a distance first.");
+      return;
+    }
+    const redo = [], undo = [];
+    let moved = 0;
+    for (const line of lines) {
+      const res = SW.restore.faultParallelFlow(fault.vertices, line.vertices,
+                                               slip, side, false);
+      if (!res.info.moved) continue;
+      redo.push({ op: "replace_vertices", id: line.id, vertices: res.points });
+      undo.push({ op: "replace_vertices", id: line.id, vertices: line.vertices });
+      moved++;
+    }
+    if (!redo.length) {
+      SW.view.status("No point on the hanging-wall side of the fault in " +
+                     "the selection — flip the side, or select different lines.");
+      return;
+    }
+    SW.undo.push({
+      label: "Fault Parallel Flow restoration",
+      redo: redo, undo: undo,
+    });
+    SW.view.status("Restored " + moved + " line(s), slip " +
+                   SW.units.len(slip) + ".");
+    SW.view.requestDraw();
+  };
+})();
+
+/* ==== js/tools/unfold.js ====
+ * Tool: Unfold — Flexural Slip. Un clic elige la capa plantilla (la
+ * plegada); las siguientes acumulan/quitan la selección de líneas
+ * pasivas a desdoblar CON ella. Pin (s), Datum (z) y el porcentaje de
+ * desdoblado viven en el riel. */
+"use strict";
+window.SW = window.SW || {};
+
+(function () {
+  let template = null;
+
+  function reset() { template = null; }
+
+  SW.tools.register("unfold", {
+    cursor: "crosshair",
+    hint: "Click the folded template bed; then click the lines to unfold " +
+          "with it; set pin/datum in the rail and press Apply.",
+    activate: reset,
+    deactivate: reset,
+    onClick: function (e, pos) {
+      if (e.button === 2) return;
+      const hit = SW.view.hitLine(pos, 10);
+      if (template === null) {
+        if (!hit) { SW.view.status("Click on the template (folded) bed."); return; }
+        template = hit.line;
+        const zMax = Math.max(...template.vertices.map(v => v[1]));
+        const datum = document.getElementById("unfold-datum");
+        if (datum && (!datum.value || +datum.value === 0))
+          datum.value = zMax.toFixed(1);
+        SW.view.status("Template: " + (template.name || "") + ". Now click " +
+          "the lines to unfold with it (Ctrl+click accumulates), set pin/" +
+          "datum and press Apply.");
+        SW.view.requestDraw();
+        return;
+      }
+      if (!hit || hit.line.id === template.id) return;
+      SW.view.toggleSelection({ type: "line", id: hit.line.id });
+      SW.view.requestDraw();
+    },
+    onKey: function (e) {
+      if (e.key !== "Escape") return false;
+      reset();
+      SW.view.requestDraw();
+      return true;
+    },
+    getState: function () { return { templateName: template ? template.name : null }; },
+    templateLine: function () { return template; },
+    drawOverlay: function (ctx) {
+      if (!template || !template.vertices || template.vertices.length < 2) return;
+      const V = SW.view;
+      ctx.save();
+      ctx.strokeStyle = SW.render.COLORS.select;
+      ctx.lineWidth = 4; ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      template.vertices.forEach((v, i) =>
+        i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+      ctx.stroke();
+      ctx.restore();
+      const pinIn = document.getElementById("unfold-pin");
+      const datIn = document.getElementById("unfold-datum");
+      if (pinIn && datIn) {
+        const pinS = +pinIn.value || 0, datumZ = +datIn.value || 0;
+        ctx.save();
+        ctx.strokeStyle = SW.render.COLORS.measure;
+        ctx.setLineDash([4, 3]); ctx.lineWidth = 1.4;
+        const r = V.plotRect ? V.plotRect() : null;
+        ctx.beginPath();
+        ctx.moveTo(V.sx(pinS), r ? r.y : 0);
+        ctx.lineTo(V.sx(pinS), r ? r.y + r.h : (V.cv ? V.cv.height : 600));
+        ctx.moveTo(r ? r.x : 0, V.zy(datumZ));
+        ctx.lineTo(r ? r.x + r.w : (V.cv ? V.cv.width : 800), V.zy(datumZ));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = SW.render.COLORS.measure;
+        ctx.beginPath();
+        ctx.arc(V.sx(pinS), V.zy(datumZ), 4, 0, 7);
+        ctx.fill();
+        ctx.restore();
+      }
+    },
+  });
+
+  SW.actions = SW.actions || {};
+  SW.actions.unfoldDatumFromTemplate = function () {
+    const t = SW.tools.get("unfold");
+    const tpl = t && t.templateLine();
+    if (!tpl) { SW.view.status("Pick the template bed first."); return; }
+    const zMax = Math.max(...tpl.vertices.map(v => v[1]));
+    const datIn = document.getElementById("unfold-datum");
+    if (datIn) datIn.value = zMax.toFixed(1);
+    SW.view.requestDraw();
+  };
+
+  SW.actions.unfoldApply = function (pinS, datumZ, amountPct) {
+    const t = SW.tools.get("unfold");
+    const tpl = t && t.templateLine();
+    if (!tpl) { SW.view.status("Pick the template bed first."); return; }
+    const lines = SW.view.selectedLines()
+      .filter(l => l.id !== tpl.id && !l.locked && l.vertices.length >= 1);
+    if (!lines.length) {
+      SW.view.status("Nothing to unfold: click the lines to move first.");
+      return;
+    }
+    const amount = Math.max(0, Math.min(100, amountPct === undefined ? 100 : amountPct)) / 100;
+    const redo = [], undo = [];
+    for (const line of lines.concat([tpl])) {
+      const res = SW.restore.flexuralSlipUnfold(tpl.vertices, line.vertices,
+                                                pinS, datumZ, null, amount, 0);
+      redo.push({ op: "replace_vertices", id: line.id, vertices: res.points });
+      undo.push({ op: "replace_vertices", id: line.id, vertices: line.vertices });
+    }
+    SW.undo.push({
+      label: "Flexural-slip unfold (" + Math.round(amount * 100) + "%)",
+      redo: redo, undo: undo,
+    });
+    SW.view.status("Unfolded " + lines.length + " line(s) + template at " +
+                   Math.round(amount * 100) + "%.");
+    SW.view.requestDraw();
+  };
+})();
+
 /* ==== js/panels/horizons.js ==== */
 "use strict";
 /* Panel: Unidades (horizontes).
@@ -7950,6 +9599,347 @@ SW.panels.horizons = (function () {
   }
 
   return { render, sync };
+})();
+
+/* ==== js/panels/polygons.js ====
+ * Panel: Unit polygons — rellenos construidos por SW.unitPolygons.build()
+ * a partir de los horizontes y recortados contra las fallas. Se
+ * RECONSTRUYEN con el botón "Build"; no se editan vértice a vértice acá
+ * (para eso está la línea de horizonte que los originó). */
+"use strict";
+window.SW = window.SW || {};
+SW.panels = SW.panels || {};
+
+SW.panels.polygons = (function () {
+  function rgbToHex(c) {
+    return "#" + (c || [90, 90, 90]).map(v =>
+      Math.max(0, Math.min(255, Math.round(v)))
+        .toString(16).padStart(2, "0")).join("");
+  }
+
+  function removePolygon(id) {
+    const sec = SW.model.state.sec;
+    const before = SW.model.clone(sec.polygons || []);
+    const after = before.filter(p => p.id !== id);
+    SW.undo.push({
+      label: "Delete unit polygon",
+      redo: [{ op: "set_polygons", polygons: after }],
+      undo: [{ op: "set_polygons", polygons: before }],
+    });
+    render();
+    SW.view.requestDraw();
+  }
+
+  function toggleVisible(id) {
+    const sec = SW.model.state.sec;
+    const p = (sec.polygons || []).find(x => x.id === id);
+    if (!p) return;
+    p.visible = p.visible === false;
+    SW.view.requestDraw();
+  }
+
+  function render() {
+    const body = document.getElementById("panel-polygons-body");
+    if (!body) return;
+    body.innerHTML = "";
+    const polys = SW.model.state.sec.polygons || [];
+
+    for (const p of polys) {
+      const row = document.createElement("div");
+      row.className = "list-item";
+
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = rgbToHex(p.color);
+      row.appendChild(sw);
+
+      const name = document.createElement("span");
+      name.className = "grow";
+      name.textContent = p.name + (p.part ? " (part " + (p.part + 1) + ")" : "");
+      row.appendChild(name);
+
+      const vis = document.createElement("button");
+      vis.className = "mini";
+      vis.textContent = p.visible === false ? "Show" : "Hide";
+      vis.title = "Show/hide this polygon";
+      vis.addEventListener("click", () => { toggleVisible(p.id); render(); });
+      row.appendChild(vis);
+
+      const del = document.createElement("button");
+      del.className = "mini"; del.textContent = "×"; del.title = "Delete";
+      del.addEventListener("click", () => removePolygon(p.id));
+      row.appendChild(del);
+
+      body.appendChild(row);
+    }
+
+    if (!polys.length) {
+      const empty = document.createElement("div");
+      empty.style.cssText = "color:var(--ink-3);font-size:11px;margin-bottom:6px;";
+      empty.textContent = "No unit polygons yet. Build them from the " +
+        "horizon lines below (each horizon is the top of one unit; the " +
+        "next one down, its base).";
+      body.appendChild(empty);
+    }
+
+    const clipRow = document.createElement("label");
+    clipRow.className = "rail-check";
+    clipRow.style.marginBottom = "6px";
+    const clipChk = document.createElement("input");
+    clipChk.type = "checkbox";
+    clipChk.checked = SW.settings.state.polygonClipFaults !== false;
+    clipChk.addEventListener("change", function () {
+      SW.settings.state.polygonClipFaults = clipChk.checked;
+    });
+    clipRow.appendChild(clipChk);
+    clipRow.appendChild(document.createTextNode(" Clip by faults"));
+    body.appendChild(clipRow);
+
+    const btns = document.createElement("div");
+    btns.className = "row";
+    const build = document.createElement("button");
+    build.className = "primary";
+    build.textContent = "Build polygons";
+    build.title = "Fill every horizon down to the next one below (or to " +
+      "its own lowest point if it's the basal unit), clipped against the " +
+      "visible faults.";
+    build.addEventListener("click", function () {
+      SW.actions.buildUnitPolygons({ clip_faults: clipChk.checked });
+    });
+    btns.appendChild(build);
+    body.appendChild(btns);
+  }
+
+  return { render };
+})();
+
+/* ==== js/panels/wells.js ====
+ * Panel: Wells — collar (s, z_collar) más una columna de intervalos
+ * (espesor + patrón litológico + color) por sondaje. Sin traza real de
+ * mundo la posición es sólo (s, z) de la sección: el collar se coloca con
+ * la tool "well" y se edita a mano acá. */
+"use strict";
+window.SW = window.SW || {};
+SW.panels = SW.panels || {};
+
+SW.panels.wells = (function () {
+  let selectedWell = null;
+
+  function wells() { return SW.model.state.sec.wells || []; }
+
+  function rgbToHex(c) {
+    return "#" + (c || [216, 216, 216]).map(v =>
+      Math.max(0, Math.min(255, Math.round(v)))
+        .toString(16).padStart(2, "0")).join("");
+  }
+  function hexToRgb(hex) {
+    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16),
+            parseInt(hex.slice(5, 7), 16)];
+  }
+
+  function saveWell(well, props, label) {
+    SW.undo.push({
+      label: label || "Well properties",
+      redo: [{ op: "set_well_props", id: well.id, props: props }],
+      undo: [{ op: "set_well_props", id: well.id,
+               props: { s: well.s, z_collar: well.z_collar, name: well.name,
+                        intervals: SW.model.clone(well.intervals) } }],
+    });
+    SW.view.requestDraw();
+  }
+
+  function removeWell(id) {
+    const i = SW.model.wellIndex(id);
+    if (i < 0) return;
+    const well = wells()[i];
+    SW.undo.push({
+      label: "Delete well",
+      redo: [{ op: "remove_well", id: id }],
+      undo: [{ op: "restore_well", well: SW.model.clone(well), index: i }],
+    });
+    if (selectedWell === id) selectedWell = null;
+    render();
+    SW.view.requestDraw();
+  }
+
+  function addInterval(well) {
+    const before = SW.model.clone(well.intervals);
+    const after = before.concat([{ id: SW.model.genId(), thickness: 50,
+                                   name: "", pattern: "none", color: null }]);
+    saveWell(well, { intervals: after }, "Add interval");
+    render();
+  }
+
+  function removeInterval(well, ivId) {
+    const after = well.intervals.filter(iv => iv.id !== ivId);
+    saveWell(well, { intervals: after }, "Remove interval");
+    render();
+  }
+
+  function render() {
+    const body = document.getElementById("panel-wells-body");
+    if (!body) return;
+    body.innerHTML = "";
+    const vu = (SW.model.state.sec.display_units || {}).v || "km";
+
+    for (const w of wells()) {
+      const row = document.createElement("div");
+      row.className = "list-item" + (w.id === selectedWell ? " selected" : "");
+      row.addEventListener("click", () => { selectedWell = w.id; render(); });
+
+      const name = document.createElement("input");
+      name.type = "text"; name.value = w.name || ""; name.className = "grow";
+      name.addEventListener("change", () => saveWell(w, { name: name.value }));
+      name.addEventListener("click", e => e.stopPropagation());
+      row.appendChild(name);
+
+      const del = document.createElement("button");
+      del.className = "mini"; del.textContent = "×"; del.title = "Delete well";
+      del.addEventListener("click", (e) => { e.stopPropagation(); removeWell(w.id); });
+      row.appendChild(del);
+      body.appendChild(row);
+
+      if (w.id !== selectedWell) continue;
+
+      const detail = document.createElement("div");
+      detail.style.cssText = "margin:4px 0 10px 4px;padding:6px;" +
+        "border-left:2px solid var(--grid-strong);";
+
+      function field(labelTxt, value, onChange) {
+        const r = document.createElement("div");
+        r.className = "row";
+        const l = document.createElement("label");
+        l.textContent = labelTxt; l.style.minWidth = "58px";
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.step = "any"; inp.value = value;
+        inp.addEventListener("change", () => onChange(+inp.value || 0));
+        r.appendChild(l); r.appendChild(inp);
+        detail.appendChild(r);
+      }
+      field("Collar s (" + vu + ")", SW.units.toDisplay(w.s, vu),
+            v => saveWell(w, { s: SW.units.toMetres(v, vu) }, "Well position"));
+      field("Collar z (" + vu + ")", SW.units.toDisplay(w.z_collar, vu),
+            v => saveWell(w, { z_collar: SW.units.toMetres(v, vu) }, "Well collar"));
+
+      const ivHead = document.createElement("div");
+      ivHead.style.cssText = "font-size:10px;text-transform:uppercase;" +
+        "color:var(--ink-3);margin:6px 0 2px;";
+      ivHead.textContent = "Intervals (top → bottom)";
+      detail.appendChild(ivHead);
+
+      (w.intervals || []).forEach(function (iv, idx) {
+        const ivRow = document.createElement("div");
+        ivRow.className = "row";
+
+        const swatch = document.createElement("input");
+        swatch.type = "color";
+        swatch.value = rgbToHex(iv.color);
+        swatch.title = "Interval color";
+        swatch.addEventListener("input", function () {
+          const after = SW.model.clone(w.intervals);
+          after[idx].color = hexToRgb(swatch.value);
+          saveWell(w, { intervals: after }, "Interval color");
+        });
+        ivRow.appendChild(swatch);
+
+        const nm = document.createElement("input");
+        nm.type = "text"; nm.value = iv.name || ""; nm.placeholder = "name";
+        nm.style.width = "62px";
+        nm.addEventListener("change", function () {
+          const after = SW.model.clone(w.intervals);
+          after[idx].name = nm.value;
+          saveWell(w, { intervals: after }, "Interval name");
+        });
+        ivRow.appendChild(nm);
+
+        const pat = document.createElement("select");
+        for (const key of SW.wellPatterns.keys()) {
+          const opt = document.createElement("option");
+          opt.value = key; opt.textContent = SW.wellPatterns.label(key);
+          if (key === (iv.pattern || "none")) opt.selected = true;
+          pat.appendChild(opt);
+        }
+        pat.addEventListener("change", function () {
+          const after = SW.model.clone(w.intervals);
+          after[idx].pattern = pat.value;
+          saveWell(w, { intervals: after }, "Interval lithology");
+        });
+        ivRow.appendChild(pat);
+
+        const th = document.createElement("input");
+        th.type = "number"; th.step = "any"; th.style.width = "56px";
+        th.title = "Thickness (" + vu + ")";
+        th.value = SW.units.toDisplay(iv.thickness || 0, vu);
+        th.addEventListener("change", function () {
+          const after = SW.model.clone(w.intervals);
+          after[idx].thickness = SW.units.toMetres(+th.value || 0, vu);
+          saveWell(w, { intervals: after }, "Interval thickness");
+        });
+        ivRow.appendChild(th);
+
+        const rm = document.createElement("button");
+        rm.className = "mini"; rm.textContent = "×";
+        rm.addEventListener("click", () => removeInterval(w, iv.id));
+        ivRow.appendChild(rm);
+
+        detail.appendChild(ivRow);
+      });
+
+      const addBtn = document.createElement("button");
+      addBtn.className = "mini";
+      addBtn.textContent = "+ Interval";
+      addBtn.addEventListener("click", () => addInterval(w));
+      detail.appendChild(addBtn);
+
+      body.appendChild(detail);
+    }
+
+    if (!wells().length) {
+      const empty = document.createElement("div");
+      empty.style.cssText = "color:var(--ink-3);font-size:11px;margin-bottom:6px;";
+      empty.textContent = "No wells yet. Use the Well tool (Draw group) to " +
+        "drop a collar on the section, then type its stratigraphy here.";
+      body.appendChild(empty);
+    }
+  }
+
+  return { render, select: function (id) { selectedWell = id; render(); } };
+})();
+
+/* ==== js/panels/restore.js ====
+ * Panel: Restoration — controles de las tools "restore_fault" (Fault
+ * Parallel Flow) y "unfold" (Flexural Slip). El estado vive en cada tool
+ * (js/tools/restore_fault.js, js/tools/unfold.js); este panel sólo lo
+ * refleja y se redibuja cuando cambia la tool activa. */
+"use strict";
+window.SW = window.SW || {};
+SW.panels = SW.panels || {};
+
+SW.panels.restore = (function () {
+  function render() {
+    const body = document.getElementById("panel-restore-body");
+    if (!body) return;
+    body.innerHTML = "";
+    const activeName = SW.tools.activeToolName();
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:11px;color:var(--ink-3);line-height:1.4;";
+    if (activeName === "restore_fault") {
+      note.textContent = "Fault Parallel Flow is active: click the fault " +
+        "in the section, select the hanging-wall lines to move, set the " +
+        "slip in the tool rail and press Apply.";
+    } else if (activeName === "unfold") {
+      note.textContent = "Unfold is active: click the folded template bed, " +
+        "select the lines to unfold with it, set pin/datum in the tool " +
+        "rail and press Apply.";
+    } else {
+      note.textContent = "Activate \"FPF Restoration\" or \"Unfold\" in " +
+        "the Restoration group of the tool rail to restore the section: " +
+        "move the hanging wall along a fault (Fault Parallel Flow), then " +
+        "unfold a folded bed to the horizontal (Flexural Slip).";
+    }
+    body.appendChild(note);
+  }
+  return { render };
 })();
 
 /* ==== js/panels/images.js ==== */
@@ -9421,6 +11411,7 @@ SW.view = (function () {
   const state = {
     scale: 0.01, ve: 1, s0: 0, zTop: 6000,
     showGrid: true, showLabels: true, showScalebars: true, showFrame: true,
+    showPolygons: true, showWells: true,
     // refs de selección: {type:"line",id} | {type:"dip",id}
     //                  | {type:"image",id} | {type:"scalebar",id}
     selection: [],
@@ -10118,6 +12109,8 @@ SW.view = (function () {
     toggleBtn("labels-btn", "showLabels");
     toggleBtn("frame-btn", "showFrame");
     toggleBtn("scalebar-btn", "showScalebars");
+    toggleBtn("polygons-btn", "showPolygons");
+    toggleBtn("wells-btn", "showWells");
 
     const selFilter = $("select-filter");
     if (selFilter)
@@ -10204,6 +12197,9 @@ SW.view = (function () {
       if (SW.panels.linelength) SW.panels.linelength.render();
       if (SW.panels.images) SW.panels.images.render();
       if (SW.panels.horizons) SW.panels.horizons.render();
+      if (SW.panels.polygons) SW.panels.polygons.render();
+      if (SW.panels.wells) SW.panels.wells.render();
+      if (SW.panels.restore) SW.panels.restore.render();
       if (SW.project) SW.project.touch();
     });
 
@@ -10246,6 +12242,36 @@ SW.view = (function () {
     const bezierBtn = $("bezier-btn");
     if (bezierBtn) bezierBtn.addEventListener("click",
                                               () => SW.actions.bezierSelected());
+    const resampleBtn = $("resample-btn");
+    const resampleSpacing = $("resample-spacing");
+    if (resampleBtn) resampleBtn.addEventListener("click", function () {
+      const sp = resampleSpacing && resampleSpacing.value ?
+        +resampleSpacing.value : 0;
+      SW.actions.resampleSelected(sp);
+    });
+    const joinBtn = $("join-btn");
+    if (joinBtn) joinBtn.addEventListener("click", () => SW.actions.joinSelected());
+
+    const restoreFlipBtn = $("restore-flip-btn");
+    if (restoreFlipBtn) restoreFlipBtn.addEventListener("click",
+                                                        () => SW.actions.restoreFaultFlip());
+    const restoreApplyBtn = $("restore-apply-btn");
+    const restoreSlip = $("restore-slip");
+    if (restoreApplyBtn) restoreApplyBtn.addEventListener("click", function () {
+      SW.actions.restoreFaultApply(restoreSlip ? +restoreSlip.value || 0 : 0);
+    });
+
+    const unfoldDatumBtn = $("unfold-datum-btn");
+    if (unfoldDatumBtn) unfoldDatumBtn.addEventListener("click",
+                                                        () => SW.actions.unfoldDatumFromTemplate());
+    const unfoldApplyBtn = $("unfold-apply-btn");
+    const unfoldPin = $("unfold-pin"), unfoldDatum = $("unfold-datum"),
+          unfoldAmount = $("unfold-amount");
+    if (unfoldApplyBtn) unfoldApplyBtn.addEventListener("click", function () {
+      SW.actions.unfoldApply(unfoldPin ? +unfoldPin.value || 0 : 0,
+                             unfoldDatum ? +unfoldDatum.value || 0 : 0,
+                             unfoldAmount ? +unfoldAmount.value : 100);
+    });
   }
 
   /* Plegar/desplegar las barras laterales y pantalla completa.
@@ -10397,6 +12423,9 @@ SW.view = (function () {
     SW.panels.images.render();
     SW.panels.properties.render();
     if (SW.panels.linelength) SW.panels.linelength.render();
+    if (SW.panels.polygons) SW.panels.polygons.render();
+    if (SW.panels.wells) SW.panels.wells.render();
+    if (SW.panels.restore) SW.panels.restore.render();
     if (SW.project) SW.project.updateTitle();
     if (!keepView) zoomToExtent(); else requestDraw();
   }
