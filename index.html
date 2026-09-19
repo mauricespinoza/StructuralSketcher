@@ -554,11 +554,17 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="rail-title" data-group>Dip data</div>
       <div class="rail-group-body">
         <button data-tool="dip" title="Place dip data (A). Click uses the angle below; click and drag sets it by direction."><svg class="ic"><use href="#i-dip"/></svg>Dip</button>
-        <label class="rail-field">Inclination (°)
-          <input id="dip-angle" type="number" min="-180" max="180" step="1" value="30">
+        <label class="rail-field">Dip (°)
+          <input id="dip-angle" type="number" min="0" max="90" step="1" value="30">
         </label>
-        <div class="rail-note">0–180° clockwise from horizontal (0 = dips
-          right, 90 = vertical); negative = overturned bed. Shift while
+        <label class="rail-field">Dips towards
+          <select id="dip-side">
+            <option value="right" selected>Right (→)</option>
+            <option value="left">Left (←)</option>
+          </select>
+        </label>
+        <div class="rail-note">Magnitude is always 0–90° from horizontal
+          (90 = vertical); "Dips towards" says which way. Shift while
           placing marks it overturned.</div>
         <button id="dip-clear" class="mini" title="Delete every dip in the section">Clear all</button>
         <button id="dip-export" class="mini" title="Export the dip table to CSV">Export CSV</button>
@@ -5934,23 +5940,39 @@ SW.dipEdit = (function () {
   function openDialog(dip) {
     if (!dip || !SW.model.getDip(dip.id)) return;
     const U = SW.ui;
-    let unitSel, degIn, overChk, labelIn;
+    let unitSel, degIn, sideSel, overChk, labelIn;
+    // el dato guarda D en [-180,180] con |D| = ángulo 0-180° horario y
+    // D<0 = volcado (ver el comentario de convención al pie del archivo);
+    // el diálogo descompone eso en lo que en verdad se mide en el campo
+    // (manteo real 0-90°) y hacia qué lado, sin tocar el formato guardado
+    const absDip = Math.min(180, Math.abs(dip.dip));
+    const initSide = absDip <= 90 ? "right" : "left";
+    const initMag = initSide === "right" ? absDip : 180 - absDip;
 
     U.modal({
-      title: "Dip " + Math.abs(dip.dip).toFixed(1) + "°",
+      title: "Dip " + Math.round(initMag * 10) / 10 + "°",
       build: function (body) {
-        U.note(body, "Dip is measured 0-180° clockwise from the horizontal " +
-          "(0 = dips right, 90 = vertical, 180 = dips left). \"Overturned\" " +
-          "only flips which end carries the head of the symbol — it does not " +
-          "change the attitude.");
+        U.note(body, "Dip magnitude is always 0-90° from the horizontal " +
+          "(90 = vertical); \"Dips towards\" says which way it tilts in " +
+          "the section. \"Overturned\" is independent of both — it only " +
+          "flips which end carries the head of the symbol, not the " +
+          "attitude.");
 
         unitSel = unitSelectEl(dip.unit_id);
         U.row(body, "Unit", unitSel,
               "Units come from the Horizons panel");
 
-        degIn = U.numberInput(Math.round(Math.abs(dip.dip) * 10) / 10,
-                              "0.1", 0, 180);
+        degIn = U.numberInput(Math.round(initMag * 10) / 10, "0.1", 0, 90);
         U.row(body, "Dip (°)", degIn);
+
+        sideSel = document.createElement("select");
+        for (const opt of [["right", "Right (→)"], ["left", "Left (←)"]]) {
+          const o = document.createElement("option");
+          o.value = opt[0]; o.textContent = opt[1];
+          sideSel.appendChild(o);
+        }
+        sideSel.value = initSide;
+        U.row(body, "Dips towards", sideSel);
 
         overChk = document.createElement("input");
         overChk.type = "checkbox";
@@ -5967,9 +5989,10 @@ SW.dipEdit = (function () {
           } },
         { label: "Cancel" },
         { label: "Apply", primary: true, action: function () {
-            let deg = +degIn.value;
-            if (isNaN(deg)) deg = Math.abs(dip.dip);
-            deg = Math.max(0, Math.min(180, Math.abs(deg)));
+            let mag = +degIn.value;
+            if (isNaN(mag)) mag = initMag;
+            mag = Math.max(0, Math.min(90, Math.abs(mag)));
+            const deg = sideSel.value === "left" ? 180 - mag : mag;
             const props = {
               dip: overChk.checked ? -deg : deg,
               unit_id: unitSel.value || null,
@@ -8860,14 +8883,24 @@ window.SW = window.SW || {};
 
   let drag = null;   // {s, z, angle, overturned}
 
+  /* El riel edita la magnitud real (0-90°) y el lado por separado; acá se
+   * componen en el ángulo crudo 0-180° horario que espera el resto del
+   * pipeline (ver la convención al pie del archivo) y viceversa, así el
+   * arrastre (que ya produce ese ángulo crudo directamente de la
+   * dirección del gesto) puede seguir alimentando los mismos campos. */
   function railValue() {
-    const inp = document.getElementById("dip-angle");
-    const v = inp ? (+inp.value || 0) : 30;
-    return Math.max(-180, Math.min(180, v));
+    const magIn = document.getElementById("dip-angle");
+    const sideIn = document.getElementById("dip-side");
+    const mag = Math.max(0, Math.min(90, magIn ? (+magIn.value || 0) : 30));
+    return sideIn && sideIn.value === "left" ? 180 - mag : mag;
   }
   function setRailValue(v) {
-    const inp = document.getElementById("dip-angle");
-    if (inp) inp.value = Math.round(v * 10) / 10;
+    const magIn = document.getElementById("dip-angle");
+    const sideIn = document.getElementById("dip-side");
+    const theta = Math.max(0, Math.min(180, Math.abs(v)));
+    const left = theta > 90;
+    if (magIn) magIn.value = Math.round((left ? 180 - theta : theta) * 10) / 10;
+    if (sideIn) sideIn.value = left ? "left" : "right";
   }
 
   /* Ángulo 0-180° horario desde la horizontal a partir de un arrastre en
