@@ -3061,45 +3061,32 @@ SW.kink = (function () {
     return [p1[0] + t * d1[0], p1[1] + t * d1[1]];
   }
 
-  /* Segunda pasada: colapsa dominios espurios que deja la primera pasada
-   * (voraz). La primera pasada solo compara cada tadpole nuevo contra la
-   * media (a la deriva) del dominio al que podría sumarse, en orden de s,
-   * así que se le escapan dos casos: (a) un límite cae justo donde los dos
-   * dominios resultantes terminan con medias casi idénticas, y (b) una
-   * lectura ruidosa aislada queda lo bastante lejos de la tendencia a
-   * AMBOS lados como para separarse en su propio dominio de un solo
-   * tadpole, aunque sus vecinos a cada lado básicamente concuerden entre
-   * sí. Sin esta corrección, cualquiera de los dos produce dos (o más) ejes
-   * anclados a pocos tadpoles de distancia con buzamientos apenas
-   * distintos — visualmente un racimo de bisectores casi paralelos donde
-   * en realidad hay un solo quiebre de buzamiento. Repite ambos chequeos
-   * hasta que ninguno encuentre nada más que fundir. */
+  /* Segunda pasada: colapsa dominios adyacentes que la primera pasada
+   * (voraz, comparando cada tadpole nuevo contra la media a la deriva del
+   * dominio en curso) dejó separados aun estando de acuerdo — el caso
+   * típico es un límite que cae justo donde dos grupos resultan con
+   * medias casi idénticas. Repite hasta que no quede nada más que fundir.
+   *
+   * ANTES había acá una segunda regla que fundía un dominio de UN SOLO
+   * tadpole flanqueado por dos vecinos que concordaban ENTRE SÍ, sin
+   * importar cuánto difiriera el solitario de ambos — pensada para una
+   * lectura ruidosa aislada. Pero eso es exactamente la forma de un
+   * chevron alterno real (buzamiento, el opuesto, buzamiento, el opuesto,
+   * ...): con tolDeg por defecto ~0 (ver DEFAULT_DIP_TOL_DEG) esa regla
+   * fundía el limbo de en medio con sus dos vecinos por el solo hecho de
+   * que esos dos vecinos comparten manteo, sin mirar nunca el propio dato
+   * del solitario — literalmente 0 < tolDeg es cierto para cualquier
+   * tolDeg > 0 cuando los vecinos son iguales. Un dato realmente ruidoso
+   * no lo filtra este algoritmo; lo decide quien digitaliza. */
   function consolidateDomains(domains, tolDeg) {
     let changed = true;
     while (changed && domains.length > 1) {
       changed = false;
-      // (a) dominios adyacentes que (ahora) concuerdan entre sí
       let i = 0;
       while (i < domains.length - 1) {
         if (Math.abs(domains[i].dip - domains[i + 1].dip) < tolDeg) {
           domains.splice(i, 2, mergePair(domains[i], domains[i + 1]));
           changed = true;
-        } else {
-          i++;
-        }
-      }
-      // (b) un dominio de un solo tadpole flanqueado por dos dominios que
-      // concuerdan ENTRE SÍ (aunque el solitario difiera de ambos) — casi
-      // seguro una lectura ruidosa aislada, no un tercer panel real
-      i = 1;
-      while (i < domains.length - 1) {
-        const left = domains[i - 1], mid = domains[i], right = domains[i + 1];
-        if (mid.n === 1 && Math.abs(left.dip - right.dip) < tolDeg) {
-          const target = Math.abs(mid.dip - left.dip) <=
-            Math.abs(mid.dip - right.dip) ? i - 1 : i;
-          domains.splice(target, 2, mergePair(domains[target], domains[target + 1]));
-          changed = true;
-          i = Math.max(1, i - 1);
         } else {
           i++;
         }
