@@ -294,22 +294,32 @@ body {
   touch-action: pan-y;
 }
 
-/* Botones flotantes sobre el lienzo: aparecen cuando el puntero principal
-   es grueso, o cuando view.js detecta dedo/lápiz y marca el <body>. */
-#touch-actions {
-  position: absolute; right: 10px; bottom: 10px; z-index: 20;
-  display: none; gap: 8px;
+/* Columna flotante sobre el lienzo, arriba a la izquierda: Deshacer/Rehacer
+   y las acciones sobre la edición activa (Done/Discard/Delete). Con
+   puntero grueso (lápiz/dedo) es además el único acceso a lo que en
+   escritorio son el click derecho y Escape. */
+#canvas-actions {
+  position: absolute; left: 10px; top: 10px; z-index: 20;
+  display: flex; flex-direction: column; gap: 6px;
 }
-#touch-actions button {
-  padding: 10px 14px; font-size: 14px; border-radius: 8px;
+#canvas-actions button {
+  padding: 8px 12px; font-size: 13px; border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,.18);
   background: var(--surface);
 }
-#touch-actions #touch-finish {
+#canvas-actions button:disabled {
+  opacity: .45; box-shadow: none; cursor: default;
+}
+#canvas-actions #edit-done:not(:disabled) {
   background: var(--accent); color: #fff; border-color: var(--accent);
 }
-@media (pointer: coarse) { #touch-actions { display: flex; } }
-body.touch-input #touch-actions { display: flex; }
+#canvas-actions #edit-delete:not(:disabled) {
+  color: var(--danger); border-color: var(--danger);
+}
+.canvas-actions-sep {
+  height: 1px; margin: 2px 4px; background: var(--grid-strong, rgba(0,0,0,.15));
+}
+@media (pointer: coarse) { #canvas-actions button { padding: 10px 14px; font-size: 14px; } }
 
 /* Objetivos de toque de 38-44 px y controles legibles con el dedo. Se
    aplica por consulta de medios Y por la clase que pone view.js, para
@@ -423,6 +433,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2M8 11h6M11 8v6"/></symbol>
   <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2M8 11h6"/></symbol>
   <symbol id="i-cancel" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-delete" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 6"/></symbol>
   <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></symbol>
   <symbol id="i-fullscreen-exit" viewBox="0 0 24 24"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></symbol>
@@ -440,9 +451,6 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <button id="saveas-btn" title="Save as… (Ctrl+Shift+S) — choose a new file; later saves overwrite that one"><svg class="ic"><use href="#i-save-as"/></svg>Save as</button>
   <button id="import-image-btn" title="Import a picture to trace over (a scanned or published cross-section)"><svg class="ic"><use href="#i-image"/></svg>Import image</button>
   <button id="setup-btn" title="Section name, extent, units and end labels"><svg class="ic"><use href="#i-setup"/></svg>Section setup</button>
-  <span class="sep"></span>
-  <button id="undo-btn" title="Undo (Ctrl+Z)"><svg class="ic"><use href="#i-undo"/></svg>Undo</button>
-  <button id="redo-btn" title="Redo (Ctrl+Y)"><svg class="ic"><use href="#i-redo"/></svg>Redo</button>
   <span class="sep"></span>
   <button id="export-svg" title="Export the current view as a vector SVG figure"><svg class="ic"><use href="#i-export-img"/></svg>SVG</button>
   <button id="export-png" title="Export the current view as a PNG image"><svg class="ic"><use href="#i-export-img"/></svg>PNG</button>
@@ -636,13 +644,20 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 
   <div id="wrap">
     <canvas id="cv"></canvas>
-    <!-- Con lápiz o dedo no hay botón secundario ni tecla Esc. Estos dos
-         botones dan acceso explícito a lo que en escritorio son el click
-         derecho (terminar un trazo, confirmar) y Escape (cancelar); una
-         pulsación larga sobre el lienzo hace lo mismo que el primero. -->
-    <div id="touch-actions" aria-hidden="true">
-      <button id="touch-finish" title="Finish / confirm — same as a right click"><svg class="ic"><use href="#i-check"/></svg>Finish</button>
-      <button id="touch-cancel" title="Cancel the current action — same as Esc"><svg class="ic"><use href="#i-cancel"/></svg>Cancel</button>
+    <!-- Columna flotante sobre el lienzo, arriba a la izquierda: Deshacer /
+         Rehacer, y las tres acciones sobre una edición activa. "Done" y
+         "Discard" son el equivalente explícito al click derecho (terminar,
+         confirmar) y a Escape (cancelar) — útiles con lápiz o dedo, que no
+         tienen botón secundario ni tecla Esc — y se habilitan sólo mientras
+         la tool activa tiene una construcción a medio hacer. "Delete" borra
+         la selección actual y se habilita sólo con algo seleccionado. -->
+    <div id="canvas-actions">
+      <button id="undo-btn" title="Undo (Ctrl+Z)"><svg class="ic"><use href="#i-undo"/></svg>Undo</button>
+      <button id="redo-btn" title="Redo (Ctrl+Y)"><svg class="ic"><use href="#i-redo"/></svg>Redo</button>
+      <span class="canvas-actions-sep"></span>
+      <button id="edit-done" title="Finish / confirm the current edit — same as a right click"><svg class="ic"><use href="#i-check"/></svg>Done</button>
+      <button id="edit-discard" title="Discard the current edit — same as Esc"><svg class="ic"><use href="#i-cancel"/></svg>Discard</button>
+      <button id="edit-delete" title="Delete the current selection (Del)"><svg class="ic"><use href="#i-delete"/></svg>Delete</button>
     </div>
   </div>
 
@@ -5647,8 +5662,13 @@ SW.tools = (function () {
     return !!(activeName === "kink" && k && k.isMarked && k.isMarked(d));
   }
 
+  function hasPending() {
+    const t = active();
+    return !!(t && t.hasPending && t.hasPending());
+  }
+
   return { register, get, active, activeToolName, activate, dispatch,
-           drawOverlay, isDipMarked };
+           drawOverlay, isDipMarked, hasPending };
 })();
 
 /* ==== js/dipedit.js ==== */
@@ -6678,6 +6698,7 @@ window.SW = window.SW || {};
     cursor: "crosshair",
     hint: "Click adds vertices; double click or right click finishes and " +
           "saves; S toggles snapping; Esc cancels.",
+    hasPending: function () { return pts.length > 0; },
     deactivate: function () { pts = []; preview = null; snapMark = null; angleReadout(null, null); },
     onClick: function (e, pos) {
       if (e.button === 0) {
@@ -7301,6 +7322,22 @@ window.SW = window.SW || {};
     return poly;
   }
 
+  /* Una línea entra al lazo si CUALQUIER parte de su traza lo toca, no sólo
+   * un vértice: basta con que el lazo cruce alguno de sus segmentos, aunque
+   * ambos extremos del segmento queden fuera del polígono (trazos largos
+   * con pocos vértices, atravesados por el medio). */
+  function lineTouchesPolygon(vertsScreen, polygon) {
+    if (vertsScreen.some(v => SW.geom.pointInPolygon(v, polygon))) return true;
+    for (let j = 0; j < vertsScreen.length - 1; j++) {
+      const a = vertsScreen[j], b = vertsScreen[j + 1];
+      for (let k = 0; k < polygon.length; k++) {
+        const c = polygon[k], d = polygon[(k + 1) % polygon.length];
+        if (SW.geom.segmentIntersection(a, b, c, d)) return true;
+      }
+    }
+    return false;
+  }
+
   function finishSelection() {
     const polygon = currentPolygon();
     if (polygon.length < 3) { reset(); SW.view.requestDraw(); return; }
@@ -7310,9 +7347,9 @@ window.SW = window.SW || {};
     if (filter !== "dips") {
       for (const line of SW.model.state.sec.lines || []) {
         if (line.visible === false || !(line.vertices || []).length) continue;
-        const hit = line.vertices.some(v =>
-          SW.geom.pointInPolygon([V.sx(v[0]), V.zy(v[1])], polygon));
-        if (hit) found.push({ type: "line", id: line.id });
+        const vertsScreen = line.vertices.map(v => [V.sx(v[0]), V.zy(v[1])]);
+        if (lineTouchesPolygon(vertsScreen, polygon))
+          found.push({ type: "line", id: line.id });
       }
     }
     if (filter !== "lines") {
@@ -7993,6 +8030,7 @@ window.SW = window.SW || {};
       return "Digitize an auxiliary cutting line: click adds vertices, " +
              "right click or double click finishes and cuts.";
     },
+    hasPending: function () { return mode() === "knife" && knifePts.length > 0; },
     activate: function () { knifePts = []; knifePreview = null; },
     deactivate: function () { knifePts = []; knifePreview = null; },
     onClick: function (e, pos) {
@@ -8179,6 +8217,7 @@ window.SW = window.SW || {};
         : "Move the pointer, then double click or right click to fix the " +
           "extension. Esc cancels.";
     },
+    hasPending: function () { return !!target; },
     activate: reset,
     deactivate: reset,
     onClick: function (e, pos) {
@@ -8443,6 +8482,7 @@ window.SW = window.SW || {};
           "dip proposes a horizon. Hold 1 s on a dip to re-guide its " +
           "inclination and watch the construction follow. \"Apply\" or " +
           "right click saves them all.",
+    hasPending: function () { return currentDips().length > 0; },
     activate: function () {
       previews = []; previewAxes = [];
       refresh();
@@ -8769,6 +8809,7 @@ window.SW = window.SW || {};
     cursor: "crosshair",
     hint: "Click adds nodes; double click or right click finishes; " +
           "Esc clears. Real length (no VE).",
+    hasPending: function () { return pts.length > 0; },
     deactivate: function () {
       pts = []; preview = null; readout(); angleReadout(null, null);
     },
@@ -11613,6 +11654,7 @@ SW.view = (function () {
     requestAnimationFrame(function () {
       drawQueued = false;
       SW.render.draw();
+      syncEditActionButtons();
     });
   }
 
@@ -11809,6 +11851,22 @@ SW.view = (function () {
              u.title = "Undo " + SW.undo.undoLabel(); }
     if (r) { r.disabled = !SW.undo.canRedo();
              r.title = "Redo " + SW.undo.redoLabel(); }
+  }
+
+  /* "Done"/"Discard" se habilitan mientras la tool activa tiene una
+   * construcción a medio hacer (tool.hasPending); "Delete" mientras haya
+   * algo seleccionado. Se resincroniza en cada requestDraw(), que ya se
+   * llama tras cualquier interacción relevante (click, tecla, cambio de
+   * selección, cambio de tool…), así no hace falta cablear un evento por
+   * cada una. */
+  function syncEditActionButtons() {
+    const done = $("edit-done"), discard = $("edit-discard"),
+          del = $("edit-delete");
+    const pending = SW.tools.hasPending();
+    const sel = state.selection.length > 0;
+    if (done) done.disabled = !pending;
+    if (discard) discard.disabled = !pending;
+    if (del) del.disabled = !sel;
   }
 
   /* -- readouts --------------------------------------------------------------- */
@@ -12130,31 +12188,36 @@ SW.view = (function () {
     for (const name of ["gesturestart", "gesturechange", "gestureend"])
       cv.addEventListener(name, e => e.preventDefault());
 
-    wireTouchActions();
+    wireEditActions();
     if (SW.actions.wireImageDrop) SW.actions.wireImageDrop($("wrap"));
   }
 
-  /* Botones flotantes sobre el lienzo, visibles sólo con puntero grueso: dan
-   * acceso explícito a las dos acciones que en escritorio son click derecho y
-   * Escape, para no depender únicamente de la pulsación larga. */
-  function wireTouchActions() {
-    const bar = $("touch-actions");
-    if (!bar) return;
-    const finish = $("touch-finish");
-    const cancel = $("touch-cancel");
-    if (finish) finish.addEventListener("click", function () {
+  /* Columna flotante sobre el lienzo: Deshacer/Rehacer y las acciones sobre
+   * la edición activa. "Done"/"Discard" son el equivalente explícito a lo
+   * que en escritorio son el click derecho (terminar, confirmar) y Escape
+   * (cancelar) — imprescindibles con lápiz o dedo, que no tienen botón
+   * secundario ni tecla Esc. "Delete" borra la selección actual. Las tres
+   * se habilitan/deshabilitan en syncEditActionButtons(). */
+  function wireEditActions() {
+    const done = $("edit-done");
+    const discard = $("edit-discard");
+    const del = $("edit-delete");
+    if (done) done.addEventListener("click", function () {
       const r = cv.getBoundingClientRect();
       SW.tools.dispatch("onClick",
                         fakeEvent(2, r.left + lastPos.x, r.top + lastPos.y),
                         lastPos);
       requestDraw();
     });
-    if (cancel) cancel.addEventListener("click", function () {
+    if (discard) discard.addEventListener("click", function () {
       if (!SW.tools.dispatch("onKey", { key: "Escape",
                                         preventDefault() {} }))
         SW.tools.activate("pan");
       resetInteraction();
       requestDraw();
+    });
+    if (del) del.addEventListener("click", function () {
+      SW.actions.deleteSelected();
     });
   }
 
