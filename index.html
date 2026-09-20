@@ -413,6 +413,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-scale" viewBox="0 0 24 24"><path d="M2 12h20"/><path d="M2 8v8M22 8v8"/><path d="M8 10v4M16 10v4"/></symbol>
   <symbol id="i-polygons" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v8l9 5 9-5V8"/></symbol>
   <symbol id="i-well" viewBox="0 0 24 24"><path d="M3 6h18"/><rect x="9" y="6" width="6" height="15"/><path d="M9 11h6M9 16h6"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l8 4.5-8 4.5-8-4.5z"/><path d="M4 12.5l8 4.5 8-4.5M4 17.5l8 4.5 8-4.5"/></symbol>
   <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 21L21 3"/><path d="M2 13h7"/><path d="M15 20h7"/><path d="M14.5 9.5L10 14m0 0h3.2M10 14v-3.2"/></symbol>
   <symbol id="i-unfold" viewBox="0 0 24 24"><path d="M2 9l5-5 5 6 5-5 5 4"/><path d="M2 21h20"/><path d="M12 13v5m0 0l-2.4-2.4M12 18l2.4-2.4"/></symbol>
   <symbol id="i-resample" viewBox="0 0 24 24"><path d="M3 17l6-9 5 6 4-6 3 4"/><circle cx="3" cy="17" r="1.4"/><circle cx="6" cy="12.5" r="1.4"/><circle cx="9" cy="8" r="1.4"/><circle cx="11.5" cy="11" r="1.4"/><circle cx="14" cy="14" r="1.4"/><circle cx="16" cy="11" r="1.4"/><circle cx="18" cy="8" r="1.4"/><circle cx="21" cy="12" r="1.4"/></symbol>
@@ -523,8 +524,21 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <input id="digitize-snap" type="checkbox" checked> Snap while drawing
         </label>
         <button data-tool="vertex" title="Edit vertices with snapping (X)"><svg class="ic"><use href="#i-vertex"/></svg>Vertices</button>
+        <label class="rail-field" id="vertex-joint-field"
+               title="With several lines selected, choose how moving a vertex of one is propagated to the rest. Rigid: the same shift is applied to the same-index vertex of every line (equal vertex counts). Parallel: each companion is re-slid along the perpendicular offset that keeps its real (perpendicular) thickness from the edited line. Taper: the edit is wedged into this line only, thinning/thickening the layer towards the ends.">Joint edit
+          <select id="vertex-joint">
+            <option value="off" selected>Off</option>
+            <option value="rigid">Rigid (same index)</option>
+            <option value="parallel">Parallel (keep thickness)</option>
+            <option value="taper">Taper (wedge)</option>
+          </select>
+        </label>
+        <label class="rail-field" title="How far the taper reaches along the line from the dragged vertex, in metres. 0 (or empty) tapers all the way to both ends — a full wedge.">Taper reach (m)
+          <input id="vertex-taper-reach" type="number" min="0" step="10" placeholder="auto">
+        </label>
         <button data-tool="image" title="Select/move/resize imported images (I)"><svg class="ic"><use href="#i-image"/></svg>Image</button>
         <button data-tool="well" title="Well: click on the section to drop a collar, then type its stratigraphy (thickness and lithology pattern per interval) in the Wells panel."><svg class="ic"><use href="#i-well"/></svg>Well</button>
+        <button id="layer-cake-btn" class="mini" title="Generate a stack of parallel beds (N beds draw N+1 horizon lines) at a given true thickness along the section; optionally with one stratigraphic unit per bed so Unit polygons can fill the bodies right away."><svg class="ic"><use href="#i-layers"/></svg>Layer cake</button>
       </div>
     </div>
     <div class="rail-sep"></div>
@@ -689,6 +703,10 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
     <div class="panel collapsed" id="panel-linelength">
       <h2>Line-Length</h2>
       <div class="panel-body" id="panel-linelength-body"></div>
+    </div>
+    <div class="panel collapsed" id="panel-versions">
+      <h2>Versions</h2>
+      <div class="panel-body" id="panel-versions-body"></div>
     </div>
   </div>
 </div>
@@ -3391,6 +3409,10 @@ SW.model = (function () {
       // arbitrarias. Ver SW.scale.
       calibration: { h: null, v: null },
       notes: "",
+      // Instantáneas con nombre de la interpretación (máx. 50): cada una es
+      // {id, name, created, data:{...}}. Ver js/panels/versions.js. Se
+      // serializan solas con el documento (.sketch.json).
+      versions: [],
     };
   }
 
@@ -3450,6 +3472,10 @@ SW.model = (function () {
     });
     sec.calibration = Object.assign({ h: null, v: null },
                                     sec.calibration || {});
+    sec.versions = (sec.versions || []).map(function (v) {
+      return Object.assign({ id: genId(), name: "Version", created: "",
+                             data: {} }, v);
+    });
     sec.display_units = Object.assign({ h: "km", v: "km" },
                                       sec.display_units || {});
     if (!sec.length || sec.length <= 0) sec.length = 40000;
@@ -3937,9 +3963,29 @@ SW.undo = (function () {
                       index: indexInList }] };
   }
 
+  /* Varias líneas nuevas a la vez (Layer cake, Copy parallel…): redo las
+   * agrega en orden, undo las borra. */
+  function addLines(lines, label) {
+    return { label: label || "Add " + lines.length + " lines",
+             redo: lines.map(l => ({ op: "add_line", line: snap(l) })),
+             undo: lines.map(l => ({ op: "delete_line", id: l.id })) };
+  }
+
+  /* Reemplaza los vértices de VARIAS líneas en un solo comando. entries:
+   * [{id, before, after}, ...] — se usa para la edición conjunta de vértices,
+   * donde master y acompañantes se empacan en un único paso de undo. */
+  function replaceVerticesMulti(entries, label) {
+    const mk = which => entries.map(e => ({ op: "replace_vertices",
+                                            id: e.id,
+                                            vertices: snap(e[which]) }));
+    return { label: label || "Edit vertices",
+             redo: mk("after"), undo: mk("before") };
+  }
+
   return { onChange, push, undo, redo, canUndo, canRedo, undoLabel,
            redoLabel, clear,
-           addLine, deleteLine, replaceVertices, setLineProps, splitLine };
+           addLine, deleteLine, replaceVertices, setLineProps, splitLine,
+           addLines, replaceVerticesMulti };
 })();
 
 /* ==== js/scale.js ==== */
@@ -6772,10 +6818,40 @@ window.SW = window.SW || {};
 
 /* ==== js/tools/vertex.js ==== */
 "use strict";
-/* Herramienta: Edición de vértices con snapping (M-E).
- * Click en línea la selecciona; arrastrar un vértice lo mueve (snap a la
- * topografía y a vértices/bordes de otras líneas); doble click en un
- * segmento inserta vértice; click derecho sobre un vértice lo elimina. */
+/* Herramienta: Edición de vértices con snapping (X).
+ * Click en línea la selecciona (Ctrl/meta acumula); arrastrar un vértice lo
+ * mueve (snap a la topografía y a vértices/bordes de otras líneas); doble
+ * click en un segmento inserta vértice; click derecho sobre un vértice lo
+ * elimina.
+ *
+ * Con VARIAS líneas seleccionadas, el selector "Joint edit" del riel propaga
+ * el gesto (mover / insertar / borrar) al resto de la selección para que las
+ * capas mantengan su espesor. Son operaciones geológicas distintas:
+ *   - "rigid":    misma corrección (Δs, Δz) al vértice del MISMO índice de
+ *                 cada línea. Conserva la separación vertical y, con ella,
+ *                 la geometría propia de cada capa (nº de vértices, extremos,
+ *                 detalle). Solo aplica a líneas con igual nº de vértices —
+ *                 el caso de las copias hechas con Copiar-paralelo.
+ *   - "parallel": cada acompañante se reconstruye como offset de la línea
+ *                 editada a su distancia perpendicular original, así el
+ *                 espesor REAL (perpendicular) se mantiene exacto. A cambio
+ *                 el acompañante adopta la traza y los extremos del master.
+ *   - "taper":    gradiente de espesor (acuñamiento). No mueve a los
+ *                 acompañantes: el desplazamiento se reparte a lo largo de la
+ *                 PROPIA línea, máximo en el vértice arrastrado y decayendo
+ *                 suavemente hacia cero hasta cada extremo (o hasta el
+ *                 alcance elegido en el riel). Las líneas vecinas se quedan
+ *                 quietas, así el espesor de la capa — el espacio entre
+ *                 ellas — engorda en el punto arrastrado y se acuña hacia
+ *                 los lados. El decaimiento va en distancia REAL a lo largo
+ *                 de la línea (no en nº de vértices).
+ *
+ * Las reglas vienen del port del plugin GeoUdeC StructuralProfiler
+ * (tools/vertex.js): solo se vinculan líneas del MISMO tipo (una falla nunca
+ * se arrastra paralela a un horizonte), las bloqueadas se omiten, "rigid"
+ * exige igual nº de vértices, y todo el gesto — master + acompañantes — se
+ * empaqueta en UN comando de undo.
+ */
 
 window.SW = window.SW || {};
 
@@ -6783,41 +6859,210 @@ window.SW = window.SW || {};
   const HANDLE_PX = () => SW.view.hitPx(8);
   const SNAP_PX = () => SW.view.hitPx(10);
 
-  let drag = null;   // {line, index, before}
+  let drag = null;       // {line, index, before, joint}
   let snapMark = null;
 
+  /* -- edición conjunta ---------------------------------------------------- */
+
+  function jointMode() {
+    const sel = document.getElementById("vertex-joint");
+    return sel ? sel.value : "off";
+  }
+
+  /* Alcance del acuñamiento en metros; 0 (o vacío) = hasta los extremos de
+   * la línea, el caso por defecto y el que produce una cuña completa. */
+  function taperReach() {
+    const el = document.getElementById("vertex-taper-reach");
+    const v = el ? parseFloat(el.value) : 0;
+    return isFinite(v) && v > 0 ? v : 0;
+  }
+
+  /* Pesos de reparto del arrastre a lo largo de la línea: w=1 en el vértice
+   * tomado y 0 en el límite del alcance, con smoothstep invertido (llega a
+   * cero con pendiente nula, así la capa se acuña sin dejar un vértice en
+   * pico). Cada lado se normaliza por su propia distancia. */
+  function taperWeights(verts, index, reach) {
+    const n = verts.length;
+    const cum = new Array(n).fill(0);
+    for (let i = 1; i < n; i++)
+      cum[i] = cum[i - 1] + Math.hypot(verts[i][0] - verts[i - 1][0],
+                                       verts[i][1] - verts[i - 1][1]);
+    const at = cum[index];
+    const leftSpan = reach > 0 ? Math.min(reach, at) : at;
+    const rightSpan = reach > 0 ? Math.min(reach, cum[n - 1] - at)
+                                : cum[n - 1] - at;
+    const w = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      const d = cum[i] - at;
+      const span = d < 0 ? leftSpan : rightSpan;
+      if (Math.abs(d) < 1e-9) { w[i] = 1; continue; }
+      if (span <= 1e-9) { w[i] = 0; continue; }
+      const t = Math.min(1, Math.abs(d) / span);
+      w[i] = 1 - (3 * t * t - 2 * t * t * t);   // 1 - smoothstep(t)
+    }
+    w[index] = 1;
+    return w;
+  }
+
+  /* Distancia perpendicular CON SIGNO de `p` a la polilínea `verts`, en la
+   * misma convención que SW.geom.offsetPolyline (positiva a la izquierda del
+   * sentido de avance), para poder reinyectarla tal cual. */
+  function signedDistanceTo(verts, p) {
+    const hit = SW.geom.nearestPointOnPolyline(verts, p);
+    if (!hit) return 0;
+    const dx = verts[hit[0] + 1][0] - verts[hit[0]][0];
+    const dy = verts[hit[0] + 1][1] - verts[hit[0]][1];
+    const L = Math.hypot(dx, dy);
+    if (L < 1e-12) return 0;
+    return ((p[0] - hit[2][0]) * (-dy / L)) + ((p[1] - hit[2][1]) * (dx / L));
+  }
+
+  /* Offset representativo de `verts` respecto del master: la MEDIANA de las
+   * distancias con signo de sus vértices (robusta a los que sobresalen y
+   * proyectan contra los extremos con distancias infladas). */
+  function medianOffset(masterVerts, verts) {
+    if (!verts.length) return 0;
+    const ds = verts.map(v => signedDistanceTo(masterVerts, v))
+                    .sort((a, b) => a - b);
+    const m = ds.length >> 1;
+    return ds.length % 2 ? ds[m] : 0.5 * (ds[m - 1] + ds[m]);
+  }
+
+  /* Acompañantes de `master` en el gesto actual; reporta también cuántas
+   * líneas de la selección quedaron fuera y por qué, para decirlo en la
+   * barra de estado en vez de ignorarlas en silencio. */
+  function beginJoint(master, index) {
+    const mode = jointMode();
+    const joint = { mode: mode, list: [], skipped: 0, skippedKind: 0 };
+    if (mode === "off") return joint;
+    if (mode === "taper") {
+      // el acuñamiento se reparte dentro de la propia línea; las demás se
+      // quedan quietas a propósito (es lo que hace variar el espesor).
+      joint.weights = (index === undefined || index === null) ? null
+        : taperWeights(master.vertices, index, taperReach());
+      return joint;
+    }
+    for (const l of SW.view.selectedLines()) {
+      if (l.id === master.id || l.locked) continue;
+      if ((l.vertices || []).length < 2) continue;
+      if (l.kind !== master.kind) { joint.skippedKind++; continue; }
+      if (mode === "rigid" && l.vertices.length !== master.vertices.length) {
+        joint.skipped++;
+        continue;
+      }
+      joint.list.push({
+        line: l,
+        before: l.vertices.map(v => v.slice()),
+        d: mode === "parallel"
+          ? medianOffset(master.vertices, l.vertices) : 0,
+      });
+    }
+    return joint;
+  }
+
+  /* Ids que participan del gesto: se excluyen del snapping para que una capa
+   * que se está moviendo con el master no actúe de imán. */
+  function jointIds(master, joint) {
+    const ids = new Set([master.id]);
+    for (const p of joint.list) ids.add(p.line.id);
+    return ids;
+  }
+
+  /* Reaplica el arrastre a los acompañantes (mutación local en vivo; el
+   * estado definitivo lo fija el comando de undo al soltar). */
+  function applyJointDrag(master, joint, delta) {
+    for (const p of joint.list) {
+      if (joint.mode === "parallel") {
+        p.line.vertices = SW.geom.offsetPolyline(master.vertices, p.d);
+      } else {
+        p.line.vertices = p.before.map(v => v.slice());
+        const v = p.line.vertices[delta.index];
+        if (v) { v[0] = p.before[delta.index][0] + delta.ds;
+                 v[1] = p.before[delta.index][1] + delta.dz; }
+      }
+    }
+  }
+
+  function revertJoint(joint) {
+    for (const p of joint.list) p.line.vertices = p.before.map(v => v.slice());
+  }
+
+  /* Empaqueta master + acompañantes en UN comando de undo. Deja la copia
+   * local en el estado "antes" porque push() re-aplica el redo. */
+  function commitJoint(label, master, before, after, joint) {
+    const entries = [{ id: master.id, before: before, after: after }];
+    for (const p of joint.list) {
+      const now = p.line.vertices.map(v => v.slice());
+      if (JSON.stringify(now) === JSON.stringify(p.before)) continue;
+      entries.push({ id: p.line.id, before: p.before, after: now });
+    }
+    master.vertices = before.map(v => v.slice());
+    revertJoint(joint);
+    SW.undo.push(SW.undo.replaceVerticesMulti(entries, label));
+    const why = [];
+    if (joint.skippedKind)
+      why.push(joint.skippedKind + " of another kind");
+    if (joint.skipped)
+      why.push(joint.skipped + " with a different vertex count");
+    if (entries.length > 1 || why.length)
+      SW.view.status(label + ": " + entries.length + " line(s) edited" +
+                     (why.length ? "; skipped " + why.join(", ") : "") + ".");
+  }
+
+  /* -- picking / snapping -------------------------------------------------- */
+
+  /* Vértice bajo el cursor en CUALQUIER línea seleccionada (la primaria
+   * primero: es la que el usuario cree estar editando cuando dos capas se
+   * cruzan). */
   function vertexAt(pos) {
-    const lid = SW.view.primarySelectedLineId();
-    const line = lid ? SW.model.getLine(lid) : null;
-    if (!line) return null;
     const V = SW.view;
-    for (let i = 0; i < line.vertices.length; i++) {
-      const v = line.vertices[i];
-      if (Math.hypot(V.sx(v[0]) - pos.x, V.zy(v[1]) - pos.y) <= HANDLE_PX())
-        return { line, index: i };
+    for (const line of SW.view.selectedLines()) {
+      for (let i = 0; i < line.vertices.length; i++) {
+        const v = line.vertices[i];
+        if (Math.hypot(V.sx(v[0]) - pos.x, V.zy(v[1]) - pos.y) <= HANDLE_PX())
+          return { line, index: i };
+      }
     }
     return null;
   }
 
-  function snapCandidates(excludeLineId) {
+  /* Línea seleccionada cuyo trazo pasa bajo el cursor (para insertar). */
+  function segmentAt(pos) {
+    const V = SW.view;
+    const p = V.toSection(pos);
+    let best = null, bestD = HANDLE_PX();
+    for (const line of SW.view.selectedLines()) {
+      if (line.locked || line.vertices.length < 2) continue;
+      const hit = SW.geom.nearestPointOnPolyline(line.vertices, [p.s, p.z]);
+      if (!hit) continue;
+      const d = Math.hypot(V.sx(hit[2][0]) - pos.x, V.zy(hit[2][1]) - pos.y);
+      if (d <= bestD) { best = { line, hit }; bestD = d; }
+    }
+    return best;
+  }
+
+  function snapCandidates(excludeIds) {
+    const skip = excludeIds instanceof Set ? excludeIds
+      : new Set(excludeIds ? [excludeIds] : []);
     const out = [];
     const topo = SW.model.topoSamples();
     for (const p of topo)
       out.push({ s: p[0], z: p[1], kind: "topo" });
     for (const line of SW.model.state.sec.lines || []) {
-      if (line.id === excludeLineId || line.visible === false) continue;
+      if (skip.has(line.id) || line.visible === false) continue;
       for (const v of line.vertices)
         out.push({ s: v[0], z: v[1], kind: "vertex" });
     }
     return out;
   }
 
-  function edgeSnap(posPx, excludeLineId) {
-    /* punto más cercano sobre segmentos de otras líneas, en pantalla */
+  function edgeSnap(posPx, excludeIds) {
+    const skip = excludeIds instanceof Set ? excludeIds
+      : new Set(excludeIds ? [excludeIds] : []);
     const V = SW.view;
     let best = null, bestD = SNAP_PX();
     for (const line of SW.model.state.sec.lines || []) {
-      if (line.id === excludeLineId || line.visible === false) continue;
+      if (skip.has(line.id) || line.visible === false) continue;
       const vs = line.vertices;
       for (let j = 0; j < vs.length - 1; j++) {
         const ax = V.sx(vs[j][0]), ay = V.zy(vs[j][1]);
@@ -6839,22 +7084,20 @@ window.SW = window.SW || {};
     return best;
   }
 
-  function snappedPoint(pos, excludeLineId) {
+  function snappedPoint(pos, excludeIds) {
     const V = SW.view;
     const p = V.toSection(pos);
     const cand = SW.geom.snapScreen(
-      pos, snapCandidates(excludeLineId), SNAP_PX(), V.sx, V.zy);
+      pos, snapCandidates(excludeIds), SNAP_PX(), V.sx, V.zy);
     if (cand) { snapMark = cand; return [cand.s, cand.z]; }
-    const eSnap = edgeSnap(pos, excludeLineId);
+    const eSnap = edgeSnap(pos, excludeIds);
     if (eSnap) { snapMark = eSnap; return [eSnap.s, eSnap.z]; }
     snapMark = null;
     return [p.s, p.z];
   }
 
-  /* Compartido con Digitalizar (WP36, casilla "Snap a líneas"): mismo
-   * candidato (topo + vértices + bordes de otras líneas), sin excluir
-   * ninguna línea propia porque al digitalizar no hay una línea "en
-   * edición" todavía. Devuelve {s,z,kind} o null. */
+  /* Compartido con Digitalizar (casilla "Snap a líneas"): mismo candidato,
+   * sin excluir ninguna línea porque no hay una línea "en edición". */
   SW.snapping = {
     nearest: function (pos) {
       const V = SW.view;
@@ -6868,18 +7111,23 @@ window.SW = window.SW || {};
   SW.tools.register("vertex", {
     cursor: "pointer",
     hint: "Drag vertices (snaps to terrain and other lines); double click " +
-          "inserts; right click deletes a vertex.",
-    deactivate: function () { drag = null; snapMark = null; },
-    /* onDown SOLO declara captura de arrastre (WP1a); toda acción de un
-     * solo click (borrar vértice, seleccionar línea al azar) vive en
-     * onClick para no robarle el gesto de pan a un drag con el primario. */
+          "inserts; right click deletes a vertex. With several lines " +
+          "selected, \"Joint edit\" propagates the change to all of them.",
+    deactivate: function () {
+      if (drag && drag.joint) revertJoint(drag.joint);
+      drag = null; snapMark = null;
+    },
+    /* onDown SOLO declara captura de arrastre; toda acción de un solo click
+     * (borrar vértice, seleccionar línea al azar) vive en onClick para no
+     * robarle el gesto de pan a un drag con el primario. */
     onDown: function (e, pos) {
       if (e.button === 2 && drag) {
-        // WP38: click derecho a mitad de un arrastre lo cancela — revierte
-        // el vértice a su posición original sin dejar que el mismo click
-        // también dispare el borrado de vértice normal del botón derecho.
+        // click derecho a mitad de un arrastre lo cancela: revierte el
+        // vértice a su posición original sin que el mismo click dispare
+        // también el borrado de vértice normal del botón derecho.
         drag.line.vertices = drag.before.map(v => v.slice());
-        drag = null; snapMark = null;
+        revertJoint(drag.joint);
+        drag = null;
         SW.view.status("Vertex edit canceled.");
         SW.view.requestDraw();
         return "capture";
@@ -6888,7 +7136,8 @@ window.SW = window.SW || {};
       const hit = vertexAt(pos);
       if (hit && !hit.line.locked) {
         drag = { line: hit.line, index: hit.index,
-                 before: hit.line.vertices.map(v => v.slice()) };
+                 before: hit.line.vertices.map(v => v.slice()),
+                 joint: beginJoint(hit.line, hit.index) };
         return "capture";
       }
     },
@@ -6899,52 +7148,89 @@ window.SW = window.SW || {};
           const before = hit.line.vertices.map(v => v.slice());
           const after = before.slice();
           after.splice(hit.index, 1);
-          SW.undo.push(SW.undo.replaceVertices(
-            hit.line.id, before, after, "Delete vertex"));
-          SW.view.requestDraw();
+          const joint = beginJoint(hit.line);
+          hit.line.vertices = after.map(v => v.slice());
+          for (const p of joint.list) {
+            if (joint.mode === "parallel") {
+              p.line.vertices = SW.geom.offsetPolyline(hit.line.vertices, p.d);
+            } else {
+              const v = p.before.map(x => x.slice());
+              v.splice(hit.index, 1);
+              p.line.vertices = v;
+            }
+          }
+          commitJoint("Delete vertex", hit.line, before, after, joint);
         }
+        SW.view.requestDraw();
         return;
       }
       if (e.button !== 0) return;
       const lh = SW.view.hitLine(pos, 8);
-      SW.view.setSelection(lh ? [{ type: "line", id: lh.line.id }] : []);
+      // Ctrl/meta acumula, igual que en Seleccionar: es la forma de armar la
+      // multiselección con la que después se edita en conjunto.
+      if (lh && (e.ctrlKey || e.metaKey))
+        SW.view.toggleSelection({ type: "line", id: lh.line.id });
+      else if (lh)
+        SW.view.setSelection([{ type: "line", id: lh.line.id }]);
+      else
+        SW.view.setSelection([]);
     },
     onMove: function (e, pos) {
       if (!drag) return;
-      const q = snappedPoint(pos, drag.line.id);
-      drag.line.vertices[drag.index] = q;   // mutación local en vivo
+      const q = snappedPoint(pos, jointIds(drag.line, drag.joint));
+      const ds = q[0] - drag.before[drag.index][0];
+      const dz = q[1] - drag.before[drag.index][1];
+      if (drag.joint.mode === "taper" && drag.joint.weights) {
+        const w = drag.joint.weights;
+        for (let i = 0; i < drag.line.vertices.length; i++)
+          drag.line.vertices[i] = [drag.before[i][0] + ds * w[i],
+                                   drag.before[i][1] + dz * w[i]];
+        // el tomado va exacto al cursor
+        drag.line.vertices[drag.index] = q;
+      } else {
+        drag.line.vertices[drag.index] = q;   // mutación local en vivo
+        applyJointDrag(drag.line, drag.joint,
+                       { index: drag.index, ds: ds, dz: dz });
+      }
       SW.view.requestDraw();
     },
-    onUp: function (e, pos) {
+    onUp: function () {
       if (!drag) return;
       const after = drag.line.vertices.map(v => v.slice());
       const before = drag.before;
-      const changed = JSON.stringify(after) !== JSON.stringify(before);
-      if (changed) {
+      if (JSON.stringify(after) !== JSON.stringify(before)) {
         // el arrastre ya mutó localmente; el comando re-aplica ese estado
-        drag.line.vertices = before.map(v => v.slice());
-        SW.undo.push(SW.undo.replaceVertices(
-          drag.line.id, before, after, "Move vertex"));
+        commitJoint("Move vertex", drag.line, before, after, drag.joint);
+      } else {
+        revertJoint(drag.joint);
       }
-      drag = null; snapMark = null;
+      drag = null;
       SW.view.requestDraw();
     },
     onDblClick: function (e, pos) {
-      const lid = SW.view.primarySelectedLineId();
-      const line = lid ? SW.model.getLine(lid) : null;
-      if (!line || line.locked) return;
-      const p = SW.view.toSection(pos);
-      const hit = SW.geom.nearestPointOnPolyline(line.vertices, [p.s, p.z]);
-      if (!hit) return;
-      const V = SW.view;
-      const dPx = Math.hypot(V.sx(hit[2][0]) - pos.x,
-                             V.zy(hit[2][1]) - pos.y);
-      if (dPx > HANDLE_PX()) return;
+      const target = segmentAt(pos);
+      if (!target) return;
+      const line = target.line, hit = target.hit;
       const before = line.vertices.map(v => v.slice());
       const after = before.slice();
       after.splice(hit[0] + 1, 0, [hit[2][0], hit[2][1]]);
-      SW.undo.push(SW.undo.replaceVertices(
-        line.id, before, after, "Insert vertex"));
+      const joint = beginJoint(line);
+      line.vertices = after.map(v => v.slice());
+      for (const p of joint.list) {
+        if (joint.mode === "parallel") {
+          p.line.vertices = SW.geom.offsetPolyline(line.vertices, p.d);
+        } else {
+          // mismo segmento y mismo parámetro t: sobre una copia paralela eso
+          // cae en el punto homólogo, así la correspondencia por índice
+          // sobrevive a la inserción
+          const v = p.before.map(x => x.slice());
+          const a = p.before[hit[0]], b = p.before[hit[0] + 1];
+          v.splice(hit[0] + 1, 0, [a[0] + hit[1] * (b[0] - a[0]),
+                                   a[1] + hit[1] * (b[1] - a[1])]);
+          p.line.vertices = v;
+        }
+      }
+      commitJoint("Insert vertex", line, before, after, joint);
       SW.view.requestDraw();
     },
     drawOverlay: function (ctx) {
@@ -7784,6 +8070,634 @@ window.SW = window.SW || {};
 
   SW.panels = SW.panels || {};
   SW.panels.imageSelection = selectedImage;
+})();
+
+/* ==== js/tools/layer_cake.js ==== */
+"use strict";
+/* Acción: Layer cake — generador de un modelo de capas paralelas.
+ *
+ * Port de StructuralWorks/tools/layer_cake.js. El punto de partida de casi
+ * cualquier corte balanceado es una pila de estratos de espesor conocido:
+ * esto la construye de una vez a partir de cuántos estratos, qué espesor y
+ * qué largo, y opcionalmente crea también las unidades estratigráficas, de
+ * modo que el panel Unit polygons pueda rellenar los cuerpos enseguida.
+ *
+ * N estratos son N+1 horizontes: el techo del primero, las N-1 superficies
+ * interiores y la base del último. Con buzamiento, "espesor" es el espesor
+ * REAL (perpendicular a las capas): la separación en z vale
+ * espesor/cos(dip). Las capas salen con 2 vértices (planas); Resample las
+ * densifica si después hay que plegarlas. */
+
+window.SW = window.SW || {};
+SW.actions = SW.actions || {};
+
+(function () {
+  const MAX_BEDS = 200;
+
+  /* La webapp no tiene SW.model.topoAt (no hay topográficas de mundo): se
+   * interpola sobre las líneas kind="topography" muestreadas. */
+  function topoZAt(s) {
+    const topo = SW.model.topoSamples();
+    if (!topo.length) return 0;
+    const pts = topo.slice().sort((a, b) => a[0] - b[0]);
+    if (s <= pts[0][0]) return pts[0][1];
+    const last = pts[pts.length - 1];
+    if (s >= last[0]) return last[1];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (s >= a[0] && s <= b[0])
+        return a[1] + (b[1] - a[1]) * (s - a[0]) / (b[0] - a[0] || 1);
+    }
+    return 0;
+  }
+
+  function buildLines(cfg) {
+    const rad = cfg.dip * Math.PI / 180;
+    // separación vertical que deja el espesor REAL (perpendicular) en
+    // cfg.thickness; el coseno se acota para que un buzamiento de 90°
+    // escrito a mano no genere infinitos
+    const drop = cfg.thickness /
+      Math.max(Math.cos(Math.min(Math.abs(rad), 89.9 * Math.PI / 180)), 1e-6);
+    const s0 = cfg.startS, s1 = cfg.startS + cfg.length;
+    const dz = -Math.tan(rad) * cfg.length;   // dip>0 desciende hacia +s
+
+    // nextLineName deriva el nombre de las líneas que YA existen; llamarlo en
+    // un bucle antes de insertarlas daría N nombres iguales: se numeran acá,
+    // continuando la serie L<n> una sola vez.
+    const base = SW.model.nextLineName("horizon");
+    const first = +(/^L(\d+)\b/.exec(base) || [0, 1])[1];
+    const out = [];
+    for (let i = 0; i <= cfg.beds; i++) {
+      const z = cfg.topZ - drop * i;
+      const line = SW.model.newLine("horizon", [[s0, z], [s1, z + dz]],
+                                    "layer_cake");
+      line.name = "L" + (first + i) + " Horizon";
+      out.push(line);
+    }
+    return out;
+  }
+
+  /* Una unidad por estrato, con el horizonte de TECHO asignado. Va por el
+   * mismo camino que el panel Horizontes (updateHorizons: replace-all), que
+   * no pasa por la pila de undo — igual que "+ Unit". */
+  function buildUnits(lines, cfg) {
+    const hs = SW.model.state.sec.horizons;
+    const start = hs.length;
+    for (let i = 0; i < cfg.beds; i++) {
+      const k = start + i;
+      hs.push({
+        id: SW.model.genId(),
+        name: "Bed " + (i + 1),
+        color: [40 + (k * 47) % 190, 90 + (k * 29) % 120, 60 + (k * 71) % 170],
+        order: k, thickness: cfg.thickness,
+        line_ids: [lines[i].id],
+      });
+    }
+    SW.panels.horizons.sync();
+  }
+
+  function dialog(defaults, onOk) {
+    const U = SW.ui;
+    let modalApi = null;
+    let fields = null;
+    let unitsChk = null;
+
+    function submit() {
+      if (!fields || !unitsChk) return;
+      const n = Math.max(1, Math.min(MAX_BEDS,
+                                     Math.round(+fields.beds.value || 0)));
+      const t = Math.abs(+fields.thickness.value);
+      const len = Math.abs(+fields.length.value);
+      if (!isFinite(t) || t === 0) {
+        SW.view.status("Layer cake: the bed thickness must be non-zero.");
+        return;
+      }
+      if (!isFinite(len) || len === 0) {
+        SW.view.status("Layer cake: the line length must be non-zero.");
+        return;
+      }
+      const cfg = { beds: n, thickness: t, length: len,
+                    startS: +fields.startS.value || 0,
+                    topZ: +fields.topZ.value || 0,
+                    dip: +fields.dip.value || 0, units: unitsChk.checked };
+      modalApi.close();
+      onOk(cfg);
+    }
+
+    U.modal({
+      title: "Layer cake model",
+      build: function (body, api) {
+        modalApi = api;
+        U.note(body, "Builds a stack of parallel beds as horizon lines. " +
+          "N beds produce N+1 horizons (the top of the stack, the surfaces " +
+          "between beds and the base). With a dip, the thickness below is " +
+          "the true thickness measured perpendicular to the beds.");
+        fields = {};
+        function field(key, labelTxt, value, step, titleTxt, min) {
+          const inp = U.numberInput(value, step, min);
+          inp.style.width = "110px";
+          U.row(body, labelTxt, inp, titleTxt);
+          fields[key] = inp;
+        }
+        field("beds", "Number of beds", defaults.beds, "1",
+              "How many beds to stack. N beds are drawn as N+1 horizon " +
+              "lines.", 1);
+        field("thickness", "Bed thickness (m)", defaults.thickness, "50",
+              "True thickness of each bed, measured perpendicular to " +
+              "bedding.", 0);
+        field("length", "Line length (m)", Math.round(defaults.length), "500",
+              "How far the beds run along the section.", 0);
+        field("startS", "Start at s (m)", Math.round(defaults.startS), "500",
+              "Distance along the section where the beds begin.");
+        field("topZ", "Top elevation (m)", Math.round(defaults.topZ), "100",
+              "Elevation of the top of the stack, at \"start at s\".");
+        field("dip", "Dip (°)", 0, "1",
+              "Apparent dip in the plane of the section: positive descends " +
+              "toward increasing s (to the right), negative to the left. 0 " +
+              "gives a flat-lying stack.");
+
+        unitsChk = document.createElement("input");
+        unitsChk.type = "checkbox";
+        unitsChk.checked = true;
+        const unitsLabel = document.createElement("label");
+        unitsLabel.className = "check-row";
+        unitsLabel.title = "Creates one stratigraphic unit per bed in the " +
+          "Units panel, coloured and assigned to its own top horizon, so " +
+          "Unit polygons can fill the bodies straight away.";
+        unitsLabel.appendChild(unitsChk);
+        unitsLabel.appendChild(document.createTextNode(
+          " Also create one stratigraphic unit per bed"));
+        body.appendChild(unitsLabel);
+
+        const summary = document.createElement("div");
+        summary.style.cssText = "font-size:11px;color:var(--ink-3);" +
+                                "margin-top:6px;";
+        body.appendChild(summary);
+        function refreshSummary() {
+          const n = Math.max(1, Math.min(MAX_BEDS,
+                                         Math.round(+fields.beds.value || 0)));
+          const t = Math.abs(+fields.thickness.value) || 0;
+          const d = +fields.dip.value || 0;
+          const vertical = t / Math.cos(
+            Math.min(89.9, Math.abs(d)) * Math.PI / 180);
+          summary.textContent = n + " bed(s) → " + (n + 1) + " horizon(s); " +
+            "total true thickness " + (n * t).toFixed(0) + " m" +
+            (d ? "; vertical spacing " + vertical.toFixed(0) + " m per bed"
+               : "");
+        }
+        refreshSummary();
+        ["beds", "thickness", "dip"].forEach(k =>
+          fields[k].addEventListener("input", refreshSummary));
+        // Enter equivale a Create (Esc ya lo cierra SW.ui.modal)
+        Object.keys(fields).forEach(function (k) {
+          fields[k].addEventListener("keydown", function (e) {
+            if (e.key === "Enter") { e.preventDefault(); submit(); }
+          });
+        });
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Create", primary: true, action: submit },
+      ],
+    });
+  }
+
+  SW.actions.layerCake = function () {
+    const sec = SW.model.state.sec;
+    const len = sec.length || 10000;
+    // arranca en la cota del terreno del medio del corte cuando hay
+    // topografía, y si no en 0
+    const topZ = Math.round(topoZAt(len / 2));
+    dialog({ beds: 5, thickness: 500, length: len, startS: 0, topZ: topZ },
+           function (cfg) {
+      const lines = buildLines(cfg);
+      SW.undo.push(SW.undo.addLines(
+        lines, "Layer cake (" + cfg.beds + " beds)"));
+      if (cfg.units) buildUnits(lines, cfg);
+      SW.view.setSelection(lines.map(l => ({ type: "line", id: l.id })));
+      if (SW.panels.horizons) SW.panels.horizons.render();
+      SW.view.status("Layer cake: " + cfg.beds + " bed(s) of " +
+                     cfg.thickness.toFixed(0) + " m over " +
+                     (cfg.length / 1000).toFixed(2) + " km — " +
+                     lines.length + " horizons created" +
+                     (cfg.units ? " with their units" : "") + ".");
+      SW.view.requestDraw();
+    });
+  };
+})();
+
+/* ==== js/io/segy.js ==== */
+"use strict";
+/* Lector y renderizador SEG-Y (dominio TWTT) + importación como imagen.
+ *
+ * Port de StructuralWorks/io/seismic/segy_reader.py + render.py:
+ *   - Lector mínimo rev 0/1: big-endian (el estándar), formatos de muestra
+ *     1 (float IBM) y 5 (float IEEE) — los dos que cubren los datos reales
+ *     de amplitud. Cabecera textual EBCDIC/ASCII best-effort (informativa).
+ *   - Render: paletas "grayscale", "seismic_rwb", "amber" y "spectral" (las
+ *     mismas control points del plugin), escala de color por percentil
+ *     simétrico (clip_pct, 98) y contraste (gain) — las propiedades de
+ *     visualización de StructuralWorks.
+ *   - El resultado es UNA imagen de la sección como cualquier foto: se puede
+ *     mover, redimensionar y calibrar. El eje vertical es TWTT en ms
+ *     (0 en el techo, negativo hacia abajo), NO profundidad — igual que el
+ *     plugin, que crea el corte en el dominio `twtt`.
+ *   - Para poder recolorear tras guardar/reabrir el proyecto sin releer el
+ *     .sgy (el navegador no vuelve a tener el archivo), se persiste en
+ *     calibration_meta el "índice de paleta" de la amplitud ya clipada
+ *     (1 byte/muestra). El PNG de pantalla se renderiza aparte, con
+ *     resolución acotada a MAX_PX. */
+
+window.SW = window.SW || {};
+SW.segy = SW.segy || {};
+SW.actions = SW.actions || {};
+
+(function () {
+  const TEXT_HEADER_SIZE = 3200;
+  const BINARY_HEADER_SIZE = 400;
+  const TRACE_HEADER_SIZE = 240;
+  const BPS = 4;                       // formatos 1 y 5: 4 bytes por muestra
+  const MAX_SAMPLES = 16 * 1024 * 1024;
+  const MAX_PX = 4096;                 // lado largo máximo del PNG de pantalla
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+  /* name -> [(stop 0..1, [r,g,b]), …] — copia fiel de io/seismic/render.py. */
+  const PALETTES = {
+    grayscale: [[0, [0, 0, 0]], [1, [255, 255, 255]]],
+    seismic_rwb: [
+      [0, [10, 20, 140]], [0.5, [255, 255, 255]], [1, [150, 10, 10]]],
+    amber: [
+      [0, [10, 8, 0]], [0.5, [120, 70, 0]], [1, [255, 210, 60]]],
+    spectral: [
+      [0, [40, 40, 140]], [0.25, [20, 130, 180]],
+      [0.5, [240, 240, 240]], [0.75, [220, 150, 30]], [1, [160, 20, 20]]],
+  };
+  function paletteNames() { return Object.keys(PALETTES).sort(); }
+  function hasPalette(name) { return Object.prototype.hasOwnProperty
+                                .call(PALETTES, name); }
+
+  function lutFor(name) {
+    const stops = (hasPalette(name) ? PALETTES[name] : PALETTES.seismic_rwb);
+    const xs = stops.map(s => s[0]);
+    const lr = stops.map(s => s[1][0]);
+    const lg = stops.map(s => s[1][1]);
+    const lb = stops.map(s => s[1][2]);
+    const out = new Uint8Array(256 * 3);
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255;
+      let r = lr[0], g = lg[0], b = lb[0];
+      for (let k = 0; k < stops.length - 1; k++) {
+        if (t >= xs[k] && t <= xs[k + 1]) {
+          const f = (t - xs[k]) / (xs[k + 1] - xs[k] || 1);
+          r = lr[k] + (lr[k + 1] - lr[k]) * f;
+          g = lg[k] + (lg[k + 1] - lg[k]) * f;
+          b = lb[k] + (lb[k + 1] - lb[k]) * f;
+          break;
+        }
+      }
+      out[i * 3] = Math.round(r);
+      out[i * 3 + 1] = Math.round(g);
+      out[i * 3 + 2] = Math.round(b);
+    }
+    return out;
+  }
+
+  function ibmToFloat(u) {
+    const sign = (u >>> 31) ? -1 : 1;
+    const exp = (u >>> 24) & 0x7f;
+    const mant = (u & 0x00ffffff) / 16777216;
+    return sign * mant * Math.pow(16, exp - 64);
+  }
+
+  /* Cabecera textual: tradicionalmente EBCDIC, hoy a menudo ASCII. Es
+   * informativa (no alimenta nada), así que se decodifica best-effort. */
+  function decodeText(raw) {
+    let out = "";
+    for (let i = 0; i < Math.min(raw.length, 320); i++) {
+      let c = raw[i];
+      if (c === 0 || c === 0xff) continue;
+      if (c < 0x40) { out += String.fromCharCode(c); continue; }
+      if (c === 0x40) { out += " "; continue; }
+      if (c >= 0x81 && c <= 0x89) { out += String.fromCharCode(0x61 + c - 0x81); continue; }
+      if (c >= 0x91 && c <= 0x99) { out += String.fromCharCode(0x6a + c - 0x91); continue; }
+      if (c >= 0xa2 && c <= 0xa9) { out += String.fromCharCode(0x73 + c - 0xa2); continue; }
+      const P = {
+        0x4b: ".", 0x4c: "<", 0x4d: "(", 0x4e: "+", 0x50: "&",
+        0x5a: "!", 0x5b: "$", 0x5d: ")", 0x61: "/", 0x6a: "|",
+        0x6b: ",", 0x6e: ">", 0x6f: "?", 0x7a: ":", 0x7b: "#",
+        0x7c: "@", 0x7d: "'", 0x7f: '"',
+      };
+      out += P[c] || "·";
+    }
+    return out.replace(/\s+/g, " ").trim();
+  }
+
+  /* Lee un .sgy/.segy. Devuelve {amplitude (Float64Array traces*samples),
+   * dt_ms, n_traces, n_samples, sample_format, text_header, truncated}.
+   * Errores → Error con mensaje claro (estilo SegyError del plugin). */
+  function read(file) {
+    return file.slice(0, TEXT_HEADER_SIZE + BINARY_HEADER_SIZE)
+      .arrayBuffer().then(function (headBuf) {
+      const hdr = new DataView(headBuf);
+      const textRaw = new Uint8Array(headBuf, 0, TEXT_HEADER_SIZE);
+      const dt_us = hdr.getInt16(TEXT_HEADER_SIZE + 16, false);
+      const n_samples = hdr.getUint16(TEXT_HEADER_SIZE + 20, false);
+      const sample_format = hdr.getInt16(TEXT_HEADER_SIZE + 24, false);
+      const ext = hdr.getInt16(TEXT_HEADER_SIZE + 304, false) || 0;
+      if (dt_us <= 0 || n_samples <= 0)
+        throw new Error("Binary header reports sample_interval=" + dt_us +
+          ", samples_per_trace=" + n_samples + " — not a readable trace " +
+          "geometry (possibly little-endian or a non-standard file).");
+      if (sample_format !== 1 && sample_format !== 5)
+        throw new Error("Sample format " + sample_format +
+          " isn't supported yet — only IBM float (1) and IEEE float (5) " +
+          "are; re-export the line as one of those.");
+      const perTrace = TRACE_HEADER_SIZE + n_samples * BPS;
+      const dataStart = TEXT_HEADER_SIZE + BINARY_HEADER_SIZE +
+                        ext * TEXT_HEADER_SIZE;
+      const maxReadable = Math.max(0,
+        Math.floor((file.size - dataStart) / perTrace));
+      const n_traces = Math.min(maxReadable,
+                                Math.floor(MAX_SAMPLES / n_samples));
+      if (n_traces <= 0)
+        throw new Error("No complete traces found (file too small or a " +
+                        "trace geometry that doesn't divide the data).");
+      const amplitude = new Float64Array(n_traces * n_samples);
+      const reads = [];
+      let off = dataStart;
+      for (let i = 0; i < n_traces; i++) {
+        reads.push(file.slice(off, off + perTrace).arrayBuffer().then(
+          function (buf) {
+            const dv = new DataView(buf);
+            const base = i * n_samples;
+            for (let j = 0; j < n_samples; j++) {
+              const at = TRACE_HEADER_SIZE + j * BPS;
+              amplitude[base + j] = sample_format === 1
+                ? ibmToFloat(dv.getUint32(at, false))
+                : dv.getFloat32(at, false);
+            }
+          }));
+        off += perTrace;
+      }
+      return Promise.all(reads).then(function () {
+        return { amplitude: amplitude, dt_ms: dt_us / 1000,
+                 n_traces: n_traces, n_samples: n_samples,
+                 sample_format: sample_format,
+                 text_header: decodeText(textRaw),
+                 truncated: maxReadable > n_traces };
+      });
+    });
+  }
+
+  /* PNG + índice de paleta de una amplitud ya cargada. Devolver
+   * {data_url, index (Uint8Array traces*samples), w, h} del PNG de pantalla. */
+  function renderAmplitude(amp, n_traces, n_samples, palette, clipPct, gain) {
+    clipPct = clipPct === undefined ? 98 : (+clipPct || 98);
+    gain = gain === undefined ? 1 : (+gain || 1);
+    const total = n_traces * n_samples;
+    const finite = [];
+    for (let i = 0; i < total; i++)
+      if (isFinite(amp[i])) finite.push(amp[i]);
+    if (!finite.length) throw new Error("Amplitude matrix has no finite values.");
+    finite.sort((a, b) => a - b);
+    // percentiles simétricos, como np.percentile(finite, [100-clip, clip])
+    const nF = finite.length;
+    let lo = finite[Math.max(0, Math.min(nF - 1,
+                  Math.floor((100 - clipPct) / 100 * nF)))];
+    let hi = finite[Math.max(0, Math.min(nF - 1,
+                  Math.floor(clipPct / 100 * nF)))];
+    if (hi <= lo) hi = lo + 1;
+    const span = hi - lo;
+    const index = new Uint8Array(total);
+    for (let i = 0; i < total; i++) {
+      const a = amp[i];
+      if (!isFinite(a)) { index[i] = 128; continue; }
+      let v = (a - lo) / span * gain * 255;
+      index[i] = v < 0 ? 0 : (v > 255 ? 255 : (v | 0));
+    }
+    const out = pngFromIndex(index, n_traces, n_samples, palette);
+    return { data_url: out.data_url, index: index, w: out.w, h: out.h };
+  }
+
+  /* Renderiza un índice (0..255 px de amplitud ya clipada) con una paleta:
+   * ImagenData full-res → canvas → PNG a resolución acotada. Sirve tanto a
+   * la importación como al recoloreo, que no necesita la amplitud cruda. */
+  function pngFromIndex(index, w, h, palette) {
+    const total = index.length;
+    const lut = lutFor(palette);
+    const big = document.createElement("canvas");
+    big.width = w; big.height = h;
+    const bctx = big.getContext("2d");
+    const img = bctx.createImageData(w, h);
+    const px = img.data;
+    for (let i = 0; i < total; i++) {
+      const k = index[i] * 3;
+      px[i * 4] = lut[k]; px[i * 4 + 1] = lut[k + 1];
+      px[i * 4 + 2] = lut[k + 2]; px[i * 4 + 3] = 255;
+    }
+    bctx.putImageData(img, 0, 0);
+    if (w <= MAX_PX && h <= MAX_PX)
+      return { data_url: big.toDataURL("image/png"), w: w, h: h };
+    const k = MAX_PX / Math.max(w, h);
+    const dw = Math.max(1, Math.round(w * k));
+    const dh = Math.max(1, Math.round(h * k));
+    const small = document.createElement("canvas");
+    small.width = dw; small.height = dh;
+    small.getContext("2d").drawImage(big, 0, 0, dw, dh);
+    return { data_url: small.toDataURL("image/png"), w: dw, h: dh };
+  }
+
+  function indexToBase64(u8) {
+    let bin = "";
+    for (let i = 0; i < u8.length; i += 0x8000)
+      bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  function base64ToIndex(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /* -- importación --------------------------------------------------------- */
+
+  function placeSegy(f, data, dataUrl, wPix, hPix, index, cfg) {
+    const totalMs = data.n_samples * data.dt_ms;
+    const sRight = data.n_traces * cfg.spacing;
+    const base = String(f.name || "segy").replace(/\.[^.]+$/, "") || "segy";
+    const img = {
+      id: SW.model.genId(),
+      name: base,
+      data_url: dataUrl,
+      natural_w: wPix, natural_h: hPix,
+      s_left: 0, s_right: sRight,
+      z_top: 0, z_bottom: -totalMs,
+      opacity: 1, visible: true, locked: false,
+      calibration_meta: {
+        type: "segy", segy_name: f.name,
+        palette: cfg.palette, clip_pct: cfg.clip_pct, gain: cfg.gain,
+        dt_ms: data.dt_ms, n_traces: data.n_traces,
+        n_samples: data.n_samples, total_ms: totalMs,
+        sample_format: data.sample_format,
+        index: indexToBase64(index),
+      },
+    };
+    // No-undoable, igual que el plugin (importar crea una sección nueva sin
+    // pila de undo); se borra con Delete image.
+    SW.model.state.sec.images.push(img);
+    if (SW.panels.images) SW.panels.images.render();
+    SW.view.setSelection([{ type: "image", id: img.id }]);
+    SW.tools.activate("image");
+    SW.view.zoomToExtent();
+    SW.view.requestDraw();
+    if (SW.project) SW.project.touch();
+    SW.view.status("Imported SEG-Y \"" + base + "\" (" + data.n_traces +
+      " traces, ~" + totalMs.toFixed(0) + " ms TWTT — the vertical axis is " +
+      "TIME, not depth) at " + (sRight / 1000).toFixed(2) + " km with " +
+      cfg.spacing.toFixed(0) + " m/trace." +
+      (data.truncated ? "  ⚠ Read only the first " + data.n_traces +
+        " traces (16M-sample read guard)." : ""));
+  }
+
+  function doRender(f, data, cfg) {
+    SW.view.status("SEG-Y: rendering " + cfg.palette + "…");
+    // un frame para pintar el mensaje antes del cálculo largo
+    setTimeout(function () {
+      try {
+        const png = renderAmplitude(data.amplitude, data.n_traces,
+                                    data.n_samples, cfg.palette,
+                                    cfg.clip_pct, cfg.gain);
+        placeSegy(f, data, png.data_url, png.w, png.h, png.index, cfg);
+      } catch (err) {
+        SW.view.status("SEG-Y render: " +
+                       (err && err.message ? err.message : err));
+      }
+    }, 30);
+  }
+
+  function importDialog(f, data) {
+    const U = SW.ui;
+    const totalMs = data.n_samples * data.dt_ms;
+    let paletteSel, clipInp, gainInp, spaceInp;
+    const names = paletteNames();
+    U.modal({
+      title: "Import SEG-Y — " + String(f.name || "seismic line"),
+      build: function (body) {
+        U.note(body, "Read " + data.n_traces + " traces × " +
+          data.n_samples + " samples, " + data.dt_ms.toFixed(1) +
+          " ms sample interval → " + totalMs.toFixed(0) +
+          " ms two-way-time." +
+          (data.truncated ? "  ⚠ Only the first " + data.n_traces +
+            " traces were read (16M-sample read guard); re-export the " +
+            "line decimated for the rest." : "") +
+          " A seismic record is TIME, not depth: it will be placed from 0 " +
+          "at the top down to -" + totalMs.toFixed(0) + " ms, like the " +
+          "plugin's TWTT sections.");
+        paletteSel = U.select(names.map(p => ({ value: p, label: p })),
+                              names.indexOf("seismic_rwb") >= 0
+                                ? "seismic_rwb" : names[0]);
+        U.row(body, "Color palette", paletteSel,
+              "Display palette (StructuralWorks: grayscale, seismic_rwb, " +
+              "amber, spectral).");
+        clipInp = U.numberInput(98, 1, 1, 99.9);
+        U.row(body, "Clip (%)", clipInp,
+              "Symmetric percentile that sets the color scale's dynamic " +
+              "range (render_amplitude_png of the plugin; 98 default).");
+        gainInp = U.numberInput(1, 0.1, 0.1, 20);
+        U.row(body, "Gain", gainInp,
+              "Post-clip contrast multiplier.");
+        spaceInp = U.numberInput(25, 1, 1);
+        U.row(body, "Trace spacing (m)", spaceInp,
+              "Horizontal extent = n_traces × spacing. Matches the plugin's " +
+              "nominal 25 m/trace when the trace headers carry no placeable " +
+              "coordinates.");
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Import", primary: true, action: function () {
+          doRender(f, data, {
+            palette: paletteSel.value,
+            clip_pct: Math.max(0.1, Math.min(99.9, +clipInp.value || 98)),
+            gain: Math.max(0.1, +gainInp.value || 1),
+            spacing: Math.max(0.1, +spaceInp.value || 25),
+          });
+        } },
+      ],
+    });
+  }
+
+  function handleFile(f) {
+    SW.view.status("SEG-Y: reading " + f.name + "…");
+    read(f).then(function (data) {
+      importDialog(f, data);
+    }).catch(function (err) {
+      SW.view.status("SEG-Y: " + (err && err.message ? err.message : err));
+    });
+  }
+
+  SW.actions.importSegy = function () {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".sgy,.segy";
+    inp.addEventListener("change", function () {
+      const f = inp.files && inp.files[0];
+      if (f) handleFile(f);
+    });
+    inp.click();
+  };
+
+  /* -- recolor (port de recolorSeismic del bridge) ------------------------- */
+
+  SW.actions.recolorSegy = function (img) {
+    const meta = (img && img.calibration_meta) || {};
+    const U = SW.ui;
+    if (meta.type !== "segy" || !meta.index || !(meta.n_traces > 0)) {
+      SW.view.status("Recolor: not a SEG-Y image with stored amplitude.");
+      return;
+    }
+    let palSel;
+    const names = paletteNames();
+    U.modal({
+      title: "Recolor " + (img.name || "seismic image"),
+      build: function (body) {
+        U.note(body, "Re-renders this SEG-Y with another display palette " +
+          "(StructuralWorks), without re-importing. The image keeps its " +
+          "position, scale and the Clip/Gain used at import.");
+        palSel = U.select(names.map(p => ({ value: p, label: p })),
+                          names.indexOf(meta.palette) >= 0
+                            ? meta.palette : names[0]);
+        U.row(body, "Color palette", palSel, "");
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Recolor", primary: true, action: function () {
+          let index;
+          try {
+            index = base64ToIndex(meta.index);
+          } catch (err) {
+            SW.view.status("Recolor: stored amplitude is corrupted.");
+            return false;   // keep modal open
+          }
+          const png = pngFromIndex(index, meta.n_traces, meta.n_samples,
+                                   palSel.value);
+          img.data_url = png.data_url;
+          img.natural_w = png.w; img.natural_h = png.h;
+          meta.palette = palSel.value;
+          img.calibration_meta = meta;
+          // no-undoable, como recolorSeismic del plugin; se persiste directo
+          SW.render.invalidateImage(img.id);
+          if (SW.panels.images) SW.panels.images.render();
+          SW.view.requestDraw();
+          if (SW.project) SW.project.touch();
+          SW.view.status("Recolored \"" + (img.name || "image") + "\" to " +
+                         palSel.value + ".");
+        } },
+      ],
+    });
+  };
+
+  SW.segy = { read, renderAmplitude, paletteNames, hasPalette };
 })();
 
 /* ==== js/tools/calibrate.js ==== */
@@ -10314,6 +11228,20 @@ SW.panels.images = (function () {
       }
     });
     calRow.appendChild(backBtn);
+
+    if (img.calibration_meta && img.calibration_meta.type === "segy") {
+      const recBtn = document.createElement("button");
+      recBtn.className = "mini";
+      recBtn.textContent = "Recolor…";
+      recBtn.title = "Re-render this SEG-Y image with another display " +
+                     "palette (StructuralWorks), keeping position, scale " +
+                     "and the Clip/Gain used at import";
+      recBtn.addEventListener("click", function () {
+        SW.actions.recolorSegy(img);
+      });
+      calRow.appendChild(recBtn);
+    }
+
     body.appendChild(calRow);
   }
 
@@ -10381,6 +11309,14 @@ SW.panels.images = (function () {
     imp.className = "mini"; imp.textContent = "Import image…";
     imp.addEventListener("click", () => SW.actions.importImage());
     btns.appendChild(imp);
+
+    const segyBtn = document.createElement("button");
+    segyBtn.className = "mini"; segyBtn.textContent = "Import SEG-Y…";
+    segyBtn.title = "Import a seismic two-way-time line (.sgy/.segy) as an " +
+                    "image with StructuralWorks' display properties, then " +
+                    "calibrate its scale if the figure already has one.";
+    segyBtn.addEventListener("click", () => SW.actions.importSegy());
+    btns.appendChild(segyBtn);
 
     const cal = document.createElement("button");
     cal.className = "mini"; cal.textContent = "Calibrate scale…";
@@ -11238,6 +12174,180 @@ SW.panels.linelength = (function () {
   }
 
   return { render, computeReport };
+})();
+
+/* ==== js/panels/versions.js ==== */
+"use strict";
+/* Panel: Versiones — instantáneas con nombre de la interpretación.
+ *
+ * Un corte se hace por iteraciones ("¿y si la falla fuera lístrica?"), y la
+ * pila de undo no sirve para volver a una de ellas: es lineal, se pierde al
+ * cerrar la pestaña y deshacer cincuenta pasos para mirar cómo estaba antes
+ * deja sin el trabajo posterior. Una versión guarda líneas, unidades,
+ * cuerpos, sondajes, imágenes y la caja de la sección tal como están;
+ * restaurarla reemplaza esa parte y deja intactos el nombre del corte, su
+ * ancho, su calibración y los rótulos — restaurar nunca mueve la sección.
+ *
+ * A diferencia del plugin no hay bridge: las versiones viven en
+ * sec.versions y se serializan solas con el .sketch.json, así que siguen
+ * ahí en la próxima sesión. */
+
+window.SW = window.SW || {};
+SW.panels = SW.panels || {};
+
+SW.panels.versions = (function () {
+  const MAX_VERSIONS = 50;
+
+  /* Campos que forman parte de una versión. Identidad y ubicación fuera:
+   * id, name, length, label_left/right, display_units, notes y calibration
+   * no se tocan al restaurar (en el plugin tampoco: traza, anchos, nombre). */
+  const FIELDS = ["z_min", "z_max", "vertical_exaggeration", "lines", "dips",
+                  "horizons", "polygons", "wells", "images", "scalebars"];
+
+  function versions() { return SW.model.state.sec.versions || []; }
+
+  function snap() {
+    const sec = SW.model.state.sec;
+    const data = {};
+    for (const f of FIELDS) data[f] = JSON.parse(JSON.stringify(sec[f]));
+    return data;
+  }
+
+  function suggestedName() {
+    return "Version " + (versions().length + 1);
+  }
+
+  function saveVersion() {
+    const name = window.prompt("Name for this version:", suggestedName());
+    if (name === null) return;
+    const trimmed = String(name || "").trim();
+    const entry = {
+      id: SW.model.genId(),
+      name: trimmed || suggestedName(),
+      created: new Date().toISOString(),
+      data: snap(),
+    };
+    versions().push(entry);
+    if (SW.project) SW.project.touch();
+    render();
+    SW.view.status("Saved version \"" + entry.name + "\".");
+  }
+
+  /* Restaurar reemplaza el documento entero: la pila de undo describe un
+   * documento que ya no existe (ids de líneas que pueden no estar), así que
+   * se vacía. Se avisa antes, porque eso NO se puede deshacer — por eso el
+   * paso previo recomendado es guardar el estado actual como una versión
+   * más, que es lo que ofrece la confirmación. */
+  function restoreVersion(v) {
+    const ok = window.confirm(
+      "Restore \"" + v.name + "\" (" + (v.created || "").slice(0, 16) + ")?\n\n" +
+      "The lines, dips, horizons, unit bodies, wells, images and the " +
+      "section box of this drawing are replaced by that version. The " +
+      "section's name, its length and its scale calibration are not " +
+      "touched.\n\n" +
+      "This cannot be undone and clears the undo history — save the current " +
+      "state as a version first if you want to come back to it.");
+    if (!ok) return;
+    const sec = SW.model.state.sec;
+    const data = v.data || {};
+    for (const f of FIELDS)
+      if (Object.prototype.hasOwnProperty.call(data, f))
+        sec[f] = JSON.parse(JSON.stringify(data[f]));
+    SW.undo.clear();
+    SW.view.setSelection([]);
+    if (SW.render.clearImageCache) SW.render.clearImageCache();
+    SW.view.syncFromDocument(true);
+    if (SW.project) SW.project.touch();
+    render();
+    SW.view.status("Restored version \"" + v.name + "\" — the undo " +
+                   "history was cleared.");
+  }
+
+  function renameVersion(v) {
+    const name = window.prompt("Rename version:", v.name || "");
+    if (name === null) return;
+    const trimmed = String(name || "").trim();
+    if (!trimmed || trimmed === v.name) return;
+    v.name = trimmed;
+    if (SW.project) SW.project.touch();
+    render();
+  }
+
+  function deleteVersion(v) {
+    if (!window.confirm("Delete version \"" + v.name + "\"?")) return;
+    const arr = versions();
+    const i = arr.indexOf(v);
+    if (i >= 0) arr.splice(i, 1);
+    if (SW.project) SW.project.touch();
+    render();
+    SW.view.status("Deleted version \"" + v.name + "\".");
+  }
+
+  function mkBtn(label, title, fn) {
+    const b = document.createElement("button");
+    b.className = "mini"; b.textContent = label; b.title = title;
+    b.addEventListener("click", function (e) { e.stopPropagation(); fn(); });
+    return b;
+  }
+
+  function render() {
+    const body = document.getElementById("panel-versions-body");
+    if (!body) return;
+    const list = versions();
+    body.innerHTML = "";
+
+    for (const v of list) {
+      const d = v.data || {};
+      const row = document.createElement("div");
+      row.className = "list-item";
+      row.title = "Saved " + (v.created || "") + " — " +
+        (d.lines || []).length + " line(s), " +
+        (d.polygons || []).length + " unit body/ies)";
+
+      const label = document.createElement("span");
+      label.className = "grow";
+      label.style.cssText = "overflow:hidden;text-overflow:ellipsis;" +
+                            "white-space:nowrap;";
+      label.textContent = v.name;
+      const when = document.createElement("span");
+      when.style.cssText = "font-size:10px;color:var(--ink-3);margin-left:6px;";
+      when.textContent = (v.created || "").slice(0, 16);
+      label.appendChild(when);
+      row.appendChild(label);
+
+      row.appendChild(mkBtn("↺", "Restore this version",
+                            () => restoreVersion(v)));
+      row.appendChild(mkBtn("✎", "Rename", () => renameVersion(v)));
+      row.appendChild(mkBtn("×", "Delete this version",
+                            () => deleteVersion(v)));
+      body.appendChild(row);
+    }
+
+    if (!list.length) {
+      const n = document.createElement("div");
+      n.style.cssText = "font-size:11px;color:var(--ink-3);margin-bottom:4px;";
+      n.textContent = "No saved versions yet. \"Save version\" stores the " +
+        "lines, dips, horizons, unit bodies, wells and images as they are " +
+        "now, so you can come back to this iteration later.";
+      body.appendChild(n);
+    }
+
+    const btns = document.createElement("div");
+    btns.className = "row";
+    const save = mkBtn("Save version",
+                       "Stores the current interpretation under a name you " +
+                       "choose. The section's name, length and calibration " +
+                       "are never part of a version.",
+                       saveVersion);
+    save.disabled = list.length >= MAX_VERSIONS;
+    if (save.disabled)
+      save.title = "This section already has the maximum of " + MAX_VERSIONS +
+        " versions — delete one first.";
+    btns.appendChild(save);
+    body.appendChild(btns);
+  }
+
+  return { render, saveVersion, restoreVersion, MAX_VERSIONS };
 })();
 
 /* ==== js/panels/analyzer.js ==== */
@@ -12422,6 +13532,7 @@ SW.view = (function () {
       if (SW.panels.polygons) SW.panels.polygons.render();
       if (SW.panels.wells) SW.panels.wells.render();
       if (SW.panels.restore) SW.panels.restore.render();
+      if (SW.panels.versions) SW.panels.versions.render();
       if (SW.project) SW.project.touch();
     });
 
@@ -12473,6 +13584,10 @@ SW.view = (function () {
     });
     const joinBtn = $("join-btn");
     if (joinBtn) joinBtn.addEventListener("click", () => SW.actions.joinSelected());
+
+    const layerCakeBtn = $("layer-cake-btn");
+    if (layerCakeBtn) layerCakeBtn.addEventListener("click",
+                                                     () => SW.actions.layerCake());
 
     const restoreFlipBtn = $("restore-flip-btn");
     if (restoreFlipBtn) restoreFlipBtn.addEventListener("click",
@@ -12648,6 +13763,7 @@ SW.view = (function () {
     if (SW.panels.polygons) SW.panels.polygons.render();
     if (SW.panels.wells) SW.panels.wells.render();
     if (SW.panels.restore) SW.panels.restore.render();
+    if (SW.panels.versions) SW.panels.versions.render();
     if (SW.project) SW.project.updateTitle();
     if (!keepView) zoomToExtent(); else requestDraw();
   }
