@@ -303,23 +303,57 @@ body {
   display: flex; flex-direction: column; gap: 6px;
 }
 #canvas-actions button {
-  padding: 8px 12px; font-size: 13px; border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.18);
-  background: var(--surface);
+  width: 40px; height: 40px; padding: 0; font-size: 0;
+  display: grid; place-items: center;
+  border-radius: 10px; border: 1px solid var(--grid-strong);
+  box-shadow: 0 2px 8px rgba(0,0,0,.22); cursor: pointer;
+  transition: transform .08s ease, box-shadow .1s ease;
+}
+#canvas-actions button:not(:disabled):active { transform: translateY(1px); }
+/* halo de los iconos: realza el trazo de su propio color, y crece al pasar
+   el ratón para avisar del grupo/acción que se va a disparar */
+#canvas-actions button .ic { width: 20px; height: 20px; }
+#canvas-actions button .ic { filter: drop-shadow(0 0 2px currentColor); }
+#canvas-actions button:not(:disabled):hover .ic {
+  filter: drop-shadow(0 0 4px currentColor);
+}
+/* tono por grupo — historial (Undo/Redo): neutro azulado */
+#canvas-actions .ca-group-history {
+  background: linear-gradient(#eef2f7, #dde4ec); color: #3a4650;
+}
+#canvas-actions .ca-group-history:not(:disabled):hover {
+  background: linear-gradient(#f4f7fb, #e4e9f1);
+}
+/* grupo de edición — cada acción con su tono semántico:
+   Done = éxito (confirmar), Discard = aviso (cancelar), Delete = peligro */
+#canvas-actions #edit-done:not(:disabled) {
+  background: #0f7a6e; color: #fff; border-color: #0f7a6e;
+  box-shadow: 0 2px 8px rgba(15,122,110,.38);
+}
+#canvas-actions #edit-done:not(:disabled):hover {
+  background: #11897b; box-shadow: 0 2px 10px rgba(15,122,110,.55);
+}
+#canvas-actions #edit-discard:not(:disabled) {
+  background: #b4760c; color: #fff; border-color: #b4760c;
+  box-shadow: 0 2px 8px rgba(180,118,12,.32);
+}
+#canvas-actions #edit-discard:not(:disabled):hover {
+  background: #c8860f; box-shadow: 0 2px 10px rgba(180,118,12,.5);
+}
+#canvas-actions #edit-delete:not(:disabled) {
+  background: var(--danger); color: #fff; border-color: var(--danger);
+  box-shadow: 0 2px 8px rgba(200,30,30,.34);
+}
+#canvas-actions #edit-delete:not(:disabled):hover {
+  background: #dc2a2a; box-shadow: 0 2px 10px rgba(200,30,30,.52);
 }
 #canvas-actions button:disabled {
   opacity: .45; box-shadow: none; cursor: default;
 }
-#canvas-actions #edit-done:not(:disabled) {
-  background: var(--accent); color: #fff; border-color: var(--accent);
-}
-#canvas-actions #edit-delete:not(:disabled) {
-  color: var(--danger); border-color: var(--danger);
-}
 .canvas-actions-sep {
   height: 1px; margin: 2px 4px; background: var(--grid-strong, rgba(0,0,0,.15));
 }
-@media (pointer: coarse) { #canvas-actions button { padding: 10px 14px; font-size: 14px; } }
+@media (pointer: coarse) { #canvas-actions button { width: 46px; height: 46px; padding: 0; font-size: 0; } }
 
 /* Objetivos de toque de 38-44 px y controles legibles con el dedo. Se
    aplica por consulta de medios Y por la clase que pone view.js, para
@@ -666,12 +700,12 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
          la tool activa tiene una construcción a medio hacer. "Delete" borra
          la selección actual y se habilita sólo con algo seleccionado. -->
     <div id="canvas-actions">
-      <button id="undo-btn" title="Undo (Ctrl+Z)"><svg class="ic"><use href="#i-undo"/></svg>Undo</button>
-      <button id="redo-btn" title="Redo (Ctrl+Y)"><svg class="ic"><use href="#i-redo"/></svg>Redo</button>
+      <button id="undo-btn" class="ca-group-history" title="Undo (Ctrl+Z)"><svg class="ic"><use href="#i-undo"/></svg></button>
+      <button id="redo-btn" class="ca-group-history" title="Redo (Ctrl+Y)"><svg class="ic"><use href="#i-redo"/></svg></button>
       <span class="canvas-actions-sep"></span>
-      <button id="edit-done" title="Finish / confirm the current edit — same as a right click"><svg class="ic"><use href="#i-check"/></svg>Done</button>
-      <button id="edit-discard" title="Discard the current edit — same as Esc"><svg class="ic"><use href="#i-cancel"/></svg>Discard</button>
-      <button id="edit-delete" title="Delete the current selection (Del)"><svg class="ic"><use href="#i-delete"/></svg>Delete</button>
+      <button id="edit-done" title="Finish / confirm the current edit — same as a right click"><svg class="ic"><use href="#i-check"/></svg></button>
+      <button id="edit-discard" title="Discard the current edit — same as Esc"><svg class="ic"><use href="#i-cancel"/></svg></button>
+      <button id="edit-delete" title="Delete the current selection (Del)"><svg class="ic"><use href="#i-delete"/></svg></button>
     </div>
   </div>
 
