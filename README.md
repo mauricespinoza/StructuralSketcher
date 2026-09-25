@@ -28,7 +28,7 @@ Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
 - **Tool rail** (left, resizable, collapsible) — grouped by task: Navigate
   (pan, select, lasso), Draw (digitize horizons/faults/contacts/topography/
   axial traces/sketches with snapping, plus a Well collar tool), Edit (split,
-  extend, free transform, duplicate, simplify, Bézier smoothing, resample/
+  extend, free transform, duplicate, simplify, smooth, resample/
   densify, join), Dip data, Kink method (fault-bend style construction from
   dip readings), Restoration (Fault Parallel Flow across a fault, and
   flexural-slip unfolding of a folded bed), and Measure & scale (ruler,
