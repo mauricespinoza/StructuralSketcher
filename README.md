@@ -1,7 +1,7 @@
 # StructuralSketcher
 
-Vector editor for structural geology cross-sections: digitize horizons,
-faults, contacts and dip data over an imported image or from scratch, then
+Vector editor for structural geology cross-sections: digitize layers,
+faults, topography and dip data over an imported image or from scratch, then
 measure, split, extend, transform and export the section.
 
 **Live app:** https://mauricespinoza.github.io/StructuralSketcher/
@@ -20,25 +20,24 @@ python3 -m http.server 8080   # then open http://localhost:8080
 
 Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
 
-- **Header** — new/open/save/save as, image import, section setup, undo/redo,
-  SVG/PNG export, and toggles for the tool rail, side panels, fullscreen and
-  settings.
-- **Second bar** — vertical exaggeration, zoom, zoom-to-extent, and
-  visibility toggles for the grid, labels, frame and scale bars.
-- **Tool rail** (left, resizable, collapsible) — grouped by task: Navigate
-  (pan, select, lasso), Draw (digitize horizons/faults/contacts/topography/
-  axial traces/sketches with snapping, plus a Well collar tool), Edit (split,
-  extend, free transform, duplicate, simplify, smooth, resample/
-  densify, join), Dip data, Kink method (fault-bend style construction from
-  dip readings), Restoration (Fault Parallel Flow across a fault, and
-  flexural-slip unfolding of a folded bed), and Measure & scale (ruler,
-  fault throw, two-axis calibration).
-- **Canvas** — the section itself; floating Finish/Cancel buttons appear on
-  touch devices in place of right-click/Esc.
-- **Side panels** (right, collapsible) — Units, Unit polygons (filled bodies
-  built between horizons and clipped against faults), Wells (collar +
-  lithology column with USGS-style fill patterns), Images & scale,
-  Restoration, Properties of the current selection, and a Line-Length table.
+- **Header** — logo, document name, file (new/open/save/save as), image
+  import, section setup, SVG/PNG export, **Versions** (drop-down list of
+  saved snapshots), and toggles for the tool rail, side panels, fullscreen
+  and settings.
+- **Second bar** — vertical exaggeration, zoom, zoom-to-extent, icon
+  toggles for grid, labels, frame, scale bars and fills, plus a separate
+  *measure & build* button bar: Ruler, Fault throw, Calibrate, Image and
+  Create beds (layer cake).
+- **Tool rail** (left, resizable, collapsible groups) — Pan/Select/Lasso;
+  **Add** Layer, Fault or Topography (with snapping); **Dip & Kink**;
+  **Edit** (vertices, transform, split, extend, smooth, simplify,
+  resample, join, duplicate); **Restore** (Fault Parallel Flow and
+  flexural-slip unfolding). Each tool's options appear only while it is
+  active.
+- **Canvas** — the section itself; floating Undo/Redo and Finish/Discard/
+  Delete buttons on the top left.
+- **Side panels** (right, collapsible) — Properties of the current
+  selection, Units, Unit polygons, Images & scale and a Line-Length table.
 - **Footer** — live readouts: cursor position, elevation, scale status,
   measurement, angle, tool hint and last action.
 
@@ -50,8 +49,7 @@ collapses to icon-only buttons so it still fits in one row.
 
 Projects save as `.sketch.json` (Save / Save as…, Ctrl+S / Ctrl+Shift+S);
 `Open` loads one back. Dip data exports to CSV. The section exports as a
-vector SVG or a PNG image of the current view, including unit-polygon fills
-and well columns.
+vector SVG or a PNG image of the current view, including unit-polygon fills.
 
 ## Structural algorithms
 
@@ -72,10 +70,6 @@ trace involved:
   horizontal datum through a pin point of zero slip, carrying every other
   selected line with it at the same perpendicular distance from the
   template (constant bed length). The unfold amount can be partial (0–100%).
-- **Wells** — a collar plus a stack of lithology intervals, filled with the
-  same USGS-style pattern library as SectionWorks (sandstone, shale,
-  limestone, coal, intrusive, …), rendered both on canvas and in the SVG
-  export.
 - **Resample / Join** — Resample densifies a line's vertices without
   changing its trace (segments longer than the given spacing are split into
   equal parts); Join chains the selected lines end to end, welding endpoints
