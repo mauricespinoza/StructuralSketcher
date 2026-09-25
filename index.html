@@ -222,6 +222,16 @@ canvas.pointer { cursor: default; }
 }
 .modal-body .row label { flex: 1; min-width: 0; color: var(--ink-2); }
 .modal-body .row input { flex: none; }
+.sw-toast {
+  position: fixed; left: 50%; bottom: 56px; z-index: 3000;
+  transform: translate(-50%, 12px); max-width: min(520px, calc(100vw - 32px));
+  padding: 9px 14px; border-radius: 8px; font-size: 12px; line-height: 1.4;
+  background: #1f2a37; color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+  cursor: pointer;
+}
+.sw-toast.show { opacity: .96; transform: translate(-50%, 0);
+                 pointer-events: auto; }
 .modal-note {
   margin: 0 0 10px; font-size: 11px; color: var(--ink-3); line-height: 1.4;
 }
@@ -440,6 +450,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-transform" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><rect x="2" y="2" width="4" height="4"/><rect x="18" y="2" width="4" height="4"/><rect x="2" y="18" width="4" height="4"/><rect x="18" y="18" width="4" height="4"/></symbol>
   <symbol id="i-duplicate" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
   <symbol id="i-simplify" viewBox="0 0 24 24"><path d="M3 16l4-6 3 3 4-7 3 5 4-3"/><circle cx="7" cy="10" r="1.6"/><circle cx="14" cy="6" r="1.6"/><circle cx="21" cy="8" r="1.6"/></symbol>
+  <symbol id="i-smooth" viewBox="0 0 24 24"><path d="M2 16c3-8 6-8 9 0s6 8 11-4"/></symbol>
   <symbol id="i-bezier" viewBox="0 0 24 24"><path d="M3 18C3 9 9 6 12 6s9 3 9 12"/><rect x="1" y="16" width="4" height="4"/><rect x="19" y="16" width="4" height="4"/><rect x="10" y="4" width="4" height="4"/></symbol>
   <symbol id="i-ruler" viewBox="0 0 24 24"><rect x="1" y="8" width="22" height="8" rx="1" transform="rotate(-20 12 12)"/><path d="M6.5 8.7l1.2 3M10.4 7.3l1.2 3M14.3 5.9l1.2 3M18.2 4.6l1.2 3"/></symbol>
   <symbol id="i-throw" viewBox="0 0 24 24"><path d="M4 8h7M13 16h7"/><path d="M12 3v18m-3-15l3-3 3 3m-6 12l3 3 3-3"/></symbol>
@@ -597,7 +608,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
         <button data-tool="transform" title="Move/scale/rotate the selection — free transform (T)"><svg class="ic"><use href="#i-transform"/></svg>Transform</button>
         <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
         <button id="simplify-btn" title="Simplify nodes of the selected lines (Douglas–Peucker)"><svg class="ic"><use href="#i-simplify"/></svg>Simplify</button>
-        <button id="bezier-btn" title="Smooth the selected lines with Bézier curves"><svg class="ic"><use href="#i-bezier"/></svg>Bézier</button>
+        <button id="smooth-btn" title="Smooth the selected lines (Chaikin corner cutting, 2 iterations). Bézier curve fitting stays in the right-click menu and the Properties panel."><svg class="ic"><use href="#i-smooth"/></svg>Smooth</button>
         <button id="resample-btn" class="mini" title="Densify the selected lines: split every segment longer than the spacing below, keeping the trace exactly as it is. Empty = halve each line's median segment."><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
         <label class="rail-field" title="Maximum segment length after resampling, in metres. Leave empty for each line's own median segment / 2.">Spacing (m)
           <input id="resample-spacing" type="number" min="0" step="10" placeholder="auto">
@@ -1264,6 +1275,174 @@ SW.ui = (function () {
 
   return { modal, row, numberInput, textInput, select, unitSelect, note, el,
            isOpen };
+})();
+
+/* ==== js/orientation.js ==== */
+"use strict";
+/* Puntos cardinales de los extremos del perfil y todo lo que depende de
+ * ellos:
+ *  - opposite(): el rumbo opuesto de un rótulo (W<->E, SW<->NE, NNE<->SSW,
+ *    A<->A'); también entiende la notación en castellano con O (oeste).
+ *  - editEnd(): diálogo que se abre al hacer click sobre la letra de un
+ *    extremo; al cambiar uno se cambia solo el del otro extremo.
+ *  - dipText(): el manteo como se lee en el campo, 0-90° + la letra del
+ *    extremo hacia el que cae según el perfil (p. ej. "35.0° E"). */
+window.SW = window.SW || {};
+
+SW.orientation = (function () {
+  const ROSE = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+
+  function opposite(label) {
+    const raw = String(label || "").trim();
+    if (!raw) return "";
+    const up = raw.toUpperCase();
+    // castellano: O = oeste (y ya no puede ser otra cosa en una rosa)
+    const spanish = /O/.test(up) && !/W/.test(up) && /^[NSEO]+$/.test(up);
+    const key = spanish ? up.replace(/O/g, "W") : up;
+    const i = ROSE.indexOf(key);
+    if (i >= 0) {
+      const out = ROSE[(i + 8) % 16];
+      return spanish ? out.replace(/W/g, "O") : out;
+    }
+    // rótulos de traza: A <-> A', B <-> B'…
+    if (/['’]$/.test(raw)) return raw.slice(0, -1);
+    return raw + "'";
+  }
+
+  /* dip: valor guardado D en [-180,180] (|D| 0-180° horario desde la
+   * horizontal; 0 = cae a la derecha). Devuelve {mag, side, letter, text}. */
+  function dipInfo(dip, sec) {
+    sec = sec || (SW.model && SW.model.state && SW.model.state.sec) || {};
+    const theta = Math.min(180, Math.abs(+dip || 0));
+    const mag = theta <= 90 ? theta : 180 - theta;
+    const r = Math.round(mag * 10) / 10;
+    let side = null;
+    if (r > 0 && r < 90) side = theta < 90 ? "right" : "left";
+    let letter = "";
+    if (side === "right") letter = sec.label_right || "→";
+    else if (side === "left") letter = sec.label_left || "←";
+    return { mag: mag, side: side, letter: letter,
+             text: r.toFixed(1) + "°" + (letter ? " " + letter : "") };
+  }
+
+  function dipText(dip, sec) { return dipInfo(dip, sec).text; }
+
+  function setLabels(left, right) {
+    const sec = SW.model.state.sec;
+    const before = { label_left: sec.label_left, label_right: sec.label_right };
+    const after = { label_left: left, label_right: right };
+    if (before.label_left === left && before.label_right === right) return;
+    SW.undo.push({
+      label: "Section orientation",
+      redo: [{ op: "set_section_props", props: after }],
+      undo: [{ op: "set_section_props", props: before }],
+    });
+    SW.view.requestDraw();
+    if (SW.panels && SW.panels.properties && SW.panels.properties.render)
+      SW.panels.properties.render();
+    SW.view.status("Section orientation: " + (left || "—") + " → " +
+                   (right || "—") + ".");
+  }
+
+  /* side: "left" | "right" — el extremo cuya letra se clickeó. */
+  function editEnd(side) {
+    const U = SW.ui;
+    const sec = SW.model.state.sec;
+    const cur = side === "left" ? sec.label_left : sec.label_right;
+    let input, preview;
+    function apply(val) {
+      val = String(val || "").trim();
+      const other = opposite(val);
+      if (side === "left") setLabels(val, other);
+      else setLabels(other, val);
+    }
+    U.modal({
+      title: (side === "left" ? "Left" : "Right") + "-hand end of the section",
+      build: function (body, api) {
+        U.note(body, "Pick the direction this end of the section points " +
+          "to. The opposite end is updated automatically.");
+        const grid = document.createElement("div");
+        grid.style.cssText = "display:grid;grid-template-columns:" +
+          "repeat(4,1fr);gap:4px;margin-bottom:10px;";
+        for (const d of ROSE) {
+          const b = document.createElement("button");
+          b.className = "mini";
+          b.textContent = d + " ↔ " + opposite(d);
+          if (String(cur || "").toUpperCase() === d) b.className += " primary";
+          b.addEventListener("click", function () { apply(d); api.close(); });
+          grid.appendChild(b);
+        }
+        body.appendChild(grid);
+        input = U.textInput(cur);
+        input.style.width = "90px";
+        U.row(body, "Custom label", input,
+              "Any text, e.g. A (the other end becomes A')");
+        preview = document.createElement("div");
+        preview.style.cssText = "font-size:11px;color:var(--ink-3);";
+        body.appendChild(preview);
+        function upd() {
+          const v = input.value.trim();
+          preview.textContent = side === "left"
+            ? (v || "—") + "  →  " + (opposite(v) || "—")
+            : (opposite(v) || "—") + "  →  " + (v || "—");
+        }
+        upd();
+        input.addEventListener("input", upd);
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") { e.preventDefault(); apply(input.value);
+                                   api.close(); }
+        });
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Apply", primary: true,
+          action: function () { apply(input.value); } },
+      ],
+    });
+  }
+
+  /* Las opciones "Dips towards" del riel llevan la letra del extremo
+   * (→ E / ← W); render.js lo llama en cada dibujado y sólo toca el DOM
+   * cuando los rótulos cambiaron. */
+  let railKey = null;
+  function refreshRail(sec) {
+    const key = (sec.label_left || "") + "|" + (sec.label_right || "");
+    if (key === railKey) return;
+    const sel = document.getElementById("dip-side");
+    if (!sel) return;
+    railKey = key;
+    for (const o of sel.options) {
+      if (o.value === "right")
+        o.textContent = "Right (→" + (sec.label_right ? " " + sec.label_right : "") + ")";
+      else if (o.value === "left")
+        o.textContent = "Left (←" + (sec.label_left ? " " + sec.label_left : "") + ")";
+    }
+  }
+
+  return { ROSE, opposite, dipInfo, dipText, editEnd, setLabels, refreshRail };
+})();
+
+/* Aviso flotante breve sobre el canvas (no bloquea nada; se va solo). */
+SW.ui.toast = (function () {
+  let box = null, timer = null;
+  return function (text, ms) {
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "sw-toast";
+      box.addEventListener("click", function () {
+        box.classList.remove("show");
+      });
+      document.body.appendChild(box);
+    }
+    box.textContent = text;
+    // reflow para reiniciar la transición si ya estaba visible
+    box.classList.remove("show"); void box.offsetWidth;
+    box.classList.add("show");
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () { box.classList.remove("show"); },
+                       ms || 6000);
+  };
 })();
 
 /* ==== js/geom.js ==== */
@@ -4949,11 +5128,23 @@ SW.render = (function () {
   /* Rótulos de orientación en los extremos del marco: los escribe el usuario
    * (W/E, SW/NE, A/A'…) porque sin traza georreferenciada no hay azimut del
    * que deducirlos. */
+  /* Cajas (px de canvas) de los dos rótulos, para que view.js sepa si un
+   * click cayó sobre una letra: clickearla abre SW.orientation.editEnd.
+   * Si un extremo no tiene rótulo igual queda una caja chica clickeable. */
+  let endLabelBoxes = { left: null, right: null };
+
   function drawEndLabels(ctx, sec, r) {
     ctx.font = "bold 12px 'Segoe UI', sans-serif";
     ctx.fillStyle = css("--accent");
     ctx.textBaseline = "top";
     const y = r.y - 14;
+    const wl = Math.max(14, ctx.measureText(sec.label_left || "").width);
+    const wr = Math.max(14, ctx.measureText(sec.label_right || "").width);
+    endLabelBoxes = {
+      left: { x: r.x - 2, y: y - 3, w: wl + 8, h: 18 },
+      right: { x: r.x + r.w - wr - 6, y: y - 3, w: wr + 8, h: 18 },
+    };
+    if (SW.orientation) SW.orientation.refreshRail(sec);
     if (sec.label_left) {
       ctx.textAlign = "left";
       ctx.fillText(sec.label_left, r.x + 2, y);
@@ -4962,6 +5153,15 @@ SW.render = (function () {
       ctx.textAlign = "right";
       ctx.fillText(sec.label_right, r.x + r.w - 2, y);
     }
+  }
+
+  function hitEndLabel(pos) {
+    for (const side of ["left", "right"]) {
+      const b = endLabelBoxes[side];
+      if (b && pos.x >= b.x && pos.x <= b.x + b.w &&
+          pos.y >= b.y && pos.y <= b.y + b.h) return side;
+    }
+    return null;
   }
 
   function drawRulers(ctx, sec, r, W, H, sL, sR, zB, zT, stepS, stepZ) {
@@ -5026,7 +5226,7 @@ SW.render = (function () {
     for (const k of Object.keys(imageCache)) delete imageCache[k];
   }
 
-  return { draw, COLORS, drawTick, niceStep, lineColor, dipColor,
+  return { draw, hitEndLabel, COLORS, drawTick, niceStep, lineColor, dipColor,
            invalidateImage, clearImageCache };
 })();
 
@@ -5885,7 +6085,8 @@ SW.dipEdit = (function () {
     // con ellos la construcción que se está mirando.
     const ref = { type: "dip", id: g.dip.id };
     if (!SW.view.isSelected(ref)) SW.view.toggleSelection(ref);
-    SW.view.status("Dip: guide the inclination with the pointer — " +
+    SW.view.status("Dip " + SW.orientation.dipText(g.dip.dip) +
+                   ": drag to change the inclination — " +
                    "release to keep it, Esc to cancel." +
                    (g.canDialog ? " Hold still to open the dialog." : ""));
     if (g.canDialog)
@@ -5931,7 +6132,7 @@ SW.dipEdit = (function () {
     const dip = g.dip;
     finish();
     SW.view.status(changed
-      ? "Dip set to " + Math.abs(dip.dip).toFixed(1) + "°" +
+      ? "Dip set to " + SW.orientation.dipText(dip.dip) +
         (dip.dip < 0 ? " (overturned)." : ".")
       : "Dip unchanged.");
   }
@@ -5977,7 +6178,17 @@ SW.dipEdit = (function () {
     // de botón secundario de la herramienta —en Dip, borrar el dato— justo
     // en mitad del gesto de editarlo.
     SW.view.cancelLongPress();
-    g.holdTimer = setTimeout(enterGuide, HOLD_MS);
+    // Shift + click sobre el dip: se entra al modo guiado de inmediato y
+    // arrastrar mueve el valor del manteo (sin esperar HOLD_MS). Se difiere
+    // a una microtarea para que corra DESPUÉS de que view.js termine su
+    // pointerdown (que deja un click pendiente): enterGuide lo anula y así
+    // el arrastre no se convierte en paneo.
+    if (e.shiftKey) {
+      g.shift = true;
+      queueMicrotask(function () { if (g && g.phase === "wait") enterGuide(); });
+    } else {
+      g.holdTimer = setTimeout(enterGuide, HOLD_MS);
+    }
     window.addEventListener("pointermove", onMove, true);
     window.addEventListener("pointerup", onUp, true);
     window.addEventListener("pointercancel", onCancel, true);
@@ -6013,7 +6224,7 @@ SW.dipEdit = (function () {
     ctx.font = "bold 12px 'Segoe UI', sans-serif";
     ctx.fillStyle = SW.render.COLORS.select;
     ctx.textAlign = "left"; ctx.textBaseline = "bottom";
-    ctx.fillText(deg.toFixed(1) + "°" +
+    ctx.fillText(SW.orientation.dipText(g.dip.dip) +
                  (g.dip.dip < 0 ? " overturned" : ""), c.x + 14, c.y - 10);
     ctx.restore();
   }
@@ -6050,7 +6261,7 @@ SW.dipEdit = (function () {
     const initMag = initSide === "right" ? absDip : 180 - absDip;
 
     U.modal({
-      title: "Dip " + Math.round(initMag * 10) / 10 + "°",
+      title: "Dip " + SW.orientation.dipText(dip.dip),
       build: function (body) {
         U.note(body, "Dip magnitude is always 0-90° from the horizontal " +
           "(90 = vertical); \"Dips towards\" says which way it tilts in " +
@@ -6066,7 +6277,10 @@ SW.dipEdit = (function () {
         U.row(body, "Dip (°)", degIn);
 
         sideSel = document.createElement("select");
-        for (const opt of [["right", "Right (→)"], ["left", "Left (←)"]]) {
+        const sec = SW.model.state.sec;
+        for (const opt of [
+            ["right", "Right (→" + (sec.label_right ? " " + sec.label_right : "") + ")"],
+            ["left", "Left (←" + (sec.label_left ? " " + sec.label_left : "") + ")"]]) {
           const o = document.createElement("option");
           o.value = opt[0]; o.textContent = opt[1];
           sideSel.appendChild(o);
@@ -6163,7 +6377,12 @@ window.SW = window.SW || {};
 (function () {
   SW.tools.register("pan", {
     cursor: "",
-    hint: "Drag to pan the view; wheel or middle button to zoom/pan.",
+    hint: "Drag to pan the view; wheel or middle button to zoom/pan; " +
+          "Shift+drag on a dip changes its inclination.",
+    onDown: function (e, pos) {
+      if (e.button === 0 && e.shiftKey) SW.dipEdit.beginAt(e, pos, 10);
+      return false;
+    },
   });
 
   /* Editar el manteo de un dip: mantener apretado 1 s sobre él y guiar la
@@ -6174,8 +6393,9 @@ window.SW = window.SW || {};
    * resto de la aplicación. */
   SW.tools.register("select", {
     cursor: "pointer",
-    hint: "Click selects (Ctrl+click accumulates); hold 1 s on a dip to " +
-          "guide its inclination; right click a dip for unit/value/delete; " +
+    hint: "Click selects (Ctrl+click accumulates); Shift+drag on a dip " +
+          "(or hold 1 s) changes its inclination; right click a dip for " +
+          "unit/value/delete; " +
           "drag empty space to pan; Del deletes.",
     onDown: function (e, pos) {
       if (e.button !== 0) return false;
@@ -8125,6 +8345,26 @@ window.SW = window.SW || {};
 window.SW = window.SW || {};
 SW.actions = SW.actions || {};
 
+/* Colores de la carta cronoestratigráfica internacional (ICS/CGMW), en
+ * orden de más antiguo a más joven. Layer cake y "+ Unit" los toman en ese
+ * orden (y vuelven a empezar si hay más unidades que colores). */
+SW.CHRONO_COLORS = [
+  { name: "Permian",          rgb: [240,  64,  40] },
+  { name: "Triassic",         rgb: [129,  43, 146] },
+  { name: "Lower Jurassic",   rgb: [ 66, 174, 208] },
+  { name: "Upper Jurassic",   rgb: [179, 227, 238] },
+  { name: "Lower Cretaceous", rgb: [140, 205,  87] },
+  { name: "Upper Cretaceous", rgb: [166, 216,  74] },
+  { name: "Paleocene",        rgb: [253, 167,  95] },
+  { name: "Oligocene",        rgb: [254, 192, 122] },
+  { name: "Miocene",          rgb: [255, 255,   0] },
+  { name: "Pleistocene",      rgb: [255, 242, 174] },
+];
+SW.chronoColor = function (k) {
+  const n = SW.CHRONO_COLORS.length;
+  return SW.CHRONO_COLORS[((k % n) + n) % n].rgb.slice();
+};
+
 (function () {
   const MAX_BEDS = 200;
 
@@ -8171,7 +8411,10 @@ SW.actions = SW.actions || {};
     return out;
   }
 
-  /* Una unidad por estrato, con el horizonte de TECHO asignado. Va por el
+  /* Una unidad por estrato, con el horizonte de TECHO asignado. Los
+   * colores siguen la carta cronoestratigráfica respetando la
+   * superposición: el estrato más bajo toma el primero (Pérmico) y los de
+   * arriba los siguientes, más jóvenes. Va por el
    * mismo camino que el panel Horizontes (updateHorizons: replace-all), que
    * no pasa por la pila de undo — igual que "+ Unit". */
   function buildUnits(lines, cfg) {
@@ -8182,7 +8425,7 @@ SW.actions = SW.actions || {};
       hs.push({
         id: SW.model.genId(),
         name: "Bed " + (i + 1),
-        color: [40 + (k * 47) % 190, 90 + (k * 29) % 120, 60 + (k * 71) % 170],
+        color: SW.chronoColor(cfg.beds - 1 - i),
         order: k, thickness: cfg.thickness,
         line_ids: [lines[i].id],
       });
@@ -9427,13 +9670,17 @@ window.SW = window.SW || {};
   SW.tools.register("kink", {
     cursor: "crosshair",
     hint: "Click marks/unmarks dips (also Select/Lasso with Ctrl); each " +
-          "dip proposes a horizon. Hold 1 s on a dip to re-guide its " +
-          "inclination and watch the construction follow. \"Apply\" or " +
-          "right click saves them all.",
+          "dip proposes a horizon. Shift+drag on a dip (or hold 1 s) " +
+          "changes its inclination and the kink follows live. \"Apply\" " +
+          "or right click saves them all.",
     hasPending: function () { return currentDips().length > 0; },
     activate: function () {
       previews = []; previewAxes = [];
       refresh();
+      if (SW.ui.toast)
+        SW.ui.toast("Kink mode — click a dip to use it; hold Shift and " +
+                    "drag on a dip to change its inclination: the kink " +
+                    "construction updates live.", 7000);
     },
     deactivate: function () {
       previews = []; previewAxes = [];
@@ -9914,7 +10161,8 @@ window.SW = window.SW || {};
       undo: [{ op: "delete_dip", id: d.id }],
     });
     SW.view.setSelection([{ type: "dip", id: d.id }]);
-    SW.view.status("Dip " + deg.toFixed(1) + "° placed.");
+    SW.view.status("Dip " + SW.orientation.dipText(deg) +
+                   (deg < 0 ? " (overturned)" : "") + " placed.");
     SW.view.requestDraw();
     return d;
   }
@@ -9935,9 +10183,9 @@ window.SW = window.SW || {};
   SW.tools.register("dip", {
     cursor: "crosshair",
     hint: "Click places a dip with the inclination typed on the left; " +
-          "click and DRAG to set the inclination by direction; hold 1 s on " +
-          "an EXISTING dip to re-guide it (another second opens its " +
-          "dialog); right click deletes the nearest one. Shift = overturned.",
+          "click and DRAG to set the inclination by direction; Shift+drag " +
+          "(or hold 1 s) on an EXISTING dip re-guides it; right click " +
+          "deletes the nearest one. Shift on empty space = overturned.",
     deactivate: function () { drag = null; },
     onDown: function (e, pos) {
       if (e.button !== 0) return false;
@@ -10008,8 +10256,8 @@ window.SW = window.SW || {};
       ctx.font = "bold 11px 'Segoe UI', sans-serif";
       ctx.fillStyle = SW.render.COLORS.select;
       ctx.textAlign = "left"; ctx.textBaseline = "bottom";
-      ctx.fillText(deg.toFixed(1) + "°" + (drag.overturned ? " overturned" : ""),
-                   x + 8, y - 8);
+      ctx.fillText(SW.orientation.dipText(deg) +
+                   (drag.overturned ? " overturned" : ""), x + 8, y - 8);
       ctx.restore();
     },
   });
@@ -10038,14 +10286,17 @@ window.SW = window.SW || {};
     const dipsList = SW.model.dips();
     if (!dipsList.length) { SW.view.status("No dips to export."); return; }
     const du = sec.display_units || { h: "km", v: "km" };
-    const rows = ["s_" + du.h + ",z_" + du.v + ",dip_deg,overturned,unit,label"];
+    const rows = ["s_" + du.h + ",z_" + du.v +
+                  ",dip_deg,dip_towards,overturned,unit,label"];
     for (const d of dipsList) {
       const unit = d.unit_id ? (SW.model.unitById(d.unit_id) || {}).name || ""
                              : "";
       rows.push([
         SW.units.toDisplay(d.s, du.h).toFixed(4),
         SW.units.toDisplay(d.z, du.v).toFixed(4),
-        Math.abs(d.dip).toFixed(1),
+        SW.orientation.dipInfo(d.dip, sec).mag.toFixed(1),
+        '"' + String(SW.orientation.dipInfo(d.dip, sec).letter)
+          .replace(/"/g, '""') + '"',
         d.dip < 0 ? "yes" : "no",
         '"' + String(unit).replace(/"/g, '""') + '"',
         '"' + String(d.label || "").replace(/"/g, '""') + '"',
@@ -10509,7 +10760,7 @@ SW.panels.horizons = (function () {
     hs.push({
       id: SW.model.genId(),
       name: "Unit " + (hs.length + 1),
-      color: [30 + (hs.length * 60) % 200, 110, 60 + (hs.length * 40) % 160],
+      color: SW.chronoColor(hs.length),
       order: hs.length, thickness: 500.0, line_ids: [],
     });
     selectedUnit = hs[hs.length - 1].id;
@@ -11566,22 +11817,66 @@ SW.panels.properties = (function () {
                      uid => pushDipProps({ unit_id: uid },
                                          "Unit of " + dips.length + " dip(s)")));
 
-    // convención de edición: 0-180° horario desde la horizontal
-    // (0 = mantea a la derecha, 90 = vertical, 180 = mantea a la izquierda);
-    // negativo = estrato volcado.
+    // Se edita como se mide en el campo: magnitud 0-90° + hacia qué
+    // extremo del perfil cae (con su letra, E/W, NE/SW…). Se recompone al
+    // ángulo guardado 0-180° horario (0 = cae a la derecha) conservando el
+    // signo de volcado de cada dato.
+    const sec = SW.model.state.sec;
+    const infoOf = d => SW.orientation.dipInfo(d.dip, sec);
+    const sideOf = d => Math.min(180, Math.abs(d.dip)) > 90 ? "left" : "right";
     const dip = document.createElement("input");
-    dip.type = "number"; dip.step = "1"; dip.min = "-180"; dip.max = "180";
-    const firstDip = dips[0].dip;
-    if (dips.every(d => d.dip === firstDip)) dip.value = firstDip;
-    dip.addEventListener("change", function () {
-      let v = +dip.value;
-      if (isNaN(v)) return;
-      v = Math.max(-180, Math.min(180, v));
-      pushDipProps({ dip: v }, "Dip of " + dips.length + " dip(s)");
-    });
+    dip.type = "number"; dip.step = "1"; dip.min = "0"; dip.max = "90";
+    const firstMag = Math.round(infoOf(dips[0]).mag * 10) / 10;
+    if (dips.every(d => Math.round(infoOf(d).mag * 10) / 10 === firstMag))
+      dip.value = firstMag;
+    const side = document.createElement("select");
+    const sideOpts = [["", "—"],
+                      ["right", "→ " + (sec.label_right || "Right")],
+                      ["left", "← " + (sec.label_left || "Left")]];
+    for (const o of sideOpts) {
+      const op = document.createElement("option");
+      op.value = o[0]; op.textContent = o[1];
+      side.appendChild(op);
+    }
+    const firstSide = sideOf(dips[0]);
+    side.value = dips.every(d => sideOf(d) === firstSide) ? firstSide : "";
+    function applyMagSide() {
+      const redo = [], undo = [];
+      const magTyped = dip.value === "" ? null
+        : Math.max(0, Math.min(90, Math.abs(+dip.value)));
+      for (const d of dips) {
+        if (magTyped !== null && isNaN(magTyped)) return;
+        const mag = magTyped === null ? infoOf(d).mag : magTyped;
+        const sd = side.value || sideOf(d);
+        const theta = sd === "left" ? 180 - mag : mag;
+        const v = d.dip < 0 ? -theta : theta;
+        if (v === d.dip) continue;
+        redo.push({ op: "set_dip_props", id: d.id, props: { dip: v } });
+        undo.push({ op: "set_dip_props", id: d.id, props: { dip: d.dip } });
+      }
+      if (!redo.length) return;
+      SW.undo.push({ label: "Dip of " + dips.length + " dip(s)",
+                     redo: redo, undo: undo });
+      if (SW.actions && SW.actions.kinkRefresh) SW.actions.kinkRefresh();
+      render();
+      SW.view.requestDraw();
+    }
+    dip.addEventListener("change", applyMagSide);
+    side.addEventListener("change", applyMagSide);
     rowEl(body, "Dip (°)", dip,
-          "0-180° clockwise from horizontal (0 = dips right, 90 = vertical, " +
-          "180 = dips left); a negative value marks an overturned bed");
+          "True dip magnitude, 0-90° from the horizontal (90 = vertical)");
+    rowEl(body, "Dips towards", side,
+          "The end of the section the bed dips towards; the letters come " +
+          "from the section's end labels (click them on the canvas to " +
+          "change them)");
+    if (dips.length === 1) {
+      const rd = document.createElement("div");
+      rd.style.cssText = "color:var(--ink-2);font-size:12px;margin:-2px 0 6px;";
+      rd.textContent = "Reading: " + infoOf(dips[0]).text +
+        (dips[0].dip < 0 ? " (overturned)" : "") +
+        " — Shift+drag on the dip to re-guide it.";
+      body.appendChild(rd);
+    }
 
     const over = document.createElement("input");
     over.type = "checkbox";
@@ -13204,6 +13499,14 @@ SW.view = (function () {
         try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
       }
       if (e.button === 1) { e.preventDefault(); beginPan(pos); return; }
+      // click sobre la letra de un extremo (W/E…): editar la orientación
+      const endSide = e.button === 0 && SW.render.hitEndLabel &&
+                      SW.render.hitEndLabel(pos);
+      if (endSide) {
+        pointers.delete(e.pointerId);
+        SW.orientation.editEnd(endSide);
+        return;
+      }
       startLongPress(e, pos);
       const t = SW.tools.active();
       if (t && t.onDown && t.onDown(e, pos) === "capture") {
@@ -13259,6 +13562,8 @@ SW.view = (function () {
         }
       } else if (e.pointerType !== "touch") {
         // hover: sólo existe con mouse o con un lápiz que lo reporta
+        cv.style.cursor = SW.render.hitEndLabel && SW.render.hitEndLabel(pos)
+          ? "pointer" : "";
         SW.tools.dispatch("onMove", e, pos);
       }
       updateReadouts(pos);
@@ -13606,9 +13911,9 @@ SW.view = (function () {
     const simplifyBtn = $("simplify-btn");
     if (simplifyBtn) simplifyBtn.addEventListener("click",
                                                   () => SW.actions.simplifySelected());
-    const bezierBtn = $("bezier-btn");
-    if (bezierBtn) bezierBtn.addEventListener("click",
-                                              () => SW.actions.bezierSelected());
+    const smoothBtn = $("smooth-btn");
+    if (smoothBtn) smoothBtn.addEventListener("click",
+                                              () => SW.actions.smoothSelected());
     const resampleBtn = $("resample-btn");
     const resampleSpacing = $("resample-spacing");
     if (resampleBtn) resampleBtn.addEventListener("click", function () {
@@ -14185,6 +14490,13 @@ SW.project = (function () {
         right = U.textInput(s.label_right);
         U.row(body, "Right-hand label", right,
               "Shown above the right edge — e.g. E, NE, or A'");
+        // cambiar un extremo cambia solo el otro (W->E, SW->NE, A->A')
+        left.addEventListener("input", function () {
+          right.value = SW.orientation.opposite(left.value);
+        });
+        right.addEventListener("input", function () {
+          left.value = SW.orientation.opposite(right.value);
+        });
 
         notes = document.createElement("textarea");
         notes.rows = 3;
