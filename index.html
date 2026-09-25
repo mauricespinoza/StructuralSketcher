@@ -6,44 +6,45 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>StructuralSketcher</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23243447'/%3E%3Cg fill='none' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5h6.5l7-6.5H27' stroke='%23ffd166'/%3E%3Cpath d='M5 18.5h8.5l7-6.5H27' stroke='%23ff8c42'/%3E%3Cpath d='M5 24.5h10.5l7-6.5H27' stroke='%23ef476f'/%3E%3C/g%3E%3C/svg%3E">
 <style>
 /* StructuralSketcher — hoja de estilo única de la app.
    Sin @import ni fuentes remotas: todo tiene que resolverse desde el disco
    para que index.html abra con file:// y sin red. */
 :root {
-  --ink: #28323c; --ink-2: #5a6672; --ink-3: #8a949e;
-  --grid: #e4e7ea; --grid-strong: #c8cdd2;
-  --ruler-bg: #f6f7f8; --surface: #ffffff; --accent: #1e5ac8;
-  --danger: #c81e1e;
+  --ink: #1f2933; --ink-2: #52606d; --ink-3: #8a96a3;
+  --grid: #e6e9ed; --grid-strong: #cfd5dc;
+  --ruler-bg: #f5f7f9; --surface: #ffffff; --accent: #2563eb;
+  --accent-soft: #e8effd; --danger: #d92d3a;
+  --chrome: #1b2531; --chrome-2: #243140; --chrome-ink: #d7dee6;
+  --c-layer: #10b981; --c-fault: #ef4444; --c-topo: #d97706;
+  --radius: 6px;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
-  color: var(--ink); background: #eceef0;
+  font: 13px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink); background: #e9ecef;
   display: flex; flex-direction: column;
 }
-header {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 6px 12px; background: var(--surface);
-  border-bottom: 1px solid var(--grid-strong);
-}
-header h1 { font-size: 14px; margin: 0 10px 0 0; font-weight: 600; }
 label { color: var(--ink-2); white-space: nowrap; }
 input[type="number"] {
   width: 64px; padding: 3px 6px; border: 1px solid var(--grid-strong);
-  border-radius: 4px; font: inherit;
+  border-radius: 4px; font: inherit; background: var(--surface);
 }
 input[type="text"] {
   padding: 3px 6px; border: 1px solid var(--grid-strong);
   border-radius: 4px; font: inherit;
 }
+input:focus, select:focus { outline: 2px solid var(--accent-soft);
+  border-color: var(--accent); }
 input[type="color"] { width: 30px; height: 22px; padding: 0; border: none; }
 button {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border: 1px solid var(--grid-strong); border-radius: 5px;
+  padding: 4px 10px; border: 1px solid var(--grid-strong);
+  border-radius: var(--radius);
   background: var(--surface); font: inherit; cursor: pointer; color: var(--ink);
-  line-height: 1.3;
+  line-height: 1.3; transition: background .1s, border-color .1s, color .1s;
 }
 button:hover { background: var(--ruler-bg); border-color: var(--ink-3); }
 button:active { background: #e8ebee; }
@@ -51,71 +52,196 @@ button.active { background: var(--accent); color: #fff; border-color: var(--acce
 button:disabled { opacity: .45; cursor: default; }
 button.primary {
   background: var(--accent); color: #fff; border-color: var(--accent);
+  justify-content: center; font-weight: 600;
 }
-button.primary:hover { background: #1a4eb0; }
-button.icon-only { padding: 4px 7px; }
+button.primary:hover { background: #1d4fd0; }
+button.icon-only { padding: 5px 6px; }
 
 /* Iconos: SVG del sprite embebido, trazo heredando el color del botón, así
    el estado activo (fondo azul, texto blanco) los repinta solo. */
 .ic {
-  width: 15px; height: 15px; flex: none;
+  width: 16px; height: 16px; flex: none;
   fill: none; stroke: currentColor; stroke-width: 1.7;
   stroke-linecap: round; stroke-linejoin: round;
 }
-header .ic, .bar2 .ic { opacity: .85; }
-button.active .ic { opacity: 1; }
 .grow { flex: 1 1 auto; }
 select {
   padding: 3px 6px; border: 1px solid var(--grid-strong); border-radius: 4px;
-  font: inherit; max-width: 190px;
+  font: inherit; max-width: 190px; background: var(--surface); color: var(--ink);
 }
+.sep { width: 1px; align-self: stretch; background: var(--grid); margin: 2px 4px; }
+
+/* -- barra superior (oscura): marca, archivo, exportar, versiones -------- */
+header {
+  display: flex; align-items: center; gap: 4px; flex-wrap: nowrap;
+  padding: 5px 10px; background: var(--chrome); color: var(--chrome-ink);
+  min-height: 44px;
+}
+header .sep { background: rgba(255,255,255,.12); margin: 6px 6px; }
+.brand { display: flex; align-items: center; gap: 8px; margin-right: 4px; }
+.logo { width: 28px; height: 28px; flex: none; }
+.logo path { fill: none; stroke-width: 3.2; stroke-linecap: round;
+  stroke-linejoin: round; }
+header h1 { font-size: 14px; margin: 0; font-weight: 600; color: #fff;
+  letter-spacing: .01em; white-space: nowrap; }
+.hgroup, .bgroup { display: flex; align-items: center; gap: 2px; }
+header button {
+  background: transparent; border-color: transparent; color: var(--chrome-ink);
+  padding: 5px 8px;
+}
+header button.icon-only { padding: 6px 7px; }
+header button:hover { background: rgba(255,255,255,.09); border-color: transparent; }
+header button:active { background: rgba(255,255,255,.15); }
+header button.active { background: rgba(37,99,235,.35); color: #fff;
+  border-color: transparent; }
+.doc-name {
+  font-size: 12px; color: #9fb0c2; max-width: 240px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,.06);
+}
+.doc-name:empty { display: none; }
+
+/* Versiones: botón en la barra superior con su lista desplegable. */
+.versions-wrap { position: relative; }
+#versions-btn .chev { width: 12px; height: 12px; opacity: .7; }
+.badge {
+  min-width: 17px; padding: 0 5px; border-radius: 9px; font-size: 10.5px;
+  line-height: 17px; text-align: center; background: rgba(255,255,255,.16);
+  color: #fff;
+}
+.badge:empty { display: none; }
+.popover {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 900;
+  width: 300px; max-height: 60vh; overflow-y: auto;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--grid-strong); border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.22);
+}
+.popover.hidden { display: none; }
+.popover-head {
+  padding: 8px 12px; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3);
+  border-bottom: 1px solid var(--grid);
+}
+.popover button { color: var(--ink); }
+
+/* -- segunda barra: vista + botonera de medición/construcción ------------ */
 .bar2 {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 5px 12px; background: var(--surface);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 4px 10px; background: var(--surface);
   border-bottom: 1px solid var(--grid-strong);
 }
-.sep { width: 1px; align-self: stretch; background: var(--grid); margin: 0 4px; }
+.bar2 button { border-color: transparent; background: transparent; }
+.bar2 button:hover { background: var(--ruler-bg); border-color: var(--grid); }
+.bar2 button.active { background: var(--accent-soft); color: var(--accent);
+  border-color: transparent; }
+.ve-field { display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; margin-right: 4px; }
+.ve-field input { width: 54px; }
+.bar2 .utility {
+  background: var(--ruler-bg); border: 1px solid var(--grid);
+  border-radius: 8px; padding: 2px;
+}
+.bar2 .utility button { font-size: 12px; padding: 4px 9px; }
+.bar2 .utility button.active { background: var(--accent); color: #fff; }
 
 #main { flex: 1; display: flex; min-height: 0; }
 
+/* -- riel de herramientas ----------------------------------------------- */
 #toolrail {
-  display: flex; flex-direction: column; gap: 4px; padding: 8px 6px;
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 12px;
   background: var(--surface); border-right: 1px solid var(--grid-strong);
-  overflow-y: auto; overflow-x: hidden; width: 118px; min-width: 92px;
+  overflow-y: auto; overflow-x: hidden; width: 186px; min-width: 150px;
   max-width: 320px; flex: none; position: relative;
 }
-#toolrail button {
-  justify-content: flex-start; text-align: left; font-size: 12px;
-  padding: 5px 8px; width: 100%;
+#toolrail button { font-size: 12px; }
+#toolrail select { width: 100%; max-width: none; font-size: 12px; }
+#toolrail .rail-group {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 0;
 }
-/* Campos del riel: etiqueta chica arriba y control a ancho completo debajo,
-   en vez de label+control en línea (que desbordaba el riel angosto). */
+#toolrail .rail-group:first-child { padding-top: 0; }
+#toolrail .rail-group + .rail-group { border-top: 1px solid var(--grid); }
+#toolrail .rail-title {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--ink-3); cursor: pointer;
+  user-select: none; display: flex; align-items: center; gap: 4px;
+}
+#toolrail .rail-title::after {
+  content: ""; margin-left: auto; width: 6px; height: 6px;
+  border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+#toolrail .rail-group.collapsed .rail-title::after { transform: rotate(-45deg); }
+#toolrail .rail-group-body { display: flex; flex-direction: column; gap: 6px; }
+#toolrail .rail-group.collapsed .rail-group-body { display: none; }
+
+/* control segmentado (Pan / Select / Lasso) */
+.seg { display: flex; gap: 0; }
+.seg button { flex: 1; justify-content: center; border-radius: 0;
+  margin-left: -1px; padding: 6px 0; }
+.seg button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.bar2 .seg button { margin-left: 0; border-radius: var(--radius); padding: 5px 6px; }
+
+/* Botones "Add": los importantes, grandes y con el color de su tipo */
+#toolrail .add-btn {
+  width: 100%; justify-content: flex-start; gap: 9px; padding: 7px 10px;
+  font-size: 13px; font-weight: 600; border-left: 4px solid var(--k);
+}
+#toolrail .add-btn .ic { color: var(--k); width: 18px; height: 18px; }
+#toolrail .add-btn:hover { background: color-mix(in srgb, var(--k) 8%, #fff); }
+#toolrail .add-btn.active {
+  background: var(--k); border-color: var(--k); color: #fff;
+}
+#toolrail .add-btn.active .ic { color: #fff; }
+.add-layer { --k: var(--c-layer); }
+.add-fault { --k: var(--c-fault); }
+.add-topo { --k: var(--c-topo); }
+
+/* mosaicos de herramientas: icono arriba, rótulo corto abajo */
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.tiles button {
+  flex-direction: column; justify-content: center; gap: 3px;
+  padding: 7px 2px 5px; font-size: 11px; min-width: 0;
+}
+.tiles button .ic { width: 19px; height: 19px; }
+.tiles-actions { gap: 3px; }
+.tiles-actions button { flex-direction: row; justify-content: flex-start;
+  gap: 6px; padding: 4px 7px; font-size: 11.5px; background: var(--ruler-bg);
+  border-color: transparent; }
+.tiles-actions button:hover { border-color: var(--grid-strong); }
+.tiles-actions button .ic { width: 15px; height: 15px; }
+.tiles .tile-strong { font-weight: 600; border-color: #8aa6e8; }
+.tiles .tile-strong .ic { color: var(--accent); }
+.tiles .tile-strong.active .ic { color: #fff; }
+
+/* opciones contextuales: sólo visibles con su tool activa */
+#toolrail .rail-opts {
+  display: none; flex-direction: column; gap: 6px; padding: 8px;
+  background: var(--accent-soft); border-radius: var(--radius);
+  border: 1px solid #cfdcf8;
+}
+#toolrail .rail-opts.show { display: flex; }
+#toolrail .rail-row { display: flex; gap: 4px; }
+#toolrail .rail-row > * { flex: 1; min-width: 0; justify-content: center; }
 #toolrail .rail-field {
   display: flex; flex-direction: column; gap: 2px;
-  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
-  color: var(--ink-3);
+  font-size: 10.5px; color: var(--ink-2);
 }
 #toolrail .rail-field select,
 #toolrail .rail-field input { width: 100%; max-width: none; font-size: 12px;
-  text-transform: none; letter-spacing: 0; color: var(--ink); }
+  color: var(--ink); }
 #toolrail .rail-check {
-  display: flex; align-items: center; gap: 5px; font-size: 11px;
+  display: flex; align-items: center; gap: 6px; font-size: 11.5px;
   color: var(--ink-2);
 }
-#toolrail .rail-note { font-size: 10px; color: var(--ink-3); line-height: 1.35; }
-#toolrail .rail-sep { height: 1px; background: var(--grid); margin: 4px 0; }
-#toolrail .rail-group { display: flex; flex-direction: column; gap: 4px; }
-#toolrail .rail-title {
-  font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--ink-3); margin: 2px 0 0 2px; cursor: pointer; user-select: none;
-  display: flex; align-items: center; gap: 4px;
+#toolrail .mini { font-size: 11px; padding: 3px 6px; gap: 4px; }
+#toolrail .mini .ic { width: 13px; height: 13px; }
+.rail-more summary {
+  font-size: 11px; color: var(--ink-3); cursor: pointer; user-select: none;
 }
-#toolrail .rail-title::before { content: "▾"; font-size: 8px; color: var(--ink-3); }
-#toolrail .rail-group.collapsed .rail-title::before { content: "▸"; }
-#toolrail .rail-group-body {
-  display: flex; flex-direction: column; gap: 4px;
-}
-#toolrail .rail-group.collapsed .rail-group-body { display: none; }
+.rail-more[open] { display: flex; flex-direction: column; gap: 6px; }
 #toolrail-resize {
   position: absolute; top: 0; right: 0; width: 5px; height: 100%;
   cursor: col-resize; z-index: 5;
@@ -137,7 +263,7 @@ canvas.crosshair { cursor: crosshair; }
 canvas.pointer { cursor: default; }
 
 #panels {
-  width: 250px; flex: none; overflow-y: auto;
+  width: 264px; flex: none; overflow-y: auto;
   background: var(--surface); border-left: 1px solid var(--grid-strong);
 }
 
@@ -148,11 +274,18 @@ canvas.pointer { cursor: default; }
 #toolrail.hidden, #panels.hidden { display: none; }
 .panel { border-bottom: 1px solid var(--grid); }
 .panel > h2 {
-  margin: 0; padding: 7px 10px; font-size: 12px; cursor: pointer;
-  background: var(--ruler-bg); user-select: none;
+  margin: 0; padding: 8px 12px; font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .07em; color: var(--ink-2);
+  cursor: pointer; background: var(--surface); user-select: none;
+  display: flex; align-items: center;
 }
-.panel > h2::before { content: "▾ "; color: var(--ink-3); }
-.panel.collapsed > h2::before { content: "▸ "; }
+.panel > h2:hover { background: var(--ruler-bg); }
+.panel > h2::after {
+  content: ""; margin-left: auto; width: 6px; height: 6px;
+  border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+.panel.collapsed > h2::after { transform: rotate(-45deg); }
 .panel.collapsed > .panel-body { display: none; }
 .panel-body { padding: 8px 10px; }
 .panel-body .row {
@@ -272,12 +405,6 @@ footer > span { flex: none; }
 #ro-hint { color: var(--ink-3); }
 
 
-/* -- nombre del documento en la barra superior --------------------------- */
-.doc-name {
-  font-size: 12px; color: var(--ink-2); max-width: 240px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
 /* Diálogos que necesitan más aire que el de Settings (calibración con su
    texto explicativo, configuración de la sección). */
 .modal-wide { width: 620px; }
@@ -380,8 +507,9 @@ body {
   input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   input[type="color"] { width: 40px; height: 32px; }
   input[type="range"] { height: 32px; }
-  #toolrail { width: 150px; }
-  #toolrail button { padding: 8px 10px; font-size: 13px; }
+  #toolrail { width: 196px; }
+  #toolrail button { min-height: 40px; }
+  #toolrail .mini { min-height: 34px; }
   #panels { width: 300px; }
   .panel > h2 { padding: 11px 12px; font-size: 13px; }
   .list-item { padding: 6px 4px; }
@@ -402,7 +530,6 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
    lienzo: se estrechan y el título de la app deja su sitio a los botones. */
 @media (max-width: 900px) {
   #panels { width: 240px; }
-  header h1 { display: none; }
 }
 
 /* Indicador de escala en la barra inferior: en rojo mientras falte
@@ -412,22 +539,15 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 #ro-scale.pending { color: var(--danger); }
 #ro-scale.done { color: #0f7a6e; }
 
-/* En pantallas angostas (tablet, sobre todo en vertical) la barra superior
-   se parte en tres filas y se come el alto del dibujo. Los botones dejan
-   sólo el icono — el texto sigue disponible en el tooltip — y la barra
-   vuelve a caber en una línea. */
-@media (max-width: 1250px) {
-  header button {
-    font-size: 0; gap: 0; padding: 8px 10px;
-  }
-  header button .ic { width: 18px; height: 18px; }
-  header { gap: 5px; padding: 6px 8px; }
-  .bar2 { gap: 6px; padding: 5px 8px; }
-  /* el nombre del documento sí conserva su texto: es lo único que dice
-     qué sección se está editando */
-  .doc-name { font-size: 12px; max-width: 160px; }
+/* Pantallas angostas (tablet): la marca deja sólo el logo y los botones
+   con texto pasan a sólo icono (el rótulo sigue en el tooltip), así cada
+   barra cabe en una línea y no se come el alto del dibujo. */
+@media (max-width: 1150px) {
+  header h1 { display: none; }
+  #versions-btn, .bar2 .utility button { font-size: 0; gap: 0; }
+  #versions-btn .badge { font-size: 10px; margin-left: 3px; }
+  .doc-name { max-width: 160px; }
 }
-
 </style>
 <!-- Built from the StructuralSketcher source folder on 2026-08-20. Single self-contained file: no external scripts, styles, fonts or network access of any kind. -->
 </head>
@@ -485,220 +605,244 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-fullscreen-exit" viewBox="0 0 24 24"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></symbol>
   <symbol id="i-rail" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
   <symbol id="i-panels" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+  <symbol id="i-add-layer" viewBox="0 0 24 24"><path d="M2 15c4-4 7-4 10-1s6 3 10-1"/><path d="M2 20c4-4 7-4 10-1s6 3 10-1" opacity=".45"/><path d="M17 3v7M13.5 6.5h7"/></symbol>
+  <symbol id="i-add-fault" viewBox="0 0 24 24"><path d="M8 21L15 3"/><path d="M2 11h7.3M11.5 16H22"/><path d="M16 8.5l1.2-3 2.6 1.9"/></symbol>
+  <symbol id="i-add-topo" viewBox="0 0 24 24"><path d="M2 18l5-7 3 3 4-7 8 11"/><path d="M2 21h20" opacity=".45"/></symbol>
+  <symbol id="i-fpf" viewBox="0 0 24 24"><path d="M8 2l8 20"/><path d="M2 8h8.4"/><path d="M14 17h8"/><path d="M20.6 14.7L17.9 8m0 0l-.4 3m.4-3l2.4 1.9"/></symbol>
+  <symbol id="i-flip" viewBox="0 0 24 24"><path d="M4 8h15m-3.5-3.5L19 8l-3.5 3.5"/><path d="M20 16H5m3.5-3.5L5 16l3.5 3.5"/></symbol>
+  <symbol id="i-datum" viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M12 4v11m-3.5-3.5L12 15l3.5-3.5"/></symbol>
+  <symbol id="i-csv" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6m-2.5-2.5L12 17l2.5-2.5"/></symbol>
+  <symbol id="i-versions" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-parallel" viewBox="0 0 24 24"><path d="M2 10c4-4 7-4 10-1s6 3 10-1"/><path d="M2 17c4-4 7-4 10-1s6 3 10-1"/></symbol>
 </svg>
 
 <header>
-  <h1>StructuralSketcher</h1>
+  <div class="brand" title="StructuralSketcher">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="8" fill="#243447"/>
+      <path d="M5 12.5h6.5l7-6.5H27" stroke="#ffd166"/>
+      <path d="M5 18.5h8.5l7-6.5H27" stroke="#ff8c42"/>
+      <path d="M5 24.5h10.5l7-6.5H27" stroke="#ef476f"/>
+    </svg>
+    <h1>StructuralSketcher</h1>
+  </div>
   <span id="doc-name" class="doc-name" title="Current section"></span>
   <span class="sep"></span>
-  <button id="new-btn" title="New section (discards the current one)"><svg class="ic"><use href="#i-new"/></svg>New</button>
-  <button id="open-btn" title="Open a .sketch.json project (Ctrl+O)"><svg class="ic"><use href="#i-open"/></svg>Open</button>
-  <button id="save-btn" title="Save (Ctrl+S) — once the project has a file, this overwrites it without asking"><svg class="ic"><use href="#i-save"/></svg>Save</button>
-  <button id="saveas-btn" title="Save as… (Ctrl+Shift+S) — choose a new file; later saves overwrite that one"><svg class="ic"><use href="#i-save-as"/></svg>Save as</button>
-  <button id="import-image-btn" title="Import a picture to trace over (a scanned or published cross-section)"><svg class="ic"><use href="#i-image"/></svg>Import image</button>
-  <button id="setup-btn" title="Section name, extent, units and end labels"><svg class="ic"><use href="#i-setup"/></svg>Section setup</button>
+  <div class="hgroup">
+    <button id="new-btn" class="icon-only" title="New section"><svg class="ic"><use href="#i-new"/></svg></button>
+    <button id="open-btn" class="icon-only" title="Open project (Ctrl+O)"><svg class="ic"><use href="#i-open"/></svg></button>
+    <button id="save-btn" class="icon-only" title="Save (Ctrl+S)"><svg class="ic"><use href="#i-save"/></svg></button>
+    <button id="saveas-btn" class="icon-only" title="Save as… (Ctrl+Shift+S)"><svg class="ic"><use href="#i-save-as"/></svg></button>
+  </div>
   <span class="sep"></span>
-  <button id="export-svg" title="Export the current view as a vector SVG figure"><svg class="ic"><use href="#i-export-img"/></svg>SVG</button>
-  <button id="export-png" title="Export the current view as a PNG image"><svg class="ic"><use href="#i-export-img"/></svg>PNG</button>
+  <div class="hgroup">
+    <button id="import-image-btn" class="icon-only" title="Import image to trace over"><svg class="ic"><use href="#i-image"/></svg></button>
+    <button id="setup-btn" class="icon-only" title="Section setup: name, extent, units, end labels"><svg class="ic"><use href="#i-setup"/></svg></button>
+  </div>
+  <span class="sep"></span>
+  <div class="hgroup">
+    <button id="export-svg" title="Export view as SVG"><svg class="ic"><use href="#i-export-img"/></svg>SVG</button>
+    <button id="export-png" title="Export view as PNG"><svg class="ic"><use href="#i-export-img"/></svg>PNG</button>
+  </div>
+  <span class="sep"></span>
+  <div class="versions-wrap">
+    <button id="versions-btn" title="Saved versions of this interpretation"><svg class="ic"><use href="#i-versions"/></svg>Versions<span id="versions-count" class="badge"></span><svg class="ic chev"><use href="#i-chevron"/></svg></button>
+    <div id="versions-pop" class="popover hidden">
+      <div class="popover-head">Versions</div>
+      <div class="panel-body" id="panel-versions-body"></div>
+    </div>
+  </div>
   <span class="grow"></span>
-  <button id="toggle-rail" class="icon-only active" title="Show/hide the tool rail (F9)"><svg class="ic"><use href="#i-rail"/></svg></button>
-  <button id="toggle-panels" class="icon-only active" title="Show/hide the side panels (F10)"><svg class="ic"><use href="#i-panels"/></svg></button>
-  <button id="fullscreen-btn" class="icon-only" title="Fullscreen (F11)"><svg class="ic"><use href="#i-fullscreen"/></svg></button>
-  <button id="settings-btn" class="icon-only" title="Settings: symbols, shortcuts, about"><svg class="ic"><use href="#i-settings"/></svg></button>
+  <div class="hgroup">
+    <button id="toggle-rail" class="icon-only active" title="Tool rail (F9)"><svg class="ic"><use href="#i-rail"/></svg></button>
+    <button id="toggle-panels" class="icon-only active" title="Side panels (F10)"><svg class="ic"><use href="#i-panels"/></svg></button>
+    <button id="fullscreen-btn" class="icon-only" title="Fullscreen (F11)"><svg class="ic"><use href="#i-fullscreen"/></svg></button>
+    <button id="settings-btn" class="icon-only" title="Settings"><svg class="ic"><use href="#i-settings"/></svg></button>
+  </div>
 </header>
 
 <div class="bar2">
-  <label title="Vertical exaggeration: how many times the vertical scale is stretched relative to the horizontal one. It changes only how the section is DRAWN — measured lengths, angles and the kink construction always use the real coordinates.">V.E. <input id="ve" type="number" min="0.1" max="50" step="0.5" value="1"></label>
-  <button id="zoom-out" class="icon-only" title="Zoom out"><svg class="ic"><use href="#i-zoom-out"/></svg></button>
-  <button id="zoom-in" class="icon-only" title="Zoom in"><svg class="ic"><use href="#i-zoom-in"/></svg></button>
-  <button id="fit" title="Zoom to fit the section and everything drawn"><svg class="ic"><use href="#i-fit"/></svg>Zoom extent</button>
+  <div class="bgroup">
+    <label class="ve-field" title="Vertical exaggeration (display only — measurements use real coordinates)">V.E. <input id="ve" type="number" min="0.1" max="50" step="0.5" value="1"></label>
+    <button id="zoom-out" class="icon-only" title="Zoom out"><svg class="ic"><use href="#i-zoom-out"/></svg></button>
+    <button id="zoom-in" class="icon-only" title="Zoom in"><svg class="ic"><use href="#i-zoom-in"/></svg></button>
+    <button id="fit" class="icon-only" title="Zoom to extent"><svg class="ic"><use href="#i-fit"/></svg></button>
+  </div>
   <span class="sep"></span>
-  <button id="grid-btn" class="active" title="Show/hide the grid"><svg class="ic"><use href="#i-grid"/></svg>Grid</button>
-  <button id="labels-btn" class="active" title="Show/hide line, dip and scale-bar labels"><svg class="ic"><use href="#i-labels"/></svg>Labels</button>
-  <button id="frame-btn" class="active" title="Show/hide the nominal section frame"><svg class="ic"><use href="#i-frame"/></svg>Frame</button>
-  <button id="scalebar-btn" class="active" title="Show/hide the calibration scale bars"><svg class="ic"><use href="#i-scale"/></svg>Scale bars</button>
-  <button id="polygons-btn" class="active" title="Show/hide unit polygon fills"><svg class="ic"><use href="#i-polygons"/></svg>Fills</button>
-  <button id="wells-btn" class="active" title="Show/hide well columns"><svg class="ic"><use href="#i-well"/></svg>Wells</button>
+  <div class="bgroup seg" title="Visibility">
+    <button id="grid-btn" class="icon-only active" title="Grid"><svg class="ic"><use href="#i-grid"/></svg></button>
+    <button id="labels-btn" class="icon-only active" title="Labels"><svg class="ic"><use href="#i-labels"/></svg></button>
+    <button id="frame-btn" class="icon-only active" title="Section frame"><svg class="ic"><use href="#i-frame"/></svg></button>
+    <button id="scalebar-btn" class="icon-only active" title="Scale bars"><svg class="ic"><use href="#i-scale"/></svg></button>
+    <button id="polygons-btn" class="icon-only active" title="Unit fills"><svg class="ic"><use href="#i-polygons"/></svg></button>
+  </div>
+  <span class="grow"></span>
+  <!-- Botonera aparte: medir, escalar y construir. Son tools/acciones de
+       uso puntual, fuera del riel de dibujo/edición. -->
+  <div class="bgroup utility" aria-label="Measure &amp; build">
+    <button data-tool="measure" title="Ruler — real length (M)"><svg class="ic"><use href="#i-ruler"/></svg>Ruler</button>
+    <button data-tool="fault_throw" title="Fault throw (F)"><svg class="ic"><use href="#i-throw"/></svg>Throw</button>
+    <button data-tool="calibrate" title="Calibrate scale — calibrate H and V separately (G)"><svg class="ic"><use href="#i-scale"/></svg>Calibrate</button>
+    <button data-tool="image" title="Move / resize imported images (I)"><svg class="ic"><use href="#i-image"/></svg>Image</button>
+    <button id="layer-cake-btn" title="Create a stack of parallel beds (layer cake)"><svg class="ic"><use href="#i-layers"/></svg>Create beds</button>
+  </div>
 </div>
 
 <div id="main">
   <div id="toolrail">
     <div class="rail-group">
-      <div class="rail-title" data-group>Navigate</div>
-      <div class="rail-group-body">
-        <button data-tool="pan" title="Drag to pan the view (P)"><svg class="ic"><use href="#i-pan"/></svg>Pan</button>
-        <button data-tool="select" title="Select lines/dips — Ctrl+click accumulates; Del deletes (V)"><svg class="ic"><use href="#i-select"/></svg>Select</button>
-        <button data-tool="lasso" title="Lasso — Shift=rectangle; Ctrl accumulates (L; Shift+Q dips only, Shift+W lines only)"><svg class="ic"><use href="#i-lasso"/></svg>Lasso</button>
-        <label class="rail-field">Filter
-          <select id="select-filter">
-            <option value="all" selected>All</option>
-            <option value="lines">Lines only</option>
-            <option value="dips">Dips only</option>
-          </select>
-        </label>
+      <div class="seg seg-3">
+        <button data-tool="pan" title="Pan (P)"><svg class="ic"><use href="#i-pan"/></svg></button>
+        <button data-tool="select" title="Select — Ctrl+click adds (V)"><svg class="ic"><use href="#i-select"/></svg></button>
+        <button data-tool="lasso" title="Lasso — Shift = rectangle (L)"><svg class="ic"><use href="#i-lasso"/></svg></button>
       </div>
+      <select id="select-filter" title="Selection filter">
+        <option value="all" selected>Select: all</option>
+        <option value="lines">Select: lines only</option>
+        <option value="dips">Select: dips only</option>
+      </select>
     </div>
-    <div class="rail-sep"></div>
+
     <div class="rail-group">
-      <div class="rail-title" data-group>Draw</div>
+      <div class="rail-title" data-group>Add</div>
       <div class="rail-group-body">
-        <label class="rail-field">Type
-          <select id="line-kind">
-            <option value="horizon" selected>Horizon</option>
-            <option value="fault">Fault</option>
-            <option value="contact">Contact</option>
-            <option value="topography">Topography</option>
-            <option value="axial">Axial trace</option>
-            <option value="sketch">Sketch</option>
-          </select>
-        </label>
-        <label class="rail-field" id="fault-sense-field"
-               title="Section symbology given to a newly digitized fault (editable afterwards in Properties)">
-          Fault sense
+        <input type="hidden" id="line-kind" value="horizon">
+        <button class="add-btn add-layer" data-tool="digitize" data-kind="horizon" title="Add layer (D)"><svg class="ic"><use href="#i-add-layer"/></svg>Layer</button>
+        <button class="add-btn add-fault" data-tool="digitize" data-kind="fault" title="Add fault"><svg class="ic"><use href="#i-add-fault"/></svg>Fault</button>
+        <button class="add-btn add-topo" data-tool="digitize" data-kind="topography" title="Add topography"><svg class="ic"><use href="#i-add-topo"/></svg>Topography</button>
+        <label class="rail-field" id="fault-sense-field" title="Symbol for new faults">Fault sense
           <select id="fault-sense">
-            <option value="normal" selected>Normal (HW down)</option>
-            <option value="reverse">Reverse (HW up)</option>
-            <option value="inverted">Inverted / reactivated</option>
-            <option value="dextral">Dextral strike-slip</option>
-            <option value="sinistral">Sinistral strike-slip</option>
+            <option value="normal" selected>Normal</option>
+            <option value="reverse">Reverse</option>
+            <option value="inverted">Inverted</option>
+            <option value="dextral">Dextral</option>
+            <option value="sinistral">Sinistral</option>
             <option value="none">No symbol</option>
           </select>
         </label>
-        <button data-tool="digitize" title="Digitize a new line (D)"><svg class="ic"><use href="#i-pen"/></svg>Digitize</button>
-        <label class="rail-check" title="Snaps each click to vertices/edges of other lines and to the vertices of the line being digitized (S toggles it mid-trace)">
-          <input id="digitize-snap" type="checkbox" checked> Snap while drawing
+        <label class="rail-check" title="Snap to vertices/edges while drawing (S toggles)">
+          <input id="digitize-snap" type="checkbox" checked> Snap
         </label>
-        <button data-tool="vertex" title="Edit vertices with snapping (X)"><svg class="ic"><use href="#i-vertex"/></svg>Vertices</button>
-        <label class="rail-field" id="vertex-joint-field"
-               title="With several lines selected, choose how moving a vertex of one is propagated to the rest. Rigid: the same shift is applied to the same-index vertex of every line (equal vertex counts). Parallel: each companion is re-slid along the perpendicular offset that keeps its real (perpendicular) thickness from the edited line. Taper: the edit is wedged into this line only, thinning/thickening the layer towards the ends.">Joint edit
-          <select id="vertex-joint">
-            <option value="off" selected>Off</option>
-            <option value="rigid">Rigid (same index)</option>
-            <option value="parallel">Parallel (keep thickness)</option>
-            <option value="taper">Taper (wedge)</option>
-          </select>
-        </label>
-        <label class="rail-field" title="How far the taper reaches along the line from the dragged vertex, in metres. 0 (or empty) tapers all the way to both ends — a full wedge.">Taper reach (m)
-          <input id="vertex-taper-reach" type="number" min="0" step="10" placeholder="auto">
-        </label>
-        <button data-tool="image" title="Select/move/resize imported images (I)"><svg class="ic"><use href="#i-image"/></svg>Image</button>
-        <button data-tool="well" title="Well: click on the section to drop a collar, then type its stratigraphy (thickness and lithology pattern per interval) in the Wells panel."><svg class="ic"><use href="#i-well"/></svg>Well</button>
-        <button id="layer-cake-btn" class="mini" title="Generate a stack of parallel beds (N beds draw N+1 horizon lines) at a given true thickness along the section; optionally with one stratigraphic unit per bed so Unit polygons can fill the bodies right away."><svg class="ic"><use href="#i-layers"/></svg>Layer cake</button>
       </div>
     </div>
-    <div class="rail-sep"></div>
+
+    <div class="rail-group">
+      <div class="rail-title" data-group>Dip &amp; Kink</div>
+      <div class="rail-group-body">
+        <div class="tiles">
+          <button data-tool="dip" title="Place dips (A) — drag sets the angle"><svg class="ic"><use href="#i-dip"/></svg>Dip</button>
+          <button data-tool="kink" class="tile-strong" title="Kink method from selected dips (K)"><svg class="ic"><use href="#i-kink"/></svg>Kink</button>
+        </div>
+        <div class="rail-opts" data-for="kink">
+          <label class="rail-field">Direction
+            <select id="kink-direction">
+              <option value="ltr" selected>Left → Right</option>
+              <option value="rtl">Right → Left</option>
+            </select>
+          </label>
+          <label class="rail-check"><input id="kink-construction" type="checkbox"> Construction</label>
+          <label class="rail-check"><input id="kink-orthogonals" type="checkbox"> Orthogonals</label>
+          <button id="kink-apply" class="primary" title="Save kink horizons (Enter)"><svg class="ic"><use href="#i-check"/></svg>Apply kink</button>
+        </div>
+        <div class="rail-row">
+          <button id="dip-export" class="mini" title="Export dips to CSV"><svg class="ic"><use href="#i-csv"/></svg>CSV</button>
+          <button id="dip-clear" class="mini" title="Delete all dips"><svg class="ic"><use href="#i-delete"/></svg>Clear</button>
+        </div>
+      </div>
+    </div>
+
     <div class="rail-group">
       <div class="rail-title" data-group>Edit</div>
       <div class="rail-group-body">
-        <button data-tool="split" title="Split line(s) — see mode below (C)"><svg class="ic"><use href="#i-split"/></svg>Split</button>
-        <label class="rail-field">Split mode
-          <select id="split-mode">
-            <option value="point" selected>Point</option>
-            <option value="knife">Knife (aux. line)</option>
-            <option value="existing">Existing line</option>
-          </select>
-        </label>
-        <button data-tool="extend" title="Extend an endpoint — see mode below (E)"><svg class="ic"><use href="#i-extend"/></svg>Extend</button>
-        <label class="rail-field">Extend mode
-          <select id="extend-mode">
-            <option value="project" selected>Projection</option>
-            <option value="free">Free</option>
-          </select>
-        </label>
-        <button data-tool="transform" title="Move/scale/rotate the selection — free transform (T)"><svg class="ic"><use href="#i-transform"/></svg>Transform</button>
-        <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
-        <button id="simplify-btn" title="Simplify nodes of the selected lines (Douglas–Peucker)"><svg class="ic"><use href="#i-simplify"/></svg>Simplify</button>
-        <button id="smooth-btn" title="Smooth the selected lines (Chaikin corner cutting, 2 iterations). Bézier curve fitting stays in the right-click menu and the Properties panel."><svg class="ic"><use href="#i-smooth"/></svg>Smooth</button>
-        <label class="rail-check" title="With 2+ lines selected, smooths only the topmost one and rebuilds the rest as exact parallel offsets of it, at the true (perpendicular) thickness measured between them before smoothing — so beds don't thin or thicken from the smoothing itself.">
-          <input id="smooth-keep-thickness" type="checkbox" checked> Keep bed thickness constant
-        </label>
-        <button id="resample-btn" class="mini" title="Densify the selected lines: split every segment longer than the spacing below, keeping the trace exactly as it is. Empty = halve each line's median segment."><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
-        <label class="rail-field" title="Maximum segment length after resampling, in metres. Leave empty for each line's own median segment / 2.">Spacing (m)
-          <input id="resample-spacing" type="number" min="0" step="10" placeholder="auto">
-        </label>
-        <button id="join-btn" class="mini" title="Join the selected lines end to end into one line. Ends within tolerance are welded; farther ones are bridged with a straight segment."><svg class="ic"><use href="#i-join"/></svg>Join</button>
+        <div class="tiles">
+          <button data-tool="vertex" title="Edit vertices (X)"><svg class="ic"><use href="#i-vertex"/></svg>Vertices</button>
+          <button data-tool="transform" title="Move / scale / rotate (T)"><svg class="ic"><use href="#i-transform"/></svg>Transform</button>
+          <button data-tool="split" title="Split lines (C)"><svg class="ic"><use href="#i-split"/></svg>Split</button>
+          <button data-tool="extend" title="Extend an endpoint (E)"><svg class="ic"><use href="#i-extend"/></svg>Extend</button>
+        </div>
+        <div class="rail-opts" data-for="vertex">
+          <label class="rail-field" id="vertex-joint-field" title="How edits propagate to the other selected lines">Joint edit
+            <select id="vertex-joint">
+              <option value="off" selected>Off</option>
+              <option value="rigid">Rigid</option>
+              <option value="parallel">Parallel</option>
+              <option value="taper">Taper</option>
+            </select>
+          </label>
+          <label class="rail-field" title="Taper reach in m (empty = whole line)">Taper reach (m)
+            <input id="vertex-taper-reach" type="number" min="0" step="10" placeholder="auto">
+          </label>
+        </div>
+        <div class="rail-opts" data-for="split">
+          <label class="rail-field">Split mode
+            <select id="split-mode">
+              <option value="point" selected>Point</option>
+              <option value="knife">Knife</option>
+              <option value="existing">Existing line</option>
+            </select>
+          </label>
+        </div>
+        <div class="rail-opts" data-for="extend">
+          <label class="rail-field">Extend mode
+            <select id="extend-mode">
+              <option value="project" selected>Projection</option>
+              <option value="free">Free</option>
+            </select>
+          </label>
+        </div>
+        <div class="tiles tiles-actions">
+          <button id="smooth-btn" title="Smooth selected lines"><svg class="ic"><use href="#i-smooth"/></svg>Smooth</button>
+          <button id="simplify-btn" title="Simplify selected lines"><svg class="ic"><use href="#i-simplify"/></svg>Simplify</button>
+          <button id="resample-btn" title="Densify selected lines"><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
+          <button id="join-btn" title="Join selected lines"><svg class="ic"><use href="#i-join"/></svg>Join</button>
+          <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
+        </div>
+        <details class="rail-more">
+          <summary>Options</summary>
+          <label class="rail-check" title="Smooth the top line and rebuild the others parallel to it">
+            <input id="smooth-keep-thickness" type="checkbox" checked> Keep bed thickness
+          </label>
+          <label class="rail-field" title="Max segment length (empty = auto)">Resample spacing (m)
+            <input id="resample-spacing" type="number" min="0" step="10" placeholder="auto">
+          </label>
+        </details>
       </div>
     </div>
-    <div class="rail-sep"></div>
+
     <div class="rail-group">
-      <div class="rail-title" data-group>Dip data</div>
+      <div class="rail-title" data-group>Restore</div>
       <div class="rail-group-body">
-        <button data-tool="dip" title="Place dip data (A). Click uses the angle below; click and drag sets it by direction."><svg class="ic"><use href="#i-dip"/></svg>Dip</button>
-        <label class="rail-field">Dip (°)
-          <input id="dip-angle" type="number" min="0" max="90" step="1" value="30">
-        </label>
-        <label class="rail-field">Dips towards
-          <select id="dip-side">
-            <option value="right" selected>Right (→)</option>
-            <option value="left">Left (←)</option>
-          </select>
-        </label>
-        <div class="rail-note">Magnitude is always 0–90° from horizontal
-          (90 = vertical); "Dips towards" says which way. Shift while
-          placing marks it overturned.</div>
-        <button id="dip-clear" class="mini" title="Delete every dip in the section">Clear all</button>
-        <button id="dip-export" class="mini" title="Export the dip table to CSV">Export CSV</button>
-      </div>
-    </div>
-    <div class="rail-sep"></div>
-    <div class="rail-group">
-      <div class="rail-title" data-group>Kink method</div>
-      <div class="rail-group-body">
-        <button data-tool="kink" title="Kink method: one auxiliary horizon per selected dip (K)"><svg class="ic"><use href="#i-kink"/></svg>Kink</button>
-        <label class="rail-field" title="Order in which contiguous dip data are walked to build the kink axes. Both orders agree on clean data; it only decides which end wins when two axes would end up out of order.">
-          Direction
-          <select id="kink-direction">
-            <option value="ltr" selected>Left → Right</option>
-            <option value="rtl">Right → Left</option>
-          </select>
-        </label>
-        <label class="rail-check" title="The construction itself: from each pair of contiguous dips, the two lines orthogonal to bedding out to where they cross (the hinge), and the axial trace bisecting that angle — the domain boundary the dip is held constant within. With a kinked line selected it also shows its bisectors">
-          <input id="kink-construction" type="checkbox"> Show construction
-        </label>
-        <label class="rail-check" title="Extend the orthogonal to bedding through EVERY dip reading edge to edge (not just the pairs that bound a domain) — shows the whole curvature fan at a glance">
-          <input id="kink-orthogonals" type="checkbox"> Show orthogonals
-        </label>
-        <button id="kink-apply" class="primary" title="Save the proposed kink horizons as new lines (Enter or right click)"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
-      </div>
-    </div>
-    <div class="rail-sep"></div>
-    <div class="rail-group">
-      <div class="rail-title" data-group>Restoration</div>
-      <div class="rail-group-body">
-        <button data-tool="restore_fault" title="Fault Parallel Flow restoration: 1) click the fault, 2) select the hanging-wall lines to move, 3) type the slip and Apply."><svg class="ic"><use href="#i-restore"/></svg>FPF Restoration</button>
-        <label class="rail-field" id="restore-slip-field">Slip (m)
-          <input id="restore-slip" type="number" step="any" value="0">
-        </label>
-        <button id="restore-flip-btn" class="mini" title="Flip which side of the fault is the hanging wall">⇄ Flip HW side</button>
-        <button id="restore-apply-btn" class="primary mini" title="Move the selected hanging-wall lines by the slip above, parallel to the fault">Apply</button>
-        <div class="rail-sep"></div>
-        <button data-tool="unfold" title="Flexural-slip unfolding: 1) click the folded template bed, 2) select the lines to unfold with it, 3) set pin/datum and Apply."><svg class="ic"><use href="#i-unfold"/></svg>Unfold</button>
-        <label class="rail-field" id="unfold-pin-field">Pin (s)
-          <input id="unfold-pin" type="number" step="any" value="0">
-        </label>
-        <label class="rail-field" id="unfold-datum-field">Datum (z)
-          <input id="unfold-datum" type="number" step="any" value="0">
-        </label>
-        <button id="unfold-datum-btn" class="mini" title="Set the datum to the template bed's own highest point">↧ Datum from template</button>
-        <label class="rail-field" id="unfold-amount-field" title="How far to unfold: 100% is the full flexural-slip restoration, less leaves it partly folded.">Unfold (%)
-          <input id="unfold-amount" type="number" min="0" max="100" step="5" value="100">
-        </label>
-        <button id="unfold-apply-btn" class="primary mini" title="Unfold the selected lines onto the datum, pinned at the point above">Apply</button>
-        <div class="rail-note">Restoration and unfolding move the SELECTED
-          lines' vertices directly (one undo step). Rebuild unit polygons
-          afterwards from the Unit polygons panel.</div>
-      </div>
-    </div>
-    <div class="rail-sep"></div>
-    <div class="rail-group">
-      <div class="rail-title" data-group>Measure &amp; scale</div>
-      <div class="rail-group-body">
-        <button data-tool="measure" title="Ruler — real length, unaffected by V.E. (M)"><svg class="ic"><use href="#i-ruler"/></svg>Ruler</button>
-        <button data-tool="fault_throw" title="Fault throw between HW/FW cutoffs (F)"><svg class="ic"><use href="#i-throw"/></svg>Fault throw</button>
-        <button data-tool="calibrate" title="Scale calibration: drag a segment of known length and declare how long it really is (G)"><svg class="ic"><use href="#i-scale"/></svg>Calibrate</button>
-        <div class="rail-note">Calibrate the horizontal and the vertical
-          axis separately — a published section is usually vertically
-          exaggerated.</div>
+        <div class="tiles">
+          <button data-tool="restore_fault" title="Fault Parallel Flow: click the fault, select hanging-wall lines, set slip"><svg class="ic"><use href="#i-fpf"/></svg>FPF</button>
+          <button data-tool="unfold" title="Flexural-slip unfold: click the template bed, select lines, set pin/datum"><svg class="ic"><use href="#i-unfold"/></svg>Unfold</button>
+        </div>
+        <div class="rail-opts" data-for="restore_fault">
+          <label class="rail-field" id="restore-slip-field">Slip (m)
+            <input id="restore-slip" type="number" step="any" value="0">
+          </label>
+          <div class="rail-row">
+            <button id="restore-flip-btn" class="mini" title="Flip hanging-wall side"><svg class="ic"><use href="#i-flip"/></svg>Flip</button>
+            <button id="restore-apply-btn" class="primary mini" title="Apply FPF restoration"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
+          </div>
+        </div>
+        <div class="rail-opts" data-for="unfold">
+          <div class="rail-row">
+            <label class="rail-field" id="unfold-pin-field">Pin (s)
+              <input id="unfold-pin" type="number" step="any" value="0">
+            </label>
+            <label class="rail-field" id="unfold-datum-field">Datum (z)
+              <input id="unfold-datum" type="number" step="any" value="0">
+            </label>
+          </div>
+          <label class="rail-field" id="unfold-amount-field">Unfold (%)
+            <input id="unfold-amount" type="number" min="0" max="100" step="5" value="100">
+          </label>
+          <div class="rail-row">
+            <button id="unfold-datum-btn" class="mini" title="Datum from the template's highest point"><svg class="ic"><use href="#i-datum"/></svg>Datum</button>
+            <button id="unfold-apply-btn" class="primary mini" title="Apply unfolding"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
+          </div>
+        </div>
       </div>
     </div>
     <div id="toolrail-resize" title="Drag to resize"></div>
@@ -706,24 +850,24 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 
   <div id="wrap">
     <canvas id="cv"></canvas>
-    <!-- Columna flotante sobre el lienzo, arriba a la izquierda: Deshacer /
-         Rehacer, y las tres acciones sobre una edición activa. "Done" y
-         "Discard" son el equivalente explícito al click derecho (terminar,
-         confirmar) y a Escape (cancelar) — útiles con lápiz o dedo, que no
-         tienen botón secundario ni tecla Esc — y se habilitan sólo mientras
-         la tool activa tiene una construcción a medio hacer. "Delete" borra
-         la selección actual y se habilita sólo con algo seleccionado. -->
+    <!-- Columna flotante sobre el lienzo: Deshacer/Rehacer y las acciones
+         sobre la edición activa (equivalentes a click derecho / Esc / Supr
+         para lápiz y dedo). -->
     <div id="canvas-actions">
       <button id="undo-btn" class="ca-group-history" title="Undo (Ctrl+Z)"><svg class="ic"><use href="#i-undo"/></svg></button>
       <button id="redo-btn" class="ca-group-history" title="Redo (Ctrl+Y)"><svg class="ic"><use href="#i-redo"/></svg></button>
       <span class="canvas-actions-sep"></span>
-      <button id="edit-done" title="Finish / confirm the current edit — same as a right click"><svg class="ic"><use href="#i-check"/></svg></button>
-      <button id="edit-discard" title="Discard the current edit — same as Esc"><svg class="ic"><use href="#i-cancel"/></svg></button>
-      <button id="edit-delete" title="Delete the current selection (Del)"><svg class="ic"><use href="#i-delete"/></svg></button>
+      <button id="edit-done" title="Finish (right click)"><svg class="ic"><use href="#i-check"/></svg></button>
+      <button id="edit-discard" title="Discard (Esc)"><svg class="ic"><use href="#i-cancel"/></svg></button>
+      <button id="edit-delete" title="Delete selection (Del)"><svg class="ic"><use href="#i-delete"/></svg></button>
     </div>
   </div>
 
   <div id="panels">
+    <div class="panel" id="panel-properties">
+      <h2>Properties</h2>
+      <div class="panel-body" id="panel-properties-body"></div>
+    </div>
     <div class="panel" id="panel-horizons">
       <h2>Units</h2>
       <div class="panel-body" id="panel-horizons-body"></div>
@@ -732,29 +876,13 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <h2>Unit polygons</h2>
       <div class="panel-body" id="panel-polygons-body"></div>
     </div>
-    <div class="panel collapsed" id="panel-wells">
-      <h2>Wells</h2>
-      <div class="panel-body" id="panel-wells-body"></div>
-    </div>
-    <div class="panel" id="panel-images">
+    <div class="panel collapsed" id="panel-images">
       <h2>Images &amp; scale</h2>
       <div class="panel-body" id="panel-images-body"></div>
-    </div>
-    <div class="panel collapsed" id="panel-restore">
-      <h2>Restoration</h2>
-      <div class="panel-body" id="panel-restore-body"></div>
-    </div>
-    <div class="panel" id="panel-properties">
-      <h2>Properties</h2>
-      <div class="panel-body" id="panel-properties-body"></div>
     </div>
     <div class="panel collapsed" id="panel-linelength">
       <h2>Line-Length</h2>
       <div class="panel-body" id="panel-linelength-body"></div>
-    </div>
-    <div class="panel collapsed" id="panel-versions">
-      <h2>Versions</h2>
-      <div class="panel-body" id="panel-versions-body"></div>
     </div>
   </div>
 </div>
@@ -801,10 +929,10 @@ SW.settings = (function () {
       faultSize: 7,          // tamaño del símbolo de falla (px de pantalla)
       faultSpacing: 0,       // 0 = un solo símbolo centrado
       lineWidth: 2,
-      horizonColor: "#1e6e3c",
-      faultColor: "#c81e1e",
-      contactColor: "#2850c8",
-      topoColor: "#5a3c28",
+      horizonColor: "#10b981",
+      faultColor: "#ef2b2b",
+      contactColor: "#2563eb",
+      topoColor: "#d97706",
       axialColor: "#6a6ac8",
       sketchColor: "#5a5a5a",
       scalebarColor: "#0f7a6e",
@@ -844,7 +972,7 @@ SW.settings = (function () {
     "tool:pan": "Tool: Pan",
     "tool:select": "Tool: Select",
     "tool:lasso": "Tool: Lasso",
-    "tool:digitize": "Tool: Digitize",
+    "tool:digitize": "Tool: Add line (current type)",
     "tool:vertex": "Tool: Vertices",
     "tool:image": "Tool: Image",
     "tool:transform": "Tool: Transform",
@@ -7078,8 +7206,8 @@ window.SW = window.SW || {};
 
   SW.tools.register("digitize", {
     cursor: "crosshair",
-    hint: "Click adds vertices; double click or right click finishes and " +
-          "saves; S toggles snapping; Esc cancels.",
+    hint: "Click adds vertices · double/right click finishes · S snap · " +
+          "Esc cancels",
     hasPending: function () { return pts.length > 0; },
     deactivate: function () { pts = []; preview = null; snapMark = null; angleReadout(null, null); },
     onClick: function (e, pos) {
@@ -8427,20 +8555,21 @@ window.SW = window.SW || {};
 window.SW = window.SW || {};
 SW.actions = SW.actions || {};
 
-/* Colores de la carta cronoestratigráfica internacional (ICS/CGMW), en
- * orden de más antiguo a más joven. Layer cake y "+ Unit" los toman en ese
+/* Paleta de unidades: los tonos de la carta cronoestratigráfica (ICS/CGMW)
+ * en orden de más antiguo a más joven, saturados para que las capas se
+ * distingan bien sobre una imagen de fondo. Layer cake y "+ Unit" los toman en ese
  * orden (y vuelven a empezar si hay más unidades que colores). */
 SW.CHRONO_COLORS = [
-  { name: "Permian",          rgb: [240,  64,  40] },
-  { name: "Triassic",         rgb: [129,  43, 146] },
-  { name: "Lower Jurassic",   rgb: [ 66, 174, 208] },
-  { name: "Upper Jurassic",   rgb: [179, 227, 238] },
-  { name: "Lower Cretaceous", rgb: [140, 205,  87] },
-  { name: "Upper Cretaceous", rgb: [166, 216,  74] },
-  { name: "Paleocene",        rgb: [253, 167,  95] },
-  { name: "Oligocene",        rgb: [254, 192, 122] },
-  { name: "Miocene",          rgb: [255, 255,   0] },
-  { name: "Pleistocene",      rgb: [255, 242, 174] },
+  { name: "Permian",          rgb: [238,  44,  60] },
+  { name: "Triassic",         rgb: [155,  48, 210] },
+  { name: "Lower Jurassic",   rgb: [ 20, 130, 255] },
+  { name: "Upper Jurassic",   rgb: [  0, 200, 230] },
+  { name: "Lower Cretaceous", rgb: [ 16, 200,  90] },
+  { name: "Upper Cretaceous", rgb: [150, 220,  20] },
+  { name: "Paleocene",        rgb: [255, 120,  20] },
+  { name: "Oligocene",        rgb: [255, 170,   0] },
+  { name: "Miocene",          rgb: [255, 225,   0] },
+  { name: "Pleistocene",      rgb: [255,  80, 170] },
 ];
 SW.chronoColor = function (k) {
   const n = SW.CHRONO_COLORS.length;
@@ -10201,24 +10330,14 @@ window.SW = window.SW || {};
 
   let drag = null;   // {s, z, angle, overturned}
 
-  /* El riel edita la magnitud real (0-90°) y el lado por separado; acá se
-   * componen en el ángulo crudo 0-180° horario que espera el resto del
-   * pipeline (ver la convención al pie del archivo) y viceversa, así el
-   * arrastre (que ya produce ese ángulo crudo directamente de la
-   * dirección del gesto) puede seguir alimentando los mismos campos. */
-  function railValue() {
-    const magIn = document.getElementById("dip-angle");
-    const sideIn = document.getElementById("dip-side");
-    const mag = Math.max(0, Math.min(90, magIn ? (+magIn.value || 0) : 30));
-    return sideIn && sideIn.value === "left" ? 180 - mag : mag;
-  }
+  /* El riel ya no tiene campos de manteo (el valor se edita en
+   * Properties y en el menú contextual): un click simple repite el último
+   * ángulo colocado por arrastre (crudo 0-180° horario, ver la convención
+   * al pie del archivo); arranca en 30° hacia la derecha. */
+  let lastAngle = 30;
+  function railValue() { return lastAngle; }
   function setRailValue(v) {
-    const magIn = document.getElementById("dip-angle");
-    const sideIn = document.getElementById("dip-side");
-    const theta = Math.max(0, Math.min(180, Math.abs(v)));
-    const left = theta > 90;
-    if (magIn) magIn.value = Math.round((left ? 180 - theta : theta) * 10) / 10;
-    if (sideIn) sideIn.value = left ? "left" : "right";
+    lastAngle = Math.max(0, Math.min(180, Math.abs(v)));
   }
 
   /* Ángulo 0-180° horario desde la horizontal a partir de un arrastre en
@@ -10264,8 +10383,8 @@ window.SW = window.SW || {};
 
   SW.tools.register("dip", {
     cursor: "crosshair",
-    hint: "Click places a dip with the inclination typed on the left; " +
-          "click and DRAG to set the inclination by direction; Shift+drag " +
+    hint: "Click places a dip (last angle); DRAG sets the angle by " +
+          "direction; Shift+drag " +
           "(or hold 1 s) on an EXISTING dip re-guides it; right click " +
           "deletes the nearest one. Shift on empty space = overturned.",
     deactivate: function () { drag = null; },
@@ -10506,39 +10625,6 @@ window.SW = window.SW || {};
                        mx, V.zy(cutHW[1]) - 4);
         }
       }
-    },
-  });
-})();
-
-/* ==== js/tools/well.js ====
- * Tool: Well — click en el lienzo deja un collar (s, z) y crea un sondaje
- * vacío; la estratigrafía (intervalos, espesor, patrón) se teclea después
- * en el panel Wells, que este tool abre y enfoca. */
-"use strict";
-window.SW = window.SW || {};
-
-(function () {
-  SW.tools.register("well", {
-    cursor: "crosshair",
-    hint: "Click on the section to drop a well collar, then type its " +
-          "stratigraphy in the Wells panel.",
-    onClick: function (e, pos) {
-      if (e.button !== 0) return;
-      const p = SW.view.toSection(pos);
-      const well = SW.model.newWell(p.s, p.z);
-      SW.undo.push({
-        label: "Add " + well.name,
-        redo: [{ op: "add_well", well: well }],
-        undo: [{ op: "remove_well", id: well.id }],
-      });
-      SW.view.status("Added " + well.name + " — edit its stratigraphy in " +
-                     "the Wells panel.");
-      if (SW.panels.wells) {
-        const panel = document.getElementById("panel-wells");
-        if (panel) panel.classList.remove("collapsed");
-        SW.panels.wells.select(well.id);
-      }
-      SW.view.requestDraw();
     },
   });
 })();
@@ -11057,8 +11143,7 @@ SW.panels.horizons = (function () {
       const empty = document.createElement("div");
       empty.style.cssText = "color:var(--ink-3);font-size:11px;" +
                             "margin-bottom:6px;";
-      empty.textContent = "No units yet. Add one to colour lines and dips " +
-                          "by stratigraphic unit and to balance lengths.";
+      empty.textContent = "No units yet.";
       body.appendChild(empty);
     }
 
@@ -11157,9 +11242,7 @@ SW.panels.polygons = (function () {
     if (!polys.length) {
       const empty = document.createElement("div");
       empty.style.cssText = "color:var(--ink-3);font-size:11px;margin-bottom:6px;";
-      empty.textContent = "No unit polygons yet. Build them from the " +
-        "horizon lines below (each horizon is the top of one unit; the " +
-        "next one down, its base).";
+      empty.textContent = "No unit polygons yet.";
       body.appendChild(empty);
     }
 
@@ -11665,8 +11748,7 @@ SW.panels.images = (function () {
     if (!(sec.images || []).length) {
       const empty = document.createElement("div");
       empty.style.cssText = "color:var(--ink-3);font-size:11px;";
-      empty.textContent = "No images. Import a scanned or published " +
-        "cross-section to trace over it, then calibrate its scale.";
+      empty.textContent = "No images.";
       body.appendChild(empty);
     }
 
@@ -12705,6 +12787,8 @@ SW.panels.versions = (function () {
     const body = document.getElementById("panel-versions-body");
     if (!body) return;
     const list = versions();
+    const count = document.getElementById("versions-count");
+    if (count) count.textContent = list.length ? String(list.length) : "";
     body.innerHTML = "";
 
     for (const v of list) {
@@ -12737,15 +12821,13 @@ SW.panels.versions = (function () {
     if (!list.length) {
       const n = document.createElement("div");
       n.style.cssText = "font-size:11px;color:var(--ink-3);margin-bottom:4px;";
-      n.textContent = "No saved versions yet. \"Save version\" stores the " +
-        "lines, dips, horizons, unit bodies, wells and images as they are " +
-        "now, so you can come back to this iteration later.";
+      n.textContent = "No saved versions yet.";
       body.appendChild(n);
     }
 
     const btns = document.createElement("div");
     btns.className = "row";
-    const save = mkBtn("Save version",
+    const save = mkBtn("+ Save current as version",
                        "Stores the current interpretation under a name you " +
                        "choose. The section's name, length and calibration " +
                        "are never part of a version.",
@@ -13358,12 +13440,27 @@ SW.view = (function () {
     if (state.panning) endPan();
   }
 
+  /* Botones de tool (riel y botonera de medición) y opciones contextuales
+   * del riel: cada bloque .rail-opts[data-for] sólo se ve con su tool
+   * activa. Los tres "Add" comparten la tool digitize y se distinguen por
+   * el tipo de línea (data-kind). */
   function syncToolButtons() {
-    document.querySelectorAll("#toolrail button[data-tool]")
-      .forEach(function (b) {
-        b.classList.toggle("active",
-                           b.dataset.tool === SW.tools.activeToolName());
+    const active = SW.tools.activeToolName();
+    const kindEl = $("line-kind");
+    const kind = kindEl ? kindEl.value : "horizon";
+    document.querySelectorAll("button[data-tool]").forEach(function (b) {
+      const on = b.dataset.tool === active &&
+                 (!b.dataset.kind || b.dataset.kind === kind);
+      b.classList.toggle("active", on);
+    });
+    document.querySelectorAll("#toolrail .rail-opts[data-for]")
+      .forEach(function (el) {
+        el.classList.toggle("show", el.dataset.for === active);
       });
+    const senseField = $("fault-sense-field");
+    if (senseField)
+      senseField.style.display =
+        active === "digitize" && kind === "fault" ? "" : "none";
   }
 
   function syncUndoButtons() {
@@ -13928,15 +14025,7 @@ SW.view = (function () {
 
     wireLayoutToggles();
 
-    // el selector de sentido de falla sólo aplica al digitalizar fallas
-    const kindSel = $("line-kind"), senseField = $("fault-sense-field");
-    if (kindSel && senseField) {
-      const syncSense = function () {
-        senseField.style.display = kindSel.value === "fault" ? "" : "none";
-      };
-      kindSel.addEventListener("change", syncSense);
-      syncSense();
-    }
+    wireVersionsPopover();
 
     $("undo-btn").addEventListener("click", function () {
       SW.undo.undo(); requestDraw();
@@ -13965,10 +14054,18 @@ SW.view = (function () {
     const dipExport = $("dip-export");
     if (dipExport) dipExport.addEventListener("click", SW.actions.exportDips);
 
-    document.querySelectorAll("#toolrail button[data-tool]")
+    document.querySelectorAll("button[data-tool]")
       .forEach(function (b) {
         b.addEventListener("click", function () {
+          if (b.dataset.kind) {
+            // Add Layer / Fault / Topography: fija el tipo y activa
+            // digitize (si ya estaba activa, la línea en curso toma el
+            // nuevo tipo al terminarla)
+            const kindEl = $("line-kind");
+            if (kindEl) kindEl.value = b.dataset.kind;
+          }
           SW.tools.activate(b.dataset.tool);
+          syncToolButtons();
         });
       });
 
@@ -14029,6 +14126,29 @@ SW.view = (function () {
       SW.actions.unfoldApply(unfoldPin ? +unfoldPin.value || 0 : 0,
                              unfoldDatum ? +unfoldDatum.value || 0 : 0,
                              unfoldAmount ? +unfoldAmount.value : 100);
+    });
+  }
+
+  /* Versiones: botón de la barra superior con la lista desplegable (la
+   * rellena SW.panels.versions.render en #panel-versions-body). Se cierra
+   * con un click fuera o con Escape. */
+  function wireVersionsPopover() {
+    const btn = $("versions-btn"), pop = $("versions-pop");
+    if (!btn || !pop) return;
+    function setOpen(open) {
+      pop.classList.toggle("hidden", !open);
+      btn.classList.toggle("active", open);
+      if (open && SW.panels.versions) SW.panels.versions.render();
+    }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setOpen(pop.classList.contains("hidden"));
+    });
+    pop.addEventListener("click", function (e) { e.stopPropagation(); });
+    document.addEventListener("click", function () { setOpen(false); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !pop.classList.contains("hidden"))
+        setOpen(false);
     });
   }
 
@@ -14132,7 +14252,7 @@ SW.view = (function () {
     });
     window.addEventListener("pointermove", function (e) {
       if (!dragging) return;
-      const w = Math.max(92, Math.min(320, startW + (e.clientX - startX)));
+      const w = Math.max(150, Math.min(320, startW + (e.clientX - startX)));
       rail.style.width = w + "px";
       resize();
     });
