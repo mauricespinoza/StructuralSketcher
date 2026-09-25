@@ -6858,31 +6858,40 @@ window.SW = window.SW || {};
     const lines = SW.view.selectedLines();
     const multi = lines.length > 1;
     const editable = !line.locked;
+    const anyEditable = (multi ? lines : [line]).some(l => !l.locked);
     return [
-      { label: "Edit vertices", disabled: !editable, action: () =>
-          SW.tools.activate("vertex") },
+      // Vertex y Transform operan sobre TODA la selección (Vertex propaga
+      // con "Joint edit", Transform mueve/escala/rota el grupo entero como
+      // una sola caja); Split y Extend siguen siendo por línea — actúan
+      // sobre la que se clickea a continuación, no sobre todo el grupo.
+      { label: multi ? "Edit vertices (" + lines.length + ")" : "Edit vertices",
+        disabled: !anyEditable, action: () => SW.tools.activate("vertex") },
+      { label: "Transform" + (multi ? " group (" + lines.length + ")" : ""),
+        action: () => SW.tools.activate("transform") },
+      { sep: true },
       { label: "Split here", disabled: !editable, action: () =>
           SW.tools.activate("split") },
       { label: "Extend", disabled: !editable, action: () =>
           SW.tools.activate("extend") },
       { sep: true },
       { label: multi ? "Simplify nodes (" + lines.length + ")" : "Simplify nodes",
-        disabled: !editable, action: () => SW.actions.simplifySelected() },
-      { label: "Smooth", disabled: !editable, submenu: [
+        disabled: !anyEditable, action: () => SW.actions.simplifySelected() },
+      { label: "Smooth", disabled: !anyEditable, submenu: [
           { label: "Chaikin", action: () => SW.actions.smoothSelected() },
           { label: "Bézier curve", action: () => SW.actions.bezierSelected() },
         ] },
-      { label: "Tidy (snap/dedupe)", disabled: !editable, action: () =>
-          SW.actions.tidySelected() },
+      { label: "Tidy (snap/dedupe)" + (multi ? " (" + lines.length + ")" : ""),
+        disabled: !anyEditable, action: () => SW.actions.tidySelected() },
       { sep: true },
       { label: "Assign unit" + (multi ? " (" + lines.length + ")" : ""),
         submenu: unitSubmenu(line.unit_id, function (uid) {
           for (const l of (multi ? lines : [line])) SW.actions.setLineUnit(l, uid);
         }) },
       { sep: true },
-      { label: "Duplicate", action: () => SW.actions.duplicateSelected() },
+      { label: multi ? "Duplicate (" + lines.length + ")" : "Duplicate",
+        action: () => SW.actions.duplicateSelected() },
       { label: multi ? "Delete (" + lines.length + ")" : "Delete", danger: true,
-        disabled: !editable, action: () => SW.actions.deleteSelected() },
+        disabled: !anyEditable, action: () => SW.actions.deleteSelected() },
     ];
   }
 
