@@ -609,6 +609,9 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
         <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
         <button id="simplify-btn" title="Simplify nodes of the selected lines (Douglas–Peucker)"><svg class="ic"><use href="#i-simplify"/></svg>Simplify</button>
         <button id="smooth-btn" title="Smooth the selected lines (Chaikin corner cutting, 2 iterations). Bézier curve fitting stays in the right-click menu and the Properties panel."><svg class="ic"><use href="#i-smooth"/></svg>Smooth</button>
+        <label class="rail-check" title="With 2+ lines selected, smooths only the topmost one and rebuilds the rest as exact parallel offsets of it, at the true (perpendicular) thickness measured between them before smoothing — so beds don't thin or thicken from the smoothing itself.">
+          <input id="smooth-keep-thickness" type="checkbox" checked> Keep bed thickness constant
+        </label>
         <button id="resample-btn" class="mini" title="Densify the selected lines: split every segment longer than the spacing below, keeping the trace exactly as it is. Empty = halve each line's median segment."><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
         <label class="rail-field" title="Maximum segment length after resampling, in metres. Leave empty for each line's own median segment / 2.">Spacing (m)
           <input id="resample-spacing" type="number" min="0" step="10" placeholder="auto">
@@ -6643,24 +6646,94 @@ window.SW = window.SW || {};
     SW.view.requestDraw();
   };
 
-  SW.actions.smoothSelected = function (iterations) {
-    const lines = SW.view.selectedLines()
-      .filter(l => !l.locked && l.vertices.length >= 3);
+  function meanZ(line) {
+    let sum = 0;
+    for (const v of line.vertices) sum += v[1];
+    return sum / line.vertices.length;
+  }
+
+  /* Distancia perpendicular con signo de `point` al segmento a->b, con la
+   * MISMA convención de normal que SW.geom.offsetPolyline (normal =
+   * (-dy,dx)/L). Sirve para medir, y después reproducir con offsetPolyline,
+   * el mismo desplazamiento. */
+  function signedPerpDistance(a, b, point) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const L = Math.hypot(dx, dy);
+    if (L < 1e-9) return 0;
+    return (dx * (point[1] - a[1]) - dy * (point[0] - a[0])) / L;
+  }
+
+  /* Espesor medio (con signo) entre dos horizontes SIN suavizar todavía:
+   * para cada vértice de `lower`, la distancia perpendicular al segmento
+   * más cercano de `upper`, promediada. Ese número es el que se congela y
+   * se reaplica después con offsetPolyline sobre el techo ya suavizado. */
+  function avgSignedOffset(upper, lower) {
+    let sum = 0, n = 0;
+    for (const v of lower.vertices) {
+      const hit = SW.geom.nearestPointOnPolyline(upper.vertices, v);
+      if (!hit) continue;
+      const j = hit[0];
+      sum += signedPerpDistance(upper.vertices[j], upper.vertices[j + 1], v);
+      n++;
+    }
+    return n ? sum / n : 0;
+  }
+
+  function keepThicknessChecked() {
+    const cb = document.getElementById("smooth-keep-thickness");
+    return cb ? cb.checked : true;
+  }
+
+  /* Suavizado de las líneas seleccionadas. Con 2+ líneas y "Keep bed
+   * thickness constant" activo (checkbox del riel, por defecto sí), en vez
+   * de suavizar cada una por su cuenta —lo que las hace correr distinto y
+   * adelgaza/engruesa las capas donde curvan más— se ordenan de techo a
+   * base por elevación media, se suaviza SOLO la de arriba (Chaikin) y las
+   * demás se reconstruyen como copias paralelas exactas (offsetPolyline) al
+   * mismo espesor real que tenían antes de tocar nada, encadenando cada
+   * una desde la anterior ya suavizada/desplazada. */
+  SW.actions.smoothSelected = function (iterations, opts) {
+    const all = SW.view.selectedLines().filter(l => !l.locked);
+    const lines = all.filter(l => l.vertices.length >= 3);
     if (!lines.length) return;
     const it = iterations === undefined ? 2 : iterations;
+    const keepThickness = opts && "keepThickness" in opts
+      ? opts.keepThickness : keepThicknessChecked();
+
     const redo = [], undo = [];
-    for (const line of lines) {
-      const out = SW.geom.chaikin(line.vertices, it);
-      redo.push({ op: "replace_vertices", id: line.id, vertices: out });
-      undo.push({ op: "replace_vertices", id: line.id,
-                  vertices: line.vertices });
+    if (keepThickness && lines.length > 1) {
+      const ordered = lines.slice().sort((a, b) => meanZ(b) - meanZ(a));
+      const offsets = [];
+      for (let i = 1; i < ordered.length; i++)
+        offsets.push(avgSignedOffset(ordered[i - 1], ordered[i]));
+      let prevOut = SW.geom.chaikin(ordered[0].vertices, it);
+      redo.push({ op: "replace_vertices", id: ordered[0].id,
+                  vertices: prevOut });
+      undo.push({ op: "replace_vertices", id: ordered[0].id,
+                  vertices: ordered[0].vertices });
+      for (let i = 1; i < ordered.length; i++) {
+        const out = SW.geom.offsetPolyline(prevOut, offsets[i - 1]);
+        redo.push({ op: "replace_vertices", id: ordered[i].id, vertices: out });
+        undo.push({ op: "replace_vertices", id: ordered[i].id,
+                    vertices: ordered[i].vertices });
+        prevOut = out;
+      }
+    } else {
+      for (const line of lines) {
+        const out = SW.geom.chaikin(line.vertices, it);
+        redo.push({ op: "replace_vertices", id: line.id, vertices: out });
+        undo.push({ op: "replace_vertices", id: line.id,
+                    vertices: line.vertices });
+      }
     }
     SW.undo.push({
       label: redo.length > 1 ? "Smooth " + redo.length + " lines"
                              : "Smooth line",
       redo: redo, undo: undo,
     });
-    SW.view.status("Smoothed " + redo.length + " line(s).");
+    SW.view.status("Smoothed " + redo.length + " line(s)" +
+                   (keepThickness && lines.length > 1
+                     ? " (bed thickness kept constant)." : "."));
     SW.view.requestDraw();
   };
 
