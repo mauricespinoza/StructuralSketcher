@@ -614,6 +614,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-csv" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6m-2.5-2.5L12 17l2.5-2.5"/></symbol>
   <symbol id="i-versions" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-tidy" viewBox="0 0 24 24"><path d="M3 17l5-6 4 4 4-6 5 5"/><path d="M15 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/></symbol>
   <symbol id="i-parallel" viewBox="0 0 24 24"><path d="M2 10c4-4 7-4 10-1s6 3 10-1"/><path d="M2 17c4-4 7-4 10-1s6 3 10-1"/></symbol>
 </svg>
 
@@ -797,6 +798,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <button id="resample-btn" title="Densify selected lines"><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
           <button id="join-btn" title="Join selected lines"><svg class="ic"><use href="#i-join"/></svg>Join</button>
           <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
+          <button id="tidy-btn" title="Tidy selected lines: snap ends, remove duplicate vertices"><svg class="ic"><use href="#i-tidy"/></svg>Tidy</button>
         </div>
         <details class="rail-more">
           <summary>Options</summary>
@@ -6514,6 +6516,10 @@ window.SW = window.SW || {};
       if (e.button === 0 && e.shiftKey) SW.dipEdit.beginAt(e, pos, 10);
       return false;
     },
+    onClick: function (e, pos) {
+      if (e.button === 2 && SW.contextActions)
+        SW.contextActions.showForSelection(e, pos);
+    },
   });
 
   /* Editar el manteo de un dip: mantener apretado 1 s sobre él y guiar la
@@ -6966,8 +6972,20 @@ window.SW = window.SW || {};
 window.SW = window.SW || {};
 
 (function () {
+  /* Submenú de unidad: asignar una existente, quitarla o crear una nueva
+   * (con nombre) y asignarla de una vez a todo lo seleccionado. */
   function unitSubmenu(currentUnitId, onPick) {
     const items = [{
+      label: "+ New unit…",
+      action: function () {
+        const hs = SW.model.state.sec.horizons || [];
+        const name = window.prompt("Name for the new unit:",
+                                   "Unit " + (hs.length + 1));
+        if (name === null) return;
+        const u = SW.panels.horizons.addUnit(name);
+        if (u) onPick(u.id);
+      },
+    }, { sep: true }, {
       label: "— No unit —",
       action: () => onPick(null),
     }];
@@ -6977,88 +6995,134 @@ window.SW = window.SW || {};
         action: () => onPick(u.id),
       });
     }
-    if (!(SW.model.state.sec.horizons || []).length)
-      items.push({ label: "(no units yet — Horizons panel)", disabled: true });
     return items;
+  }
+
+  function commonUnit(recs) {
+    const ids = new Set(recs.map(r => (r && r.unit_id) || null));
+    return ids.size === 1 ? [...ids][0] : undefined;
+  }
+
+  function assignLines(lines, uid) {
+    for (const l of lines) SW.actions.setLineUnit(l, uid);
+  }
+  function assignDips(refs, uid) {
+    for (const r of refs) SW.actions.setDipUnit(r, uid);
+  }
+
+  function selectedDipRefs() {
+    return SW.view.state.selection.filter(r => r.type === "dip");
+  }
+
+  function kinkItem(dipRefs) {
+    const n = dipRefs.length;
+    return { label: n > 1 ? "Kink with " + n + " dips" : "Use in Kink",
+             action: function () { SW.tools.activate("kink"); } };
   }
 
   function lineMenu(line) {
     const lines = SW.view.selectedLines();
     const multi = lines.length > 1;
+    const group = multi ? lines : [line];
+    const n = multi ? " (" + lines.length + ")" : "";
     const editable = !line.locked;
-    const anyEditable = (multi ? lines : [line]).some(l => !l.locked);
-    return [
+    const anyEditable = group.some(l => !l.locked);
+    const dips = selectedDipRefs();
+    const items = [
+      { label: "Assign unit" + n,
+        submenu: unitSubmenu(commonUnit(group), function (uid) {
+          assignLines(group, uid);
+        }) },
+      { sep: true },
       // Vertex y Transform operan sobre TODA la selección (Vertex propaga
       // con "Joint edit", Transform mueve/escala/rota el grupo entero como
       // una sola caja); Split y Extend siguen siendo por línea — actúan
       // sobre la que se clickea a continuación, no sobre todo el grupo.
-      { label: multi ? "Edit vertices (" + lines.length + ")" : "Edit vertices",
+      { label: "Edit vertices" + n,
         disabled: !anyEditable, action: () => SW.tools.activate("vertex") },
-      { label: "Transform" + (multi ? " group (" + lines.length + ")" : ""),
+      { label: "Transform" + (multi ? " group" + n : ""),
         action: () => SW.tools.activate("transform") },
+    ];
+    if (!multi) {
+      items.push(
+        { label: "Split here", disabled: !editable, action: () =>
+            SW.tools.activate("split") },
+        { label: "Extend", disabled: !editable, action: () =>
+            SW.tools.activate("extend") });
+    }
+    items.push(
       { sep: true },
-      { label: "Split here", disabled: !editable, action: () =>
-          SW.tools.activate("split") },
-      { label: "Extend", disabled: !editable, action: () =>
-          SW.tools.activate("extend") },
-      { sep: true },
-      { label: multi ? "Simplify nodes (" + lines.length + ")" : "Simplify nodes",
-        disabled: !anyEditable, action: () => SW.actions.simplifySelected() },
-      { label: "Smooth", disabled: !anyEditable, submenu: [
+      { label: "Smooth" + n, disabled: !anyEditable, submenu: [
           { label: "Chaikin", action: () => SW.actions.smoothSelected() },
           { label: "Bézier curve", action: () => SW.actions.bezierSelected() },
         ] },
-      { label: "Tidy (snap/dedupe)" + (multi ? " (" + lines.length + ")" : ""),
-        disabled: !anyEditable, action: () => SW.actions.tidySelected() },
+      { label: "Simplify nodes" + n,
+        disabled: !anyEditable, action: () => SW.actions.simplifySelected() },
+      { label: "Tidy (snap/dedupe)" + n,
+        disabled: !anyEditable, action: () => SW.actions.tidySelected() });
+    if (multi)
+      items.push({ label: "Join" + n, disabled: !anyEditable,
+                   action: () => SW.actions.joinSelected() });
+    if (dips.length) items.push({ sep: true }, kinkItem(dips));
+    items.push(
       { sep: true },
-      { label: "Assign unit" + (multi ? " (" + lines.length + ")" : ""),
-        submenu: unitSubmenu(line.unit_id, function (uid) {
-          for (const l of (multi ? lines : [line])) SW.actions.setLineUnit(l, uid);
-        }) },
-      { sep: true },
-      { label: multi ? "Duplicate (" + lines.length + ")" : "Duplicate",
-        action: () => SW.actions.duplicateSelected() },
-      { label: multi ? "Delete (" + lines.length + ")" : "Delete", danger: true,
-        disabled: !anyEditable, action: () => SW.actions.deleteSelected() },
-    ];
+      { label: "Duplicate" + n, action: () => SW.actions.duplicateSelected() },
+      { label: "Delete" + (dips.length ? " selection" : "") +
+               (multi || dips.length ? " (" + (group.length + dips.length) + ")" : ""),
+        danger: true, disabled: !anyEditable && !dips.length,
+        action: () => SW.actions.deleteSelected() });
+    return items;
   }
 
   function dipMenu(ref) {
-    const rec = SW.model.getDip(ref.id);
-    const unitId = rec ? rec.unit_id : null;
-    const selected = SW.view.state.selection.filter(r => r.type === "dip");
+    const rec = ref ? SW.model.getDip(ref.id) : null;
+    const selected = selectedDipRefs();
     const multi = selected.length > 1;
-    return [
-      // el diálogo completo (unidad + valor exacto + volcado + etiqueta +
-      // eliminar) es el mismo al que llega el lápiz manteniendo apretado
-      { label: "Edit dip…", disabled: !rec, action: function () {
-          if (rec) SW.dipEdit.openDialog(rec);
-        } },
+    const group = multi ? selected : [ref];
+    const n = multi ? " (" + selected.length + ")" : "";
+    const recs = group.map(r => SW.model.getDip(r.id)).filter(Boolean);
+    const lines = SW.view.selectedLines();
+    const items = [
+      // Kink siempre arriba: es para lo que se seleccionan varios dips
+      kinkItem(selected.length ? selected : [ref]),
       { sep: true },
-      { label: "Assign unit" + (multi ? " (" + selected.length + ")" : ""),
-        submenu: unitSubmenu(unitId, function (uid) {
-          for (const r of (multi ? selected : [ref]))
-            SW.actions.setDipUnit(r, uid);
+      { label: "Assign unit" + n,
+        submenu: unitSubmenu(commonUnit(recs), function (uid) {
+          assignDips(group, uid);
         }) },
-      { label: "Flip overturned", disabled: !rec, action: function () {
-          if (!rec) return;
-          SW.undo.push({
-            label: "Flip overturned",
-            redo: [{ op: "set_dip_props", id: rec.id,
-                     props: { dip: -rec.dip } }],
-            undo: [{ op: "set_dip_props", id: rec.id,
-                     props: { dip: rec.dip } }],
-          });
-          SW.view.requestDraw();
-        } },
-      { label: "Use in Kink", action: function () {
-          if (!SW.view.isSelected(ref)) SW.view.toggleSelection(ref);
-          SW.tools.activate("kink");
-        } },
-      { sep: true },
-      { label: multi ? "Delete dips (" + selected.length + ")" : "Delete dip",
-        danger: true, action: () => SW.actions.deleteSelected() },
     ];
+    if (lines.length)
+      items.push({ label: "Assign unit to all (" +
+                          (group.length + lines.length) + ")",
+                   submenu: unitSubmenu(undefined, function (uid) {
+                     assignDips(group, uid); assignLines(lines, uid);
+                   }) });
+    items.push({ sep: true });
+    // el diálogo completo (unidad + valor exacto + volcado + etiqueta +
+    // eliminar) es el mismo al que llega el lápiz manteniendo apretado
+    if (!multi)
+      items.push({ label: "Edit dip…", disabled: !rec, action: function () {
+          if (rec) SW.dipEdit.openDialog(rec);
+        } });
+    items.push({ label: "Flip overturned" + n, disabled: !recs.length,
+      action: function () {
+        SW.undo.push({
+          label: "Flip overturned",
+          redo: recs.map(d => ({ op: "set_dip_props", id: d.id,
+                                 props: { dip: -d.dip } })),
+          undo: recs.map(d => ({ op: "set_dip_props", id: d.id,
+                                 props: { dip: d.dip } })),
+        });
+        if (SW.actions.kinkRefresh) SW.actions.kinkRefresh();
+        SW.view.requestDraw();
+      } },
+      { label: "Export dips (CSV)", action: () => SW.actions.exportDips() },
+      { sep: true },
+      { label: "Delete" + (lines.length ? " selection (" +
+                 (group.length + lines.length) + ")"
+                 : multi ? " dips" + n : " dip"),
+        danger: true, action: () => SW.actions.deleteSelected() });
+    return items;
   }
 
   function scalebarMenu(bar) {
@@ -7095,8 +7159,16 @@ window.SW = window.SW || {};
         if (bar) { ref = { type: "scalebar", id: bar.id }; hitBar = bar;
                    kind = "scalebar"; }
       }
-      if (!ref) return;
-      if (!V.isSelected(ref)) V.setSelection([ref]);
+      // Sin nada bajo el cursor el menú actúa sobre la selección actual
+      // (p. ej. varios dips o líneas recién tomados con el lazo).
+      if (!ref) {
+        const sel = V.state.selection;
+        const lines = V.selectedLines();
+        if (lines.length) { hitLine = lines[0]; kind = "line"; }
+        else if (sel.some(r => r.type === "dip")) {
+          ref = sel.find(r => r.type === "dip"); kind = "dip";
+        } else return;
+      } else if (!V.isSelected(ref)) V.setSelection([ref]);
       const items = kind === "line" ? lineMenu(hitLine)
                   : kind === "scalebar" ? scalebarMenu(hitBar)
                   : dipMenu(ref);
@@ -8125,6 +8197,10 @@ window.SW = window.SW || {};
     hint: "Drag to draw a lasso (Shift = rectangle); Ctrl keeps the " +
           "previous selection.",
     deactivate: reset,
+    onClick: function (e, pos) {
+      if (e.button === 2 && !dragging && SW.contextActions)
+        SW.contextActions.showForSelection(e, pos);
+    },
     onDown: function (e, pos) {
       if (e.button !== 0) return;
       dragging = true;
@@ -10923,16 +10999,17 @@ SW.panels.horizons = (function () {
     SW.view.requestDraw();
   }
 
-  function addUnit() {
+  function addUnit(name) {
     const hs = SW.model.state.sec.horizons;
     hs.push({
       id: SW.model.genId(),
-      name: "Unit " + (hs.length + 1),
+      name: (typeof name === "string" && name.trim()) || "Unit " + (hs.length + 1),
       color: SW.chronoColor(hs.length),
       order: hs.length, thickness: 500.0, line_ids: [],
     });
     selectedUnit = hs[hs.length - 1].id;
     sync();
+    return hs[hs.length - 1];
   }
 
   function removeUnit(id) {
@@ -11155,7 +11232,7 @@ SW.panels.horizons = (function () {
       b.addEventListener("click", fn);
       btns.appendChild(b);
     }
-    mkBtn("+ Unit", "Add a stratigraphic unit", addUnit);
+    mkBtn("+ Unit", "Add a stratigraphic unit", () => addUnit());
     mkBtn("Assign", "Assign the selected lines and dips to the selected unit",
           assignSelected);
     mkBtn("Unassign", "Remove the selection from its unit", unassignSelected);
@@ -11164,7 +11241,7 @@ SW.panels.horizons = (function () {
     body.appendChild(btns);
   }
 
-  return { render, sync };
+  return { render, sync, addUnit };
 })();
 
 /* ==== js/panels/polygons.js ====
@@ -14100,6 +14177,8 @@ SW.view = (function () {
         +resampleSpacing.value : 0;
       SW.actions.resampleSelected(sp);
     });
+    const tidyBtn = $("tidy-btn");
+    if (tidyBtn) tidyBtn.addEventListener("click", () => SW.actions.tidySelected());
     const joinBtn = $("join-btn");
     if (joinBtn) joinBtn.addEventListener("click", () => SW.actions.joinSelected());
 
