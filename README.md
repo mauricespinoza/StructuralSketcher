@@ -32,8 +32,9 @@ Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
   **Add** Layer, Fault or Topography (with snapping); **Dip & Kink**;
   **Edit** (vertices, transform, split, extend, smooth, simplify,
   resample, join, duplicate); **Restore** (Fault Parallel Flow and
-  flexural-slip unfolding). Each tool's options appear only while it is
-  active.
+  flexural-slip unfolding); **Forward modeling** (Parallel flow, Bend fold,
+  Propagation, Trishear, Simple shear). Each tool's options appear only
+  while it is active.
 - **Canvas** — the section itself; floating Undo/Redo and Finish/Discard/
   Delete buttons on the top left.
 - **Side panels** (right, collapsible) — Properties of the current
@@ -70,6 +71,36 @@ trace involved:
   horizontal datum through a pin point of zero slip, carrying every other
   selected line with it at the same perpendicular distance from the
   template (constant bed length). The unfold amount can be partial (0–100%).
+- **Forward modeling** — deforms the selected lines (or every horizon and
+  contact when nothing is selected) over a fault, with a live preview drawn
+  over the current section before anything is written. The fault is a
+  parametric flat–ramp(–flat) (base, detachment elevation, ramp angle,
+  height or initial tip, vergence; "Place" puts the base with a click and
+  "From fault" reads it from a drawn fault) or, for Parallel flow and Simple
+  shear, any fault line clicked on the section. Methods:
+  - *Fault Parallel Flow* (Egan et al., 1997) — hanging wall carried along
+    flow lines parallel to the fault, axial surfaces on the bisectors of the
+    fault bends.
+  - *Fault-bend fold* (Suppe, 1983), mode I — kink-band velocity domains
+    bounded by the lower-bend bisector and the upper-bend axial surface of
+    Suppe's equation (slip ratio R = sin(γ−θ)/sin γ); once the slip exceeds
+    the ramp length the crest widens and the forelimb is carried along.
+  - *Fault-propagation fold* (Suppe & Medwedeff, 1990), constant thickness —
+    tip advancing at P/S = 2, forelimb syncline pinned to the tip with
+    sin(2γ*−θ) = 2 sin θ and forelimb dip 180°−2γ*.
+  - *Trishear* (Erslev, 1991; Zehnder & Allmendinger, 2000) with apical
+    angle, P/S and concentration factor, plus the backlimb trishear fan of
+    Cristallini & Allmendinger (2002) at the fault bend (0° = sharp kink).
+  - *Inclined simple shear* (White et al., 1986) — hanging-wall collapse
+    over any fault shape with a shear direction inclined from the vertical.
+
+  Checkboxes show the **axial surfaces** (active, fixed to the fault, and
+  inactive, carried by the hanging wall) and **strain markers** — a grid of
+  circles deformed with the rock into strain ellipses, with their long axis
+  and the maximum strain ratio. The velocity-field models (bend,
+  propagation, trishear) conserve area to a fraction of a percent. Apply
+  writes the result in one undo step, cutting lines where the fault offsets
+  them, and can also add the fault, the axial surfaces and the markers.
 - **Resample / Join** — Resample densifies a line's vertices without
   changing its trace (segments longer than the given spacing are split into
   equal parts); Join chains the selected lines end to end, welding endpoints
