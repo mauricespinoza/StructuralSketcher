@@ -242,6 +242,15 @@ header button.active { background: rgba(37,99,235,.35); color: #fff;
   font-size: 11px; color: var(--ink-3); cursor: pointer; user-select: none;
 }
 .rail-more[open] { display: flex; flex-direction: column; gap: 6px; }
+/* Forward modeling: rótulo del método, línea de resultados y avisos */
+#toolrail .fwd-title { font-size: 11px; font-weight: 600; color: var(--ink); }
+#toolrail .fwd-info { font-size: 10.5px; line-height: 1.35; color: var(--ink-2);
+  white-space: normal; }
+#toolrail .fwd-info .err { color: var(--danger); font-weight: 600; }
+#toolrail .fwd-info:empty { display: none; }
+#toolrail .fwd-hide { display: none !important; }
+#toolrail .mini.active { background: var(--accent); color: #fff;
+  border-color: var(--accent); }
 #toolrail-resize {
   position: absolute; top: 0; right: 0; width: 5px; height: 100%;
   cursor: col-resize; z-index: 5;
@@ -609,6 +618,11 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-add-fault" viewBox="0 0 24 24"><path d="M8 21L15 3"/><path d="M2 11h7.3M11.5 16H22"/><path d="M16 8.5l1.2-3 2.6 1.9"/></symbol>
   <symbol id="i-add-topo" viewBox="0 0 24 24"><path d="M2 18l5-7 3 3 4-7 8 11"/><path d="M2 21h20" opacity=".45"/></symbol>
   <symbol id="i-fpf" viewBox="0 0 24 24"><path d="M8 2l8 20"/><path d="M2 8h8.4"/><path d="M14 17h8"/><path d="M20.6 14.7L17.9 8m0 0l-.4 3m.4-3l2.4 1.9"/></symbol>
+  <symbol id="i-fwd-fpf" viewBox="0 0 24 24"><path d="M2 21h6l6-9h8"/><path d="M2 15h4.5l6-9H22" opacity=".55"/><path d="M15.5 16.5l3.5-.2-1.6 3"/></symbol>
+  <symbol id="i-fwd-fbf" viewBox="0 0 24 24"><path d="M2 21h6l5-6h9" stroke-dasharray="2.2 1.8"/><path d="M2 11h5l4-5h4l4 5h3"/><path d="M2 15.5h5.5l4-5h3l3.5 5H22" opacity=".55"/></symbol>
+  <symbol id="i-fwd-fpfold" viewBox="0 0 24 24"><path d="M2 21h5l5-6" stroke-dasharray="2.2 1.8"/><circle cx="12" cy="15" r="1.3"/><path d="M2 10h5l3.5-4h3.5l2.5 8H22"/></symbol>
+  <symbol id="i-fwd-trishear" viewBox="0 0 24 24"><path d="M2 21l9-6" stroke-dasharray="2.2 1.8"/><path d="M11 15l11-9M11 15l11 2" opacity=".6"/><path d="M2 12c5 0 7-5 10-5s5 4 10 4"/></symbol>
+  <symbol id="i-fwd-shear" viewBox="0 0 24 24"><path d="M4 20L8 4M10 20l4-16M16 20l4-16"/><path d="M2 12h20" opacity=".55"/></symbol>
   <symbol id="i-flip" viewBox="0 0 24 24"><path d="M4 8h15m-3.5-3.5L19 8l-3.5 3.5"/><path d="M20 16H5m3.5-3.5L5 16l3.5 3.5"/></symbol>
   <symbol id="i-datum" viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M12 4v11m-3.5-3.5L12 15l3.5-3.5"/></symbol>
   <symbol id="i-csv" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6m-2.5-2.5L12 17l2.5-2.5"/></symbol>
@@ -844,6 +858,97 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
             <button id="unfold-datum-btn" class="mini" title="Datum from the template's highest point"><svg class="ic"><use href="#i-datum"/></svg>Datum</button>
             <button id="unfold-apply-btn" class="primary mini" title="Apply unfolding"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
           </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail-group">
+      <div class="rail-title" data-group>Forward modeling</div>
+      <div class="rail-group-body">
+        <div class="tiles">
+          <button data-tool="fwd_fpf" title="Fault Parallel Flow: the hanging wall moves along flow lines parallel to the fault, axial surfaces on the bisectors of the fault bends"><svg class="ic"><use href="#i-fwd-fpf"/></svg>Parallel flow</button>
+          <button data-tool="fwd_fbf" title="Fault-bend fold (Suppe, 1983): flat-ramp-flat kink-band fold, mode I"><svg class="ic"><use href="#i-fwd-fbf"/></svg>Bend fold</button>
+          <button data-tool="fwd_fpfold" title="Fault-propagation fold (Suppe &amp; Medwedeff, 1990): constant-thickness kink-band fold over a propagating ramp"><svg class="ic"><use href="#i-fwd-fpfold"/></svg>Propagation</button>
+          <button data-tool="fwd_trishear" title="Trishear (Erslev, 1991) with backlimb trishear (Cristallini &amp; Allmendinger, 2002)"><svg class="ic"><use href="#i-fwd-trishear"/></svg>Trishear</button>
+          <button data-tool="fwd_shear" title="Inclined simple shear: the hanging wall keeps its distance to the fault along the shear direction"><svg class="ic"><use href="#i-fwd-shear"/></svg>Simple shear</button>
+        </div>
+        <div class="rail-opts" data-for="fwd_fpf fwd_fbf fwd_fpfold fwd_trishear fwd_shear">
+          <div class="fwd-title" id="fwd-title"></div>
+          <label class="rail-field" data-m="fpf shear" title="Use a flat-ramp-flat fault built from the numbers below, or a fault line clicked on the section">Fault
+            <select id="fwd-fault-src">
+              <option value="param" selected>Parametric ramp</option>
+              <option value="line">Clicked fault line</option>
+            </select>
+          </label>
+          <label class="rail-field" data-geom title="Transport direction of the hanging wall">Vergence
+            <select id="fwd-verg">
+              <option value="1" selected>&#8594; toward +s</option>
+              <option value="-1">&#8592; toward &#8722;s</option>
+            </select>
+          </label>
+          <div class="rail-row" data-geom>
+            <label class="rail-field" title="Distance of the base of the ramp (on the detachment)">Ramp base s
+              <input id="fwd-s0" type="number" step="any">
+            </label>
+            <label class="rail-field" title="Elevation of the detachment (lower flat)">Detachment z
+              <input id="fwd-zd" type="number" step="any">
+            </label>
+          </div>
+          <div class="rail-row" data-geom>
+            <label class="rail-field" title="Ramp cutoff angle against the (horizontal) beds">Ramp &#952; (&#176;)
+              <input id="fwd-theta" type="number" min="1" max="89" step="1" value="25">
+            </label>
+            <label class="rail-field" data-m="fpf fbf shear" title="Height of the upper flat above the detachment (Parallel flow / Simple shear: empty or 0 = the ramp goes on up)">Ramp height
+              <input id="fwd-h" type="number" min="0" step="any">
+            </label>
+            <label class="rail-field" data-m="fpfold trishear" title="Initial length of the fault along the ramp, from its base to the tip">Initial tip
+              <input id="fwd-l0" type="number" min="0" step="any" value="0">
+            </label>
+          </div>
+          <div class="rail-row" data-m="trishear">
+            <label class="rail-field" title="Total apical angle of the trishear zone">Trishear &#966; (&#176;)
+              <input id="fwd-phi" type="number" min="1" max="179" step="5" value="60">
+            </label>
+            <label class="rail-field" title="Propagation-to-slip ratio of the fault tip">P/S
+              <input id="fwd-ps" type="number" min="0" step="0.1" value="2">
+            </label>
+          </div>
+          <div class="rail-row" data-m="trishear">
+            <label class="rail-field" title="Backlimb trishear angle at the fault bend (0 = sharp kink on the bisector)">Backlimb &#968; (&#176;)
+              <input id="fwd-psi" type="number" min="0" max="170" step="5" value="30">
+            </label>
+            <label class="rail-field" title="Velocity concentration factor s (1 = linear velocity field)">Concentr. s
+              <input id="fwd-conc" type="number" min="0.1" step="0.1" value="1">
+            </label>
+          </div>
+          <label class="rail-field" data-m="shear" title="Angle of the shear direction from the vertical; positive leans toward the transport direction (antithetic to a fault that dips that way), negative leans back (synthetic)">Shear angle (&#176; from vertical)
+            <input id="fwd-alpha" type="number" min="-89" max="89" step="5" value="0">
+          </label>
+          <div class="rail-row">
+            <label class="rail-field" id="fwd-slip-label" title="Slip on the fault (Simple shear: horizontal heave). Positive moves the hanging wall in the vergence direction">Slip (m)
+              <input id="fwd-slip" type="number" step="any">
+            </label>
+            <label class="rail-field" data-m="fbf fpfold trishear" title="Number of slip increments used to integrate the velocity field">Increments
+              <input id="fwd-steps" type="number" min="10" max="2000" step="10" value="100">
+            </label>
+          </div>
+          <label class="rail-check" title="Draw the deformed section over the current one"><input id="fwd-preview" type="checkbox" checked> Preview</label>
+          <label class="rail-check" title="Active (fixed to the fault) and inactive (carried by the hanging wall) axial surfaces"><input id="fwd-axial" type="checkbox" checked> Axial surfaces</label>
+          <label class="rail-check" title="Circles on a regular grid, deformed with the rock into strain ellipses"><input id="fwd-strain" type="checkbox"> Strain markers</label>
+          <label class="rail-field" data-strain title="Grid spacing of the strain markers (empty = automatic)">Marker spacing (m)
+            <input id="fwd-mspace" type="number" min="0" step="any" placeholder="auto">
+          </label>
+          <div class="fwd-info" id="fwd-info"></div>
+          <div class="rail-row" data-geom>
+            <button id="fwd-place-btn" class="mini" title="Click on the section to place the base of the ramp"><svg class="ic"><use href="#i-datum"/></svg>Place</button>
+            <button id="fwd-fit-btn" class="mini" title="Take base, angle and height/tip from the clicked (or selected) fault line"><svg class="ic"><use href="#i-add-fault"/></svg>From fault</button>
+          </div>
+          <details class="rail-more">
+            <summary>On Apply, also add</summary>
+            <label class="rail-check"><input id="fwd-add-fault" type="checkbox" checked> Fault line</label>
+            <label class="rail-check"><input id="fwd-add-axial" type="checkbox"> Shown axial surfaces</label>
+            <label class="rail-check"><input id="fwd-add-strain" type="checkbox"> Shown strain markers</label>
+          </details>
+          <button id="fwd-apply-btn" class="primary mini" title="Deform the lines (selected ones, or every horizon and contact if none is selected)"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
         </div>
       </div>
     </div>
@@ -10950,6 +11055,1239 @@ window.SW = window.SW || {};
   };
 })();
 
+/* ==== js/forward.js ====
+ * StructuralSketcher — modelado directo (forward modeling) de pliegues
+ * relacionados con fallas, en el mismo espacio (s, z) real del resto de
+ * la app. Cinco métodos:
+ *  - Fault Parallel Flow (Egan et al., 1997; Kane et al., 1997): el bloque
+ *    colgante avanza por láminas de flujo paralelas a la falla, con las
+ *    superficies axiales en las bisectrices de cada quiebre (reutiliza
+ *    SW.restore.faultParallelFlow con el slip en sentido directo).
+ *  - Fault-bend fold (Suppe, 1983), modo I, escalón plano-rampa-plano:
+ *    campo de velocidades por dominios separados por superficies axiales
+ *    fijas: la bisectriz del quiebre inferior (A) y, en el quiebre
+ *    superior, la superficie B con el ángulo axial γ de la ecuación de
+ *    Suppe y la razón de slip R = sin(γ−θ)/sin γ. Cuando el slip supera el
+ *    largo de la rampa todo lo que llega al quiebre superior es flanco
+ *    trasero y B se reemplaza por la bisectriz B0 (R = 1): la cresta se
+ *    ensancha y el flanco frontal ya formado sólo se traslada.
+ *  - Fault-propagation fold de espesor constante (Suppe y Medwedeff, 1990):
+ *    la punta avanza por la rampa a razón P/S = 2; el sinclinal frontal
+ *    está anclado a la punta con ángulo axial γ* (sin(2γ*−θ) = 2 sin θ) y
+ *    el flanco frontal (buzamiento 180°−2γ*) es la cuña entre ese
+ *    sinclinal y la capa que pasa por la punta; detrás, el bloque colgante
+ *    se mueve paralelo a la rampa. Con estos valores el campo conserva
+ *    área, largo y espesor de capa exactamente.
+ *  - Trishear (Erslev, 1991; Zehnder y Allmendinger, 2000) con la
+ *    variante de flanco trasero de Cristallini y Allmendinger (2002): en el
+ *    quiebre inferior, un abanico de ángulo ψ donde la dirección de la
+ *    velocidad rota linealmente de la del despegue a la de la rampa, con el
+ *    módulo que exige la incompresibilidad (ψ = 0 es un kink bisector).
+ *  - Cizalla simple inclinada (White et al., 1986; Withjack y Peterson,
+ *    1993): cada punto del bloque colgante conserva su distancia a la
+ *    falla medida sobre la dirección de cizalla, mientras el bloque se
+ *    traslada el rechazo horizontal indicado.
+ * Los tres métodos de campo de velocidades (FBF, FPF, trishear) integran
+ * con Runge-Kutta 2 en `steps` incrementos; FPF y cizalla simple son
+ * mapeos directos (no dependen del camino). Los marcadores de strain y las
+ * superficies axiales inactivas se obtienen deformando esos mismos puntos
+ * con el mismo mapeo, así que muestran exactamente lo que le pasa a la
+ * roca. Todo acá es puro: nada toca sec/undo/vista. */
+"use strict";
+window.SW = window.SW || {};
+
+SW.forward = (function () {
+  const D2R = Math.PI / 180;
+  const EPS = 1e-9;
+
+  const METHODS = {
+    fpf: { label: "Fault Parallel Flow", short: "FPF", velocity: false },
+    fbf: { label: "Fault-bend fold (Suppe, 1983)", short: "FBF", velocity: true },
+    fpfold: { label: "Fault-propagation fold (Suppe & Medwedeff, 1990)",
+              short: "Propagation fold", velocity: true },
+    trishear: { label: "Trishear (with backlimb trishear)", short: "Trishear",
+                velocity: true },
+    shear: { label: "Inclined simple shear", short: "Simple shear",
+             velocity: false },
+  };
+
+  /* -- utilidades ----------------------------------------------------------- */
+  const cross = (ux, uz, px, pz) => ux * pz - uz * px;
+  // ¿p está a la izquierda (lado antihorario) de la recta por q con dirección u?
+  function leftOf(px, pz, qx, qz, ux, uz) {
+    return cross(ux, uz, px - qx, pz - qz) > 0;
+  }
+  function dirv(a) { return [Math.cos(a), Math.sin(a)]; }
+
+  /* -- Suppe (1983): ángulo axial γ del quiebre anticlinal, modo I --------
+   * θ_cutoff = atan{−sin(γ−φ)[sin(2γ−φ) − sin φ] /
+   *                 (cos(γ−φ)[sin(2γ−φ) − sin φ] − sin γ)}
+   * con φ = θ (el despegue es paralelo a la estratificación). El modo I es
+   * la rama de γ mayor; no hay solución más allá de θ ≈ 30°. */
+  function suppeTheta(g, phi) {
+    const a = Math.sin(2 * g - phi) - Math.sin(phi);
+    return Math.atan(-Math.sin(g - phi) * a /
+                     (Math.cos(g - phi) * a - Math.sin(g)));
+  }
+  function suppeGamma(theta) {
+    if (!(theta > 0)) return null;
+    // se baja desde 90° hasta cruzar θ; después, bisección
+    let hi = Math.PI / 2, lo = null;
+    const step = 0.02 * D2R;
+    for (let g = Math.PI / 2 - step; g > theta / 2; g -= step) {
+      if (suppeTheta(g, theta) >= theta) { lo = g; break; }
+      hi = g;
+    }
+    if (lo === null) return null;
+    for (let i = 0; i < 60; i++) {
+      const m = (lo + hi) / 2;
+      if (suppeTheta(m, theta) >= theta) lo = m; else hi = m;
+    }
+    return (lo + hi) / 2;
+  }
+
+  /* -- geometría paramétrica ------------------------------------------------
+   * Marco local: origen en la base de la rampa (s0, zd), x en el sentido del
+   * transporte (verg = ±1), z hacia arriba. */
+  function frame(p) {
+    const v = p.verg < 0 ? -1 : 1;
+    return {
+      v: v,
+      toLocal: q => [(q[0] - p.s0) * v, q[1] - p.zd],
+      toSec: q => [p.s0 + v * q[0], p.zd + q[1]],
+    };
+  }
+
+  /* Prepara las constantes de cada método; devuelve {ok, error, info, ...}. */
+  function setup(p) {
+    const th = (+p.theta || 0) * D2R;
+    const g = { method: p.method, th: th, r: dirv(th), info: [], warn: [] };
+    const needsTheta = p.method !== "fpf" && p.method !== "shear" ||
+                       p.faultSrc !== "line";
+    if (needsTheta && !(th > 0 && th < 89 * D2R))
+      return { error: "The ramp angle must be between 0° and 89°." };
+    const slip = +p.slip || 0;
+    if (p.method === "fbf") {
+      if (!(p.H > 0)) return { error: "The ramp height must be positive." };
+      const gam = suppeGamma(th);
+      if (gam === null)
+        return { error: "No mode I fault-bend fold for a " + p.theta +
+                        "° ramp (Suppe's solution exists up to ~30°)." };
+      g.gam = gam;
+      g.R = Math.sin(gam - th) / Math.sin(gam);
+      g.L = p.H / Math.sin(th);
+      g.P2 = [p.H / Math.tan(th), p.H];
+      g.uA = dirv(Math.PI / 2 + th / 2);
+      g.uB = dirv(gam);
+      g.uB0 = g.uA;
+      g.info.push("γ = " + (gam / D2R).toFixed(1) + "°",
+                  "forelimb dip = " + (180 - 2 * gam / D2R).toFixed(1) + "°",
+                  "slip ratio R = " + g.R.toFixed(3),
+                  "ramp length = " + g.L.toFixed(0) + " m");
+      if (slip > g.L) g.info.push("slip > ramp length: the crest widens");
+    } else if (p.method === "fpfold") {
+      const x = 2 * Math.sin(th);
+      if (x > 1) return { error: "No constant-thickness fault-propagation " +
+                                 "fold for ramps steeper than 30°." };
+      const gs = (th + Math.asin(x)) / 2;
+      g.gs = gs;
+      g.ps = 2;
+      g.lam = 4 * Math.cos(gs) * Math.sin(gs - th) / Math.sin(gs);
+      g.v2 = [g.lam * Math.cos(gs), g.lam * Math.sin(gs)];
+      g.L0 = Math.max(0, +p.L0 || 0);
+      g.uA = dirv(Math.PI / 2 + th / 2);
+      g.info.push("γ* = " + (gs / D2R).toFixed(1) + "°",
+                  "forelimb dip = " + (180 - 2 * gs / D2R).toFixed(1) + "°",
+                  "P/S = 2 → tip advances " + (2 * slip).toFixed(0) + " m");
+    } else if (p.method === "trishear") {
+      const phi = (+p.phi || 0) * D2R;
+      if (!(phi > 0 && phi < 179 * D2R))
+        return { error: "The trishear angle must be between 0° and 179°." };
+      g.m = Math.tan(phi / 2);
+      g.ps = Math.max(0, +p.ps || 0);
+      g.conc = Math.max(0.1, +p.conc || 1);
+      g.psi = Math.max(0, Math.min(170, +p.psi || 0)) * D2R;
+      g.L0 = Math.max(0, +p.L0 || 0);
+      g.am = Math.PI / 2 + th / 2;
+      if (g.psi > 0) {
+        g.k = 1 + th / g.psi;
+        g.ck = Math.cos(g.k * g.psi / 2);
+        g.ex = th / (g.psi * g.k);
+      }
+      g.info.push("tip advances " + (g.ps * slip).toFixed(0) + " m",
+                  g.psi > 0 ? "backlimb fan " + (+p.psi) + "°"
+                            : "sharp backlimb kink");
+    } else if (p.method === "shear") {
+      const a = (+p.alpha || 0) * D2R;
+      if (Math.abs(a) >= 89 * D2R)
+        return { error: "The shear angle must be within ±89° of vertical." };
+      g.alpha = a;
+      g.info.push("shear " + (+p.alpha || 0) + "° from vertical",
+                  "heave " + slip.toFixed(0) + " m");
+    } else if (p.method === "fpf") {
+      g.info.push("slip " + slip.toFixed(0) + " m along the fault");
+    }
+    g.ok = true;
+    return g;
+  }
+
+  /* -- campos de velocidad (marco local, por unidad de slip) -------------- */
+  function vFBF(g, x, z, s) {
+    const th = g.th;
+    // bloque yaciente: debajo del despegue, la rampa o el plano superior
+    if (x <= 0) { if (z <= 0) return [0, 0]; }
+    else if (x < g.P2[0]) { if (z <= x * Math.tan(th)) return [0, 0]; }
+    else if (z <= g.P2[1]) return [0, 0];
+    if (leftOf(x, z, 0, 0, g.uA[0], g.uA[1])) return [1, 0];
+    if (s < g.L)
+      return leftOf(x, z, g.P2[0], g.P2[1], g.uB[0], g.uB[1])
+        ? g.r : [g.R, 0];
+    return leftOf(x, z, g.P2[0], g.P2[1], g.uB0[0], g.uB0[1])
+      ? g.r : [1, 0];
+  }
+
+  function vFPFold(g, x, z, s) {
+    const th = g.th;
+    const Lt = g.L0 + g.ps * s;
+    const tx = Lt * g.r[0], tz = Lt * g.r[1];
+    if (x <= 0) { if (z <= 0) return [0, 0]; }
+    else if (x <= tx && z <= x * Math.tan(th)) return [0, 0];
+    if (leftOf(x, z, 0, 0, g.uA[0], g.uA[1])) return [1, 0];
+    let a = Math.atan2(z - tz, x - tx);
+    if (a < th - Math.PI) a += 2 * Math.PI;          // a ∈ [θ−π, θ+π)
+    if (a < th) return [0, 0];                        // delante, bajo la prolongación
+    if (a < g.gs) return [0, 0];                      // delante del sinclinal
+    if (a < 2 * g.gs) return g.v2;                    // flanco frontal activo
+    return g.r;                                       // bloque colgante
+  }
+
+  function vTrishear(g, x, z, s) {
+    const th = g.th, r = g.r;
+    const Lt = g.L0 + g.ps * s;
+    const tx = Lt * r[0], tz = Lt * r[1];
+    const dx = x - tx, dz = z - tz;
+    const xt = dx * r[0] + dz * r[1];               // a lo largo de la falla
+    const yt = -dx * r[1] + dz * r[0];              // normal (hacia el colgante)
+    if (xt > 0) {
+      const lim = xt * g.m;
+      if (yt <= -lim) return [0, 0];
+      if (yt < lim) {
+        const q = yt / lim, aq = Math.abs(q), c = g.conc;
+        const vx = 0.5 * (Math.sign(q) * Math.pow(aq, 1 / c) + 1);
+        const vy = 0.5 * g.m / (1 + c) * (Math.pow(aq, (1 + c) / c) - 1);
+        return [vx * r[0] - vy * r[1], vx * r[1] + vy * r[0]];
+      }
+      // por encima del triángulo: bloque colgante (sigue abajo)
+    } else if (x <= 0) {
+      // detrás de la punta: yaciente bajo el despegue o la rampa
+      if (z <= 0) return [0, 0];
+    } else if (yt <= 0) return [0, 0];
+    // flanco trasero: kink bisector o abanico de Cristallini & Allmendinger
+    const al = Math.atan2(z, x);
+    const tau = al - g.am;
+    if (!(g.psi > 0)) return tau > 0 ? [1, 0] : r;
+    if (tau >= g.psi / 2) return [1, 0];
+    if (tau <= -g.psi / 2) return r;
+    const beta = th / 2 - th / g.psi * tau;
+    const V = Math.pow(g.ck / Math.cos(g.k * tau), g.ex);
+    return [V * Math.cos(beta), V * Math.sin(beta)];
+  }
+
+  const VFIELD = { fbf: vFBF, fpfold: vFPFold, trishear: vTrishear };
+
+  /* Integra una nube de puntos (marco local) con RK2 de punto medio. */
+  function integrate(g, pts, slip, steps) {
+    const vf = VFIELD[g.method];
+    const n = Math.max(1, Math.round(steps) || 1);
+    const ds = slip / n;
+    const out = pts.map(p => [p[0], p[1]]);
+    if (!(slip > 0)) return out;
+    for (let k = 0; k < n; k++) {
+      const s = k * ds;
+      for (const p of out) {
+        const v1 = vf(g, p[0], p[1], s);
+        const mx = p[0] + v1[0] * ds / 2, mz = p[1] + v1[1] * ds / 2;
+        const v2 = vf(g, mx, mz, s + ds / 2);
+        p[0] += v2[0] * ds; p[1] += v2[1] * ds;
+      }
+    }
+    return out;
+  }
+
+  /* -- trazas de falla ------------------------------------------------------
+   * Polilínea de la falla en coordenadas de la sección. `slip` define la
+   * posición de la punta en los modelos que propagan. `x0/x1` son los
+   * extremos locales del despegue y del plano superior. */
+  function faultLocal(p, g, slip, x0, x1) {
+    const th = g.th;
+    if (p.method === "fbf" || ((p.method === "fpf" || p.method === "shear") &&
+                               p.H > 0)) {
+      const P2 = [p.H / Math.tan(th), p.H];
+      return [[Math.min(x0, -1), 0], [0, 0], P2,
+              [Math.max(x1, P2[0] + 1), p.H]];
+    }
+    if (p.method === "fpf" || p.method === "shear") {
+      const far = Math.max(x1, 1);
+      return [[Math.min(x0, -1), 0], [0, 0],
+              [far, far * Math.tan(th)]];
+    }
+    const Lt = g.L0 + g.ps * Math.max(0, slip);
+    return [[Math.min(x0, -1), 0], [0, 0], [Lt * g.r[0], Lt * g.r[1]]];
+  }
+
+  /* -- superficies axiales activas (marco local), al slip dado ------------ */
+  function axialsLocal(p, g, slip, top) {
+    const out = [];
+    function ray(o, u, kind) {
+      if (u[1] <= EPS) return;
+      const t = (top - o[1]) / u[1];
+      if (!(t > 0)) return;
+      out.push({ kind: kind, pts: [o.slice(), [o[0] + u[0] * t, o[1] + u[1] * t]] });
+    }
+    if (p.method === "fbf") {
+      ray([0, 0], g.uA, "A");
+      ray(g.P2, slip < g.L ? g.uB : g.uB0, slip < g.L ? "B" : "B0");
+    } else if (p.method === "fpfold") {
+      const Lt = g.L0 + g.ps * slip;
+      const T = [Lt * g.r[0], Lt * g.r[1]];
+      ray([0, 0], g.uA, "A");
+      ray(T, dirv(g.gs), "syncline");
+      ray(T, dirv(2 * g.gs), "forelimb");
+    } else if (p.method === "trishear") {
+      const Lt = g.L0 + g.ps * slip;
+      const T = [Lt * g.r[0], Lt * g.r[1]];
+      const half = Math.atan(g.m);
+      ray(T, dirv(g.th + half), "trishear");
+      // el borde inferior del triángulo apunta hacia abajo si θ < φ/2
+      const lo = dirv(g.th - half);
+      const reach = Math.max(1, top) * 2;
+      out.push({ kind: "trishear",
+                 pts: [T.slice(), [T[0] + lo[0] * reach, T[1] + lo[1] * reach]] });
+      if (g.psi > 0) {
+        ray([0, 0], dirv(g.am - g.psi / 2), "backlimb");
+        ray([0, 0], dirv(g.am + g.psi / 2), "backlimb");
+      } else ray([0, 0], dirv(g.am), "A");
+    }
+    return out;
+  }
+
+  /* Densifica una polilínea (marco cualquiera) a `n` puntos. */
+  function sampleLine(pts, n) {
+    const out = [];
+    const L = [0];
+    for (let i = 1; i < pts.length; i++)
+      L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0],
+                                   pts[i][1] - pts[i - 1][1]));
+    const tot = L[L.length - 1];
+    if (!(tot > 0)) return pts.map(q => q.slice());
+    let j = 0;
+    for (let k = 0; k < n; k++) {
+      const u = tot * k / (n - 1);
+      while (j < pts.length - 2 && L[j + 1] < u) j++;
+      const seg = L[j + 1] - L[j];
+      const t = seg > 0 ? (u - L[j]) / seg : 0;
+      out.push([pts[j][0] + t * (pts[j + 1][0] - pts[j][0]),
+                pts[j][1] + t * (pts[j + 1][1] - pts[j][1])]);
+    }
+    return out;
+  }
+
+  /* -- Fault Parallel Flow (coordenadas de la sección) ---------------------
+   * Láminas de flujo = paralelas a la falla con esquinas a inglete sobre
+   * las bisectrices de cada quiebre. Cada punto pertenece a la franja entre
+   * las bisectrices de los extremos de UN segmento (la de |h| mínimo si hay
+   * varias, del lado cóncavo), así su lámina es exacta también en el
+   * abanico de un quiebre convexo, donde el punto más cercano de la falla
+   * es el vértice y no dice de qué lado del quiebre está el punto. */
+  function fpfMapper(faultLR, margin) {
+    const f = extendEnds(faultLR, margin);
+    const n = f.length;
+    const nrm = [], bis = [];
+    for (let i = 0; i < n - 1; i++) {
+      const dx = f[i + 1][0] - f[i][0], dz = f[i + 1][1] - f[i][1];
+      const L = Math.hypot(dx, dz) || 1;
+      nrm.push([-dz / L, dx / L]);
+    }
+    for (let i = 0; i < n; i++) {
+      let b;
+      if (i === 0) b = nrm[0];
+      else if (i === n - 1) b = nrm[n - 2];
+      else {
+        const bx = nrm[i - 1][0] + nrm[i][0], bz = nrm[i - 1][1] + nrm[i][1];
+        const L = Math.hypot(bx, bz);
+        b = L < EPS ? nrm[i] : [bx / L, bz / L];
+      }
+      // inglete: su proyección sobre la normal de cada segmento vecino es 1
+      const c = Math.max(0.05, b[0] * (i < n - 1 ? nrm[i] : nrm[i - 1])[0] +
+                               b[1] * (i < n - 1 ? nrm[i] : nrm[i - 1])[1]);
+      bis.push({ b: b, m: [b[0] / c, b[1] / c] });
+    }
+    function lamina(h) {
+      return f.map((v, i) => [v[0] + h * bis[i].m[0], v[1] + h * bis[i].m[1]]);
+    }
+    function locate(p) {
+      let best = null;
+      for (let j = 0; j < n - 1; j++) {
+        const a = f[j], c = f[j + 1];
+        const h = (p[0] - a[0]) * nrm[j][0] + (p[1] - a[1]) * nrm[j][1];
+        const b0 = bis[j].b, b1 = bis[j + 1].b;
+        const s0 = cross(b0[0], b0[1], p[0] - a[0], p[1] - a[1]);
+        const r0 = cross(b0[0], b0[1], c[0] - a[0], c[1] - a[1]);
+        const s1 = cross(b1[0], b1[1], p[0] - c[0], p[1] - c[1]);
+        const r1 = cross(b1[0], b1[1], a[0] - c[0], a[1] - c[1]);
+        if (s0 * r0 < -EPS || s1 * r1 < -EPS) continue;
+        if (!best || Math.abs(h) < Math.abs(best.h)) best = { j: j, h: h };
+      }
+      return best;
+    }
+    function mapper(p, slip) {
+      const loc = locate(p);
+      if (!loc || loc.h <= 0) return [p[0], p[1]];       // yaciente
+      const lam = lamina(loc.h);
+      const j = loc.j;
+      const cum = [0];
+      for (let i = 1; i < lam.length; i++)
+        cum.push(cum[i - 1] + Math.hypot(lam[i][0] - lam[i - 1][0],
+                                         lam[i][1] - lam[i - 1][1]));
+      const a = lam[j], c = lam[j + 1];
+      const L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1;
+      const t = ((p[0] - a[0]) * (c[0] - a[0]) + (p[1] - a[1]) * (c[1] - a[1])) / L;
+      let u = cum[j] + t + slip;
+      // punto a arco u sobre la lámina, prolongando los extremos en recta
+      let k = 0;
+      if (u <= 0) k = 0;
+      else if (u >= cum[cum.length - 1]) k = lam.length - 2;
+      else while (k < lam.length - 2 && cum[k + 1] < u) k++;
+      const A = lam[k], B = lam[k + 1];
+      const seg = cum[k + 1] - cum[k] || 1;
+      const tt = (u - cum[k]) / seg;
+      return [A[0] + tt * (B[0] - A[0]), A[1] + tt * (B[1] - A[1])];
+    }
+    // ¿bloque colgante? (lado izquierdo = arriba de la falla orientada)
+    mapper.isHW = function (p) { const loc = locate(p); return !!loc && loc.h > 0; };
+    return mapper;
+  }
+
+  /* -- cizalla simple inclinada (coordenadas de la sección) --------------- */
+  function shearMapper(faultSec, sh, heaveVec, isHW) {
+    // faultSec: polilínea ya extendida. sh: dirección de cizalla (unitaria,
+    // hacia arriba). Devuelve f(p) -> p' (o p si está en el yaciente).
+    function hits(q) {
+      const ts = [];
+      for (let i = 0; i < faultSec.length - 1; i++) {
+        const a = faultSec[i], b = faultSec[i + 1];
+        const ex = b[0] - a[0], ez = b[1] - a[1];
+        const den = cross(sh[0], sh[1], ex, ez);
+        if (Math.abs(den) < EPS) continue;
+        const wx = a[0] - q[0], wz = a[1] - q[1];
+        const t = cross(wx, wz, ex, ez) / den;     // q + t·sh
+        const u = cross(wx, wz, sh[0], sh[1]) / den; // a + u·e
+        if (u >= -EPS && u <= 1 + EPS) ts.push(t);
+      }
+      return ts;
+    }
+    function below(q) {
+      let best = -Infinity;
+      for (const t of hits(q)) if (t <= 1e-9 && t > best) best = t;
+      return best === -Infinity ? null : best;
+    }
+    function above(q) {
+      let best = Infinity;
+      for (const t of hits(q)) if (t > 1e-9 && t < best) best = t;
+      return best === Infinity ? null : best;
+    }
+    return function (p) {
+      if (isHW && !isHW(p)) return [p[0], p[1]];   // yaciente
+      const t0 = below(p);
+      if (t0 === null) return [p[0], p[1]];
+      const h = -t0;
+      const q = [p[0] + heaveVec[0], p[1] + heaveVec[1]];
+      // la falla bajo q sobre su línea de cizalla (o, si q quedó metido
+      // bajo la falla — acortamiento contra una rampa —, la de arriba)
+      let tq = below(q);
+      if (tq === null) tq = above(q);
+      if (tq === null) return [q[0], q[1]];
+      const fx = q[0] + tq * sh[0], fz = q[1] + tq * sh[1];
+      return [fx + h * sh[0], fz + h * sh[1]];
+    };
+  }
+
+  /* -- API principal ---------------------------------------------------------
+   * run(p, sets) -> {ok, error, info, fault (sección), axialActive,
+   *                  outputs: sets deformados (mismas claves), ...}
+   * p: parámetros (method, s0, zd, verg, theta, H, L0, phi, ps, conc, psi,
+   *    alpha, slip, steps, faultSrc, faultLine (vértices), top, x0, x1).
+   * sets: {clave: [[s,z], ...]} — puntos en coordenadas de la sección. */
+  function run(p, sets) {
+    const g = setup(p);
+    if (!g.ok) return { ok: false, error: g.error };
+    const F = frame(p);
+    const slip = +p.slip || 0;
+    const res = { ok: true, info: g.info, g: g, outputs: {} };
+    const top = p.top;
+
+    let axActive = [];
+    if (usesLine(p) && (p.faultLine || []).length < 2)
+      return { ok: false, error: "Click a fault line on the section first." };
+    const faultSec = trace(p, g, slip);
+    res.fault = faultSec;
+    res.fault0 = trace(p, g, 0);
+
+    // superficies axiales activas e iniciales (las inactivas se deforman)
+    let ax0 = [];
+    if (VFIELD[p.method]) {
+      const topL = top - p.zd;
+      ax0 = axialsLocal(p, g, 0, topL).map(a => ({ kind: a.kind, pts: a.pts.map(F.toSec) }));
+      axActive = axialsLocal(p, g, slip, topL).map(a => ({ kind: a.kind, pts: a.pts.map(F.toSec) }));
+    } else {
+      // quiebres de la falla: bisectriz (FPF) o dirección de cizalla
+      const lr = SW.restore.orientLR(faultSec);
+      const sh = p.method === "shear" ? shearDir(p, F.v) : null;
+      for (let i = 1; i < lr.length - 1; i++) {
+        let u;
+        if (sh) u = sh;
+        else {
+          const n0 = SW.restore.leftNormal(lr, i - 1);
+          const n1 = SW.restore.leftNormal(lr, i);
+          const nx = n0[0] + n1[0], nz = n0[1] + n1[1];
+          const L = Math.hypot(nx, nz);
+          if (L < EPS) continue;
+          u = [nx / L, nz / L];
+        }
+        if (u[1] <= EPS) continue;
+        const t = (top - lr[i][1]) / u[1];
+        if (!(t > 0)) continue;
+        ax0.push({ kind: "bend", pts: [lr[i].slice(), [lr[i][0] + u[0] * t, lr[i][1] + u[1] * t]] });
+      }
+      axActive = ax0.map(a => ({ kind: a.kind, pts: a.pts.map(q => q.slice()) }));
+    }
+    res.axialActive = axActive;
+
+    // todo lo que se deforma, en un único lote
+    const keys = Object.keys(sets);
+    const AXN = 48;
+    // la raíz de cada superficie axial está SOBRE la falla, que cuenta como
+    // yaciente: se la corre un pelo hacia el bloque colgante para que viaje
+    // con él
+    const nudge = Math.max(1e-6, Math.abs(p.x1 - p.x0) * 1e-6);
+    const axSamples = ax0.map(function (a) {
+      const q = a.pts.map(v => v.slice());
+      const dx = q[1][0] - q[0][0], dz = q[1][1] - q[0][1];
+      const L = Math.hypot(dx, dz) || 1;
+      q[0] = [q[0][0] + dx / L * nudge, q[0][1] + dz / L * nudge];
+      return sampleLine(q, AXN);
+    });
+    const flat = [];
+    for (const k of keys) for (const q of sets[k]) flat.push(q);
+    for (const a of axSamples) for (const q of a) flat.push(q);
+
+    let moved;
+    if (VFIELD[p.method]) {
+      const loc = flat.map(F.toLocal);
+      moved = integrate(g, loc, Math.max(0, slip), p.steps).map(F.toSec);
+    } else if (p.method === "fpf") {
+      const lr = SW.restore.orientLR(faultSec);
+      const span = Math.max(1, (p.x1 - p.x0) || 1);
+      const f = fpfMapper(lr, span * 3);
+      moved = flat.map(q => f(q, slip * F.v));
+    } else {
+      const lr = SW.restore.orientLR(faultSec);
+      const span = Math.max(1, (p.x1 - p.x0) || 1);
+      const ext = extendEnds(lr, span * 3);
+      const side = fpfMapper(lr, span * 3).isHW;
+      const f = shearMapper(ext, shearDir(p, F.v), [slip * F.v, 0], side);
+      moved = flat.map(f);
+    }
+    let i = 0;
+    for (const k of keys) {
+      res.outputs[k] = moved.slice(i, i + sets[k].length);
+      i += sets[k].length;
+    }
+    res.axialInactive = axSamples.map(function (a, j) {
+      const pts = moved.slice(i + j * AXN, i + (j + 1) * AXN);
+      return { kind: ax0[j].kind, pts: pts };
+    });
+    return res;
+  }
+
+  function usesLine(p) {
+    return (p.method === "fpf" || p.method === "shear") && p.faultSrc === "line";
+  }
+  function trace(p, g, slip) {
+    if (usesLine(p)) return (p.faultLine || []).map(v => v.slice());
+    return faultLocal(p, g, slip, p.x0, p.x1).map(frame(p).toSec);
+  }
+  /* Traza de la falla en coordenadas de la sección al slip dado (null si
+   * los parámetros no son válidos). */
+  function faultTrace(p, slip) {
+    const g = setup(p);
+    if (!g.ok) return null;
+    if (usesLine(p) && (p.faultLine || []).length < 2) return null;
+    return trace(p, g, slip === undefined ? +p.slip || 0 : slip);
+  }
+
+  function shearDir(p, v) {
+    const a = (+p.alpha || 0) * D2R;
+    return [Math.sin(a) * v, Math.cos(a)];
+  }
+
+  function extendEnds(verts, margin) {
+    const out = verts.map(q => q.slice());
+    if (out.length < 2) return out;
+    function ext(a, b) {
+      const dx = a[0] - b[0], dz = a[1] - b[1], L = Math.hypot(dx, dz);
+      return L < EPS ? null : [a[0] + dx / L * margin, a[1] + dz / L * margin];
+    }
+    const e0 = ext(out[0], out[1]);
+    const e1 = ext(out[out.length - 1], out[out.length - 2]);
+    if (e0) out.unshift(e0);
+    if (e1) out.push(e1);
+    return out;
+  }
+
+  /* -- marcadores de strain -------------------------------------------------
+   * Círculos en una grilla regular sobre la caja dada; `seg` lados. */
+  function strainGrid(box, spacing, seg) {
+    seg = seg || 36;
+    const out = [];
+    if (!(spacing > 0)) return out;
+    const r = spacing * 0.32;
+    const nx = Math.floor((box.s1 - box.s0) / spacing);
+    const nz = Math.floor((box.z1 - box.z0) / spacing);
+    if (nx * nz > 900) return out;
+    const ox = box.s0 + ((box.s1 - box.s0) - nx * spacing) / 2 + spacing / 2;
+    const oz = box.z0 + ((box.z1 - box.z0) - nz * spacing) / 2 + spacing / 2;
+    for (let i = 0; i < nx; i++)
+      for (let j = 0; j < nz; j++) {
+        const cx = ox + i * spacing, cz = oz + j * spacing;
+        const ring = [];
+        for (let k = 0; k <= seg; k++) {
+          const a = 2 * Math.PI * k / seg;
+          ring.push([cx + r * Math.cos(a), cz + r * Math.sin(a)]);
+        }
+        out.push(ring);
+      }
+    return out;
+  }
+
+  /* Elipse de strain de un anillo deformado (momentos de segundo orden):
+   * {ratio, angleDeg} — R = eje mayor / eje menor. */
+  function ellipseOf(ring) {
+    const n = ring.length - 1;
+    if (n < 3) return null;
+    let cx = 0, cz = 0;
+    for (let i = 0; i < n; i++) { cx += ring[i][0]; cz += ring[i][1]; }
+    cx /= n; cz /= n;
+    let sxx = 0, szz = 0, sxz = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = ring[i][0] - cx, dz = ring[i][1] - cz;
+      sxx += dx * dx; szz += dz * dz; sxz += dx * dz;
+    }
+    const tr = sxx + szz, det = sxx * szz - sxz * sxz;
+    const disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+    const l1 = tr / 2 + disc, l2 = Math.max(tr / 2 - disc, 1e-30);
+    return { ratio: Math.sqrt(l1 / l2),
+             angleDeg: 0.5 * Math.atan2(2 * sxz, sxx - szz) / D2R,
+             center: [cx, cz] };
+  }
+
+  /* Corta una polilínea deformada donde un segmento cruza la falla (el
+   * tramo que uniría bloque colgante y yaciente). */
+  function splitAtFault(verts, fault) {
+    const pieces = [];
+    let cur = [verts[0]];
+    for (let i = 1; i < verts.length; i++) {
+      const a = verts[i - 1], b = verts[i];
+      let cut = false;
+      for (let k = 0; k < fault.length - 1 && !cut; k++) {
+        const h = SW.geom.segmentIntersection(a, b, fault[k], fault[k + 1]);
+        if (h && h[0] > 1e-7 && h[0] < 1 - 1e-7) cut = true;
+      }
+      if (cut) {
+        if (cur.length >= 2) pieces.push(cur);
+        cur = [b];
+      } else cur.push(b);
+    }
+    if (cur.length >= 2) pieces.push(cur);
+    return pieces;
+  }
+
+  /* Inserta, en cada cruce con la falla inicial, dos vértices a ambos lados
+   * (así el corte queda justo sobre la falla y no a un segmento de ella). */
+  function cutAtFault(verts, fault, eps) {
+    const out = [verts[0].slice()];
+    for (let i = 1; i < verts.length; i++) {
+      const a = verts[i - 1], b = verts[i];
+      const ts = [];
+      for (let k = 0; k < fault.length - 1; k++) {
+        const h = SW.geom.segmentIntersection(a, b, fault[k], fault[k + 1]);
+        if (h && h[0] > 1e-9 && h[0] < 1 - 1e-9) ts.push(h[0]);
+      }
+      ts.sort((x, y) => x - y);
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const d = Math.min(eps / L, 0.25);
+      for (const t of ts) {
+        for (const tt of [t - d, t + d]) {
+          if (tt <= 0 || tt >= 1) continue;
+          out.push([a[0] + tt * (b[0] - a[0]), a[1] + tt * (b[1] - a[1])]);
+        }
+      }
+      out.push(b.slice());
+    }
+    return out;
+  }
+
+  return { METHODS, run, setup, faultTrace, suppeGamma, strainGrid, ellipseOf,
+           splitAtFault, cutAtFault, sampleLine, extendEnds,
+           _v: VFIELD, _integrate: integrate };
+})();
+
+/* ==== js/tools/forward.js ====
+ * Tools: Forward modeling — una tool por método (fwd_fpf, fwd_fbf,
+ * fwd_fpfold, fwd_trishear, fwd_shear) que comparten estado y el bloque de
+ * opciones del riel. Deforma las líneas seleccionadas (o, sin selección,
+ * todos los horizontes y contactos visibles) con SW.forward y muestra en
+ * vivo el resultado: la sección deformada, la falla, las superficies
+ * axiales activas (fijas a la falla) e inactivas (llevadas por el bloque
+ * colgante) y los marcadores de strain (círculos que se vuelven elipses).
+ * Clic en una línea de falla = falla de referencia (para "From fault" y
+ * para Parallel flow / Simple shear con "Clicked fault line"); clic en
+ * otra línea = agregarla/quitarla de la selección; "Place" + clic = base
+ * de la rampa. Apply lo escribe en la sección en un solo paso de undo. */
+"use strict";
+window.SW = window.SW || {};
+
+(function () {
+  const METHODS = ["fpf", "fbf", "fpfold", "trishear", "shear"];
+  const st = { method: null, faultId: null, placing: false,
+               cache: null, key: "", timer: null };
+  const $ = id => document.getElementById(id);
+
+  function num(id, def) {
+    const el = $(id);
+    if (!el) return def;
+    const v = String(el.value).trim();
+    return v === "" || !isFinite(+v) ? def : +v;
+  }
+  function checked(id) { const el = $(id); return !!(el && el.checked); }
+  function faultLine() {
+    const l = st.faultId ? SW.model.getLine(st.faultId) : null;
+    return l && (l.vertices || []).length >= 2 ? l : null;
+  }
+  function usesLine() {
+    const src = $("fwd-fault-src");
+    return (st.method === "fpf" || st.method === "shear") &&
+           src && src.value === "line";
+  }
+
+  /* Líneas a deformar: la selección, o todos los horizontes y contactos
+   * visibles si no hay nada seleccionado. Nunca la falla de referencia. */
+  function targets() {
+    const fid = st.faultId;
+    const ok = l => l && !l.locked && l.visible !== false &&
+                    (l.vertices || []).length >= 2 && l.id !== fid;
+    let lines = SW.view.selectedLines().filter(ok);
+    if (!lines.length)
+      lines = (SW.model.state.sec.lines || []).filter(l => ok(l) &&
+        (l.kind === "horizon" || l.kind === "contact"));
+    return lines;
+  }
+
+  function bbox(lines) {
+    let s0 = Infinity, s1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const l of lines)
+      for (const v of l.vertices) {
+        if (v[0] < s0) s0 = v[0]; if (v[0] > s1) s1 = v[0];
+        if (v[1] < z0) z0 = v[1]; if (v[1] > z1) z1 = v[1];
+      }
+    if (!isFinite(s0)) {
+      const sec = SW.model.state.sec;
+      s0 = 0; s1 = sec.length || 10000;
+      z0 = sec.z_min !== undefined ? sec.z_min : -5000;
+      z1 = sec.z_max !== undefined ? sec.z_max : 1000;
+    }
+    if (s1 - s0 < 1) s1 = s0 + 1;
+    if (z1 - z0 < 1) z1 = z0 + 1;
+    return { s0, s1, z0, z1 };
+  }
+
+  const round = x => {
+    const a = Math.abs(x);
+    const step = a >= 1000 ? 10 : a >= 100 ? 5 : 1;
+    return Math.round(x / step) * step;
+  };
+
+  /* Valores iniciales a partir de lo dibujado — sólo en campos vacíos. */
+  function ensureDefaults() {
+    const b = bbox(targets());
+    const w = b.s1 - b.s0, h = b.z1 - b.z0;
+    const fill = (id, v) => { const el = $(id); if (el && String(el.value).trim() === "") el.value = round(v); };
+    fill("fwd-s0", b.s0 + 0.3 * w);
+    fill("fwd-zd", b.z0);
+    fill("fwd-h", Math.max(h * 0.45, 1));
+    fill("fwd-slip", Math.max(w * 0.08, 1));
+  }
+
+  function params() {
+    const lines = targets();
+    const box = bbox(lines);
+    const fl = faultLine();
+    const p = {
+      method: st.method,
+      faultSrc: usesLine() ? "line" : "param",
+      faultLine: fl ? fl.vertices.map(v => v.slice()) : null,
+      verg: num("fwd-verg", 1),
+      s0: num("fwd-s0", box.s0), zd: num("fwd-zd", box.z0),
+      theta: num("fwd-theta", 25), H: num("fwd-h", 0),
+      L0: num("fwd-l0", 0), phi: num("fwd-phi", 60), ps: num("fwd-ps", 2),
+      psi: num("fwd-psi", 0), conc: num("fwd-conc", 1),
+      alpha: num("fwd-alpha", 0), slip: num("fwd-slip", 0),
+      steps: Math.max(10, Math.min(2000, num("fwd-steps", 100))),
+    };
+    const span = Math.max(box.s1 - box.s0, box.z1 - box.z0);
+    // extremos locales del despegue y del plano superior, y techo de las
+    // superficies axiales
+    const v = p.verg < 0 ? -1 : 1;
+    const xa = (box.s0 - p.s0) * v, xb = (box.s1 - p.s0) * v;
+    p.x0 = Math.min(xa, xb) - 0.1 * span;
+    p.x1 = Math.max(xa, xb) + 0.1 * span;
+    p.top = box.z1 + 0.15 * (box.z1 - box.z0 || span);
+    return { p, lines, box, span };
+  }
+
+  /* Firma barata de todo lo que cambia el resultado (entradas del riel,
+   * líneas en juego y sus vértices), para no recalcular al hacer pan/zoom. */
+  function signature(pp) {
+    const parts = [JSON.stringify(pp.p), checked("fwd-axial"),
+                   checked("fwd-strain"), num("fwd-mspace", 0)];
+    for (const l of pp.lines) {
+      let a = 0;
+      for (const v of l.vertices) a += v[0] * 1.3 + v[1] * 0.7;
+      parts.push(l.id + ":" + l.vertices.length + ":" + a.toFixed(3));
+    }
+    return parts.join("|");
+  }
+
+  function markerSpacing(pp) {
+    const user = num("fwd-mspace", 0);
+    if (user > 0) return user;
+    return pp.span / 14;
+  }
+
+  function compute() {
+    const pp = params();
+    const key = signature(pp);
+    if (st.cache && st.key === key) return st.cache;
+    st.key = key;
+    const { p, lines, box, span } = pp;
+    const out = { ok: false, lines: [], markers: [], axActive: [],
+                  axInactive: [], p: p };
+    const sp = span / 400;
+    const f0 = SW.forward.faultTrace(p, 0);
+    const sets = {};
+    lines.forEach(function (l, i) {
+      let v = SW.geom.resamplePolyline(l.vertices, sp);
+      if (f0) v = SW.forward.cutAtFault(v, f0, sp * 0.05);
+      sets["l" + i] = v;
+    });
+    let rings = [];
+    if (checked("fwd-strain")) {
+      const msp = markerSpacing(pp);
+      const pad = 0.02 * span;
+      rings = SW.forward.strainGrid({ s0: box.s0 + pad, s1: box.s1 - pad,
+                                      z0: box.z0 + pad, z1: box.z1 - pad },
+                                    msp, 36);
+      rings.forEach((r, i) => { sets["m" + i] = r; });
+    }
+    let res;
+    try { res = SW.forward.run(p, sets); }
+    catch (e) { console.error(e); res = { ok: false, error: String(e.message || e) }; }
+    if (!res.ok) {
+      out.error = res.error;
+      st.cache = out;
+      return out;
+    }
+    out.ok = true;
+    out.info = res.info;
+    out.fault = res.fault;
+    const tol = sp * 0.02;
+    lines.forEach(function (l, i) {
+      const pieces = SW.forward.splitAtFault(res.outputs["l" + i], res.fault)
+        .map(pc => SW.geom.simplifyDP(pc, tol))
+        .filter(pc => pc.length >= 2);
+      out.lines.push({ line: l, pieces: pieces });
+    });
+    rings.forEach(function (r, i) {
+      const def = res.outputs["m" + i];
+      const pcs = SW.forward.splitAtFault(def, res.fault);
+      out.markers.push({ pieces: pcs, closed: pcs.length === 1,
+                         ell: pcs.length === 1 ? SW.forward.ellipseOf(def) : null });
+    });
+    if (checked("fwd-axial")) {
+      out.axActive = res.axialActive;
+      out.axInactive = res.axialInactive.map(a => ({
+        kind: a.kind, pieces: SW.forward.splitAtFault(a.pts, res.fault) }));
+    }
+    st.cache = out;
+    return out;
+  }
+
+  function renderInfo(res) {
+    const el = $("fwd-info");
+    if (!el) return;
+    el.textContent = "";
+    if (!res) return;
+    if (!res.ok) {
+      const b = document.createElement("span");
+      b.className = "err";
+      b.textContent = res.error || "Invalid parameters.";
+      el.appendChild(b);
+      return;
+    }
+    const n = res.lines.length;
+    const txt = (res.info || []).join(" · ") +
+      (n ? " · " + n + " line" + (n === 1 ? "" : "s") : " · no lines to deform");
+    el.textContent = txt;
+    if (res.markers.length) {
+      let rmax = 1;
+      for (const m of res.markers) if (m.ell) rmax = Math.max(rmax, m.ell.ratio);
+      el.textContent += " · max strain ratio " + rmax.toFixed(2);
+    }
+  }
+
+  /* -- visibilidad de campos según el método ------------------------------ */
+  function syncFields() {
+    const title = $("fwd-title");
+    if (title && st.method) title.textContent = SW.forward.METHODS[st.method].label;
+    const geom = !(st.method === "fpf" || st.method === "shear") || !usesLine();
+    document.querySelectorAll("#toolrail [data-m]").forEach(function (el) {
+      const on = el.dataset.m.split(/\s+/).indexOf(st.method) >= 0;
+      el.classList.toggle("fwd-hide", !on);
+    });
+    document.querySelectorAll("#toolrail [data-geom]").forEach(function (el) {
+      el.classList.toggle("fwd-hide", !geom);
+    });
+    const strain = checked("fwd-strain");
+    document.querySelectorAll("#toolrail [data-strain]").forEach(function (el) {
+      el.classList.toggle("fwd-hide", !strain);
+    });
+    const lab = $("fwd-slip-label");
+    if (lab && lab.firstChild)
+      lab.firstChild.nodeValue = st.method === "shear" ? "Heave (m)" : "Slip (m)";
+    const place = $("fwd-place-btn");
+    if (place) place.classList.toggle("active", st.placing);
+  }
+
+  function refresh() {
+    syncFields();
+    SW.view.requestDraw();
+  }
+
+  function refreshSoon() {
+    clearTimeout(st.timer);
+    st.timer = setTimeout(refresh, 120);
+  }
+
+  /* -- dibujo ---------------------------------------------------------------- */
+  function strokePath(ctx, pts, close) {
+    const V = SW.view;
+    ctx.beginPath();
+    pts.forEach((v, i) => i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1]))
+                            : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+    if (close) ctx.closePath();
+  }
+
+  function drawOverlay(ctx) {
+    const V = SW.view;
+    const preview = checked("fwd-preview");
+    const res = compute();
+    renderInfo(res);
+    const fl = faultLine();
+    if (fl) {                                     // falla de referencia
+      ctx.save();
+      ctx.strokeStyle = SW.render.COLORS.select;
+      ctx.lineWidth = 5; ctx.globalAlpha = 0.3;
+      strokePath(ctx, fl.vertices); ctx.stroke();
+      ctx.restore();
+    }
+    if (!res.ok) return;
+    const r = V.plotRect();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+    if (preview) {
+      // velo sobre la sección actual para que resalte la deformada
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      for (const e of res.lines) {
+        ctx.strokeStyle = SW.render.lineColor(e.line);
+        ctx.lineWidth = Math.max(1.5, +(e.line.style || {}).width || 2);
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+        for (const pc of e.pieces) { strokePath(ctx, pc); ctx.stroke(); }
+      }
+    }
+    // falla (con la punta en su posición final)
+    ctx.strokeStyle = SW.render.COLORS.kinds.fault || "#d92d3a";
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash(preview ? [] : [7, 4]);
+    strokePath(ctx, res.fault); ctx.stroke();
+    ctx.setLineDash([]);
+    if (!usesLine()) {                            // base de la rampa
+      const b = [res.p.s0, res.p.zd];
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = SW.render.COLORS.kinds.fault || "#d92d3a";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(V.sx(b[0]), V.zy(b[1]), 5, 0, 7);
+      ctx.fill(); ctx.stroke();
+    }
+    if (preview) {
+      const axc = SW.settings.sym("axialColor") || "#6a6ac8";
+      ctx.strokeStyle = axc;
+      ctx.lineWidth = 1.6; ctx.setLineDash([8, 5]);
+      for (const a of res.axActive) { strokePath(ctx, a.pts); ctx.stroke(); }
+      ctx.lineWidth = 1.2; ctx.setLineDash([2, 4]);
+      for (const a of res.axInactive)
+        for (const pc of a.pieces) { strokePath(ctx, pc); ctx.stroke(); }
+      ctx.setLineDash([]);
+      for (const m of res.markers) {
+        ctx.strokeStyle = "#0f766e"; ctx.lineWidth = 1.2;
+        ctx.fillStyle = "rgba(15,118,110,0.12)";
+        for (const pc of m.pieces) {
+          strokePath(ctx, pc, m.closed);
+          if (m.closed) ctx.fill();
+          ctx.stroke();
+        }
+        if (m.ell && m.ell.ratio > 1.02) {        // eje mayor de la elipse
+          const c = m.ell.center, a = m.ell.angleDeg * Math.PI / 180;
+          const len = markerSpacingPx(res) * 0.36 * Math.sqrt(m.ell.ratio);
+          const cx = V.sx(c[0]), cy = V.zy(c[1]);
+          // el ángulo está en (s, z); en pantalla z crece hacia abajo y con VE
+          const dx = Math.cos(a), dy = -Math.sin(a) * (V.state.ve || 1);
+          const L = Math.hypot(dx, dy) || 1;
+          ctx.beginPath();
+          ctx.moveTo(cx - dx / L * len, cy - dy / L * len);
+          ctx.lineTo(cx + dx / L * len, cy + dy / L * len);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function markerSpacingPx(res) {
+    const pp = params();
+    return markerSpacing(pp) * (SW.view.state.scale || 1);
+  }
+
+  /* -- acciones -------------------------------------------------------------- */
+  function setFaultFromLine(line) {
+    st.faultId = line.id;
+    SW.view.status("Reference fault: " + (line.name || "fault") +
+      (st.method === "fpf" || st.method === "shear"
+        ? ". Choose \"Clicked fault line\" to deform over it, or press \"From fault\"."
+        : ". Press \"From fault\" to take the ramp from it."));
+    refresh();
+  }
+
+  function fitFromFault() {
+    let fl = faultLine();
+    if (!fl) {
+      const sel = SW.view.selectedLines().filter(l => l.kind === "fault");
+      if (sel.length) { fl = sel[0]; st.faultId = fl.id; }
+    }
+    if (!fl) { SW.view.status("Click a fault line on the section first."); return; }
+    const vs = fl.vertices;
+    const a = vs[0], b = vs[vs.length - 1];
+    const lo = a[1] <= b[1] ? a : b, hi = a[1] <= b[1] ? b : a;
+    const ds = hi[0] - lo[0], dz = hi[1] - lo[1];
+    if (!(dz > 0) || Math.abs(ds) < 1e-9) {
+      SW.view.status("The fault must be inclined to define a ramp.");
+      return;
+    }
+    const set = (id, v) => { const el = $(id); if (el) el.value = v; };
+    set("fwd-verg", ds > 0 ? "1" : "-1");
+    set("fwd-s0", round(lo[0]));
+    set("fwd-zd", round(lo[1]));
+    set("fwd-theta", Math.round(Math.atan2(dz, Math.abs(ds)) * 180 / Math.PI));
+    set("fwd-h", round(dz));
+    set("fwd-l0", round(Math.hypot(ds, dz)));
+    SW.view.status("Ramp taken from " + (fl.name || "the fault") +
+                   ": base, angle, height and initial tip.");
+    refresh();
+  }
+
+  function copyProps(src, dst, name) {
+    dst.style = JSON.parse(JSON.stringify(src.style || dst.style));
+    dst.unit_id = src.unit_id || null;
+    if (src.fault_style)
+      dst.fault_style = JSON.parse(JSON.stringify(src.fault_style));
+    dst.name = name;
+    return dst;
+  }
+
+  function apply() {
+    const res = compute();
+    if (!res.ok) { SW.view.status(res.error || "Invalid parameters."); return; }
+    if (!res.lines.length) {
+      SW.view.status("Nothing to deform: select lines or draw horizons first.");
+      return;
+    }
+    const redo = [], undo = [], added = [], unitAdds = [];
+    let moved = 0, split = 0;
+    for (const e of res.lines) {
+      const l = e.line;
+      if (!e.pieces.length) continue;
+      // el tramo más largo conserva la línea original (id, unidad, nombre)
+      let main = 0, best = -1;
+      e.pieces.forEach(function (pc, i) {
+        const L = SW.geom.polylineLength(pc);
+        if (L > best) { best = L; main = i; }
+      });
+      redo.push({ op: "replace_vertices", id: l.id, vertices: e.pieces[main] });
+      undo.push({ op: "replace_vertices", id: l.id, vertices: l.vertices });
+      moved++;
+      let k = 1;
+      e.pieces.forEach(function (pc, i) {
+        if (i === main) return;
+        const nl = copyProps(l, SW.model.newLine(l.kind, pc, "forward"),
+                             (l.name || "Line") + " (" + (++k) + ")");
+        added.push(nl);
+        if (nl.unit_id) unitAdds.push([nl.unit_id, nl.id]);
+        split++;
+      });
+    }
+    const tag = SW.forward.METHODS[st.method].short;
+    let nFault = 0, nAx = 0, nMk = 0;
+    if (checked("fwd-add-fault") && !usesLine()) {
+      const f = SW.model.newLine("fault", res.fault, "forward");
+      f.name = "Fault (" + tag + ")";
+      added.push(f); nFault = 1;
+    }
+    if (checked("fwd-add-axial")) {
+      const mk = (pts, name, width) => {
+        const a = SW.model.newLine("axial", pts, "forward");
+        a.name = name; a.style.width = width;
+        added.push(a); nAx++;
+      };
+      res.axActive.forEach((a, i) => mk(a.pts, "Active axial surface " + (i + 1) + " (" + tag + ")", 1.5));
+      res.axInactive.forEach((a, i) => a.pieces.forEach(pc =>
+        mk(pc, "Inactive axial surface " + (i + 1) + " (" + tag + ")", 1)));
+    }
+    if (checked("fwd-add-strain")) {
+      res.markers.forEach(function (m, i) {
+        m.pieces.forEach(function (pc) {
+          const s = SW.model.newLine("sketch", pc, "forward");
+          s.name = "Strain marker " + (i + 1) +
+                   (m.ell ? " (R=" + m.ell.ratio.toFixed(2) + ")" : "");
+          s.style.width = 1;
+          s.style.dash = false;
+          added.push(s); nMk++;
+        });
+      });
+    }
+    for (const a of added) {
+      redo.push({ op: "add_line", line: JSON.parse(JSON.stringify(a)) });
+      undo.unshift({ op: "delete_line", id: a.id });
+    }
+    SW.undo.push({ label: "Forward model: " + tag, redo: redo, undo: undo });
+    // las piezas nuevas quedan en la unidad de su línea madre (igual que
+    // "+ Unit", fuera de la pila de undo; un id borrado no molesta)
+    if (unitAdds.length) {
+      for (const [uid, lid] of unitAdds) {
+        const u = SW.model.unitById(uid);
+        if (u) (u.line_ids = u.line_ids || []).push(lid);
+      }
+      SW.model.syncUnitIds();
+      if (SW.panels.horizons && SW.panels.horizons.sync) SW.panels.horizons.sync();
+    }
+    const slipEl = $("fwd-slip");
+    if (slipEl) slipEl.value = 0;               // el próximo paso parte de acá
+    st.cache = null; st.key = "";
+    const extra = [];
+    if (split) extra.push(split + " new piece(s) cut by the fault");
+    if (nFault) extra.push("fault line added");
+    if (nAx) extra.push(nAx + " axial surface(s)");
+    if (nMk) extra.push(nMk + " strain marker(s)");
+    SW.view.status(tag + ": deformed " + moved + " line(s)" +
+                   (extra.length ? " — " + extra.join(", ") : "") +
+                   ". Slip reset to 0 to continue from here.");
+    refresh();
+  }
+
+  /* -- registro de las cinco tools ------------------------------------------ */
+  function makeTool(method) {
+    return {
+      cursor: "crosshair",
+      hint: "Forward model (" + SW.forward.METHODS[method].short + "): set " +
+            "the fault and slip in the rail; click lines to choose what to " +
+            "deform (none = all horizons), click a fault line to use it; " +
+            "Apply writes the result.",
+      activate: function () {
+        st.method = method;
+        st.placing = false;
+        st.cache = null; st.key = "";
+        ensureDefaults();
+        syncFields();
+      },
+      deactivate: function () {
+        st.placing = false;
+        st.cache = null; st.key = "";
+      },
+      onClick: function (e, pos) {
+        if (e.button === 2) return;
+        if (st.placing) {
+          const q = SW.view.toSection(pos);
+          const set = (id, v) => { const el = $(id); if (el) el.value = v; };
+          set("fwd-s0", round(q.s)); set("fwd-zd", round(q.z));
+          st.placing = false;
+          SW.view.status("Ramp base placed at s = " + round(q.s) +
+                         ", z = " + round(q.z) + ".");
+          refresh();
+          return;
+        }
+        const hit = SW.view.hitLine(pos, 10);
+        if (!hit) return;
+        if (hit.line.kind === "fault") { setFaultFromLine(hit.line); return; }
+        SW.view.toggleSelection({ type: "line", id: hit.line.id });
+        SW.view.requestDraw();
+      },
+      onKey: function (e) {
+        if (e.key !== "Escape") return false;
+        if (st.placing) st.placing = false;
+        else st.faultId = null;
+        refresh();
+        return true;
+      },
+      drawOverlay: drawOverlay,
+    };
+  }
+  METHODS.forEach(m => SW.tools.register("fwd_" + m, makeTool(m)));
+
+  /* -- cableado del riel (el DOM ya existe: el script va al final) -------- */
+  const ids = ["fwd-verg", "fwd-s0", "fwd-zd", "fwd-theta", "fwd-h", "fwd-l0",
+               "fwd-phi", "fwd-ps", "fwd-psi", "fwd-conc", "fwd-alpha",
+               "fwd-slip", "fwd-steps", "fwd-mspace", "fwd-fault-src",
+               "fwd-preview", "fwd-axial", "fwd-strain"];
+  for (const id of ids) {
+    const el = $(id);
+    if (!el) continue;
+    el.addEventListener("input", refreshSoon);
+    el.addEventListener("change", refresh);
+  }
+  const place = $("fwd-place-btn");
+  if (place) place.addEventListener("click", function () {
+    st.placing = !st.placing;
+    if (st.placing) SW.view.status("Click on the section to place the base of the ramp.");
+    refresh();
+  });
+  const fit = $("fwd-fit-btn");
+  if (fit) fit.addEventListener("click", fitFromFault);
+  const ap = $("fwd-apply-btn");
+  if (ap) ap.addEventListener("click", apply);
+
+  SW.actions = SW.actions || {};
+  SW.actions.forwardApply = apply;
+})();
+
 /* ==== js/panels/horizons.js ==== */
 "use strict";
 /* Panel: Unidades (horizontes).
@@ -13532,7 +14870,8 @@ SW.view = (function () {
     });
     document.querySelectorAll("#toolrail .rail-opts[data-for]")
       .forEach(function (el) {
-        el.classList.toggle("show", el.dataset.for === active);
+        el.classList.toggle("show",
+          el.dataset.for.split(/\s+/).indexOf(active) >= 0);
       });
     const senseField = $("fault-sense-field");
     if (senseField)
