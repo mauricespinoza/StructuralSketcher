@@ -11423,6 +11423,15 @@ SW.forward = (function () {
     } else if (p.method === "fpf") {
       g.info.push("slip " + slip.toFixed(0) + " m along the fault");
     }
+    if (p.isSplay) {
+      // en el marco del splay (x a lo largo de la rampa principal, origen en
+      // la rama) la base de la rampa principal está en (−d, 0); detrás de su
+      // bisectriz el bloque colgante desliza sobre el despegue horizontal
+      const tm = (+p.mainTheta || 0) * D2R;
+      g.splay = { d: Math.max(0, +p.mainD || 0),
+                  uAm: dirv(Math.PI / 2 - tm / 2),
+                  flat: dirv(-tm) };
+    }
     g.ok = true;
     return g;
   }
@@ -11494,8 +11503,20 @@ SW.forward = (function () {
   /* Integra una nube de puntos (marco local) con RK2 de punto medio, del
    * slip acumulado sA al sB (la posición de la punta y el cambio de régimen
    * del FBF dependen del slip ACUMULADO, no del incremento). */
+  /* Campo de un splay: el de su método, salvo detrás de la base de la
+   * rampa principal, donde el bloque colgante desliza paralelo al
+   * despegue (kink bisector en esa base, como en la falla principal). */
+  function splayField(vf) {
+    return function (g, x, z, s) {
+      const m = g.splay;
+      if (leftOf(x, z, -m.d, 0, m.uAm[0], m.uAm[1]))
+        return leftOf(x, z, -m.d, 0, m.flat[0], m.flat[1]) ? m.flat : [0, 0];
+      return vf(g, x, z, s);
+    };
+  }
+
   function integrate(g, pts, sA, sB, steps) {
-    const vf = VFIELD[g.method];
+    const vf = g.splay ? splayField(VFIELD[g.method]) : VFIELD[g.method];
     const n = Math.max(1, Math.round(steps) || 1);
     const ds = (sB - sA) / n;
     const out = pts.map(p => [p[0], p[1]]);
@@ -11861,7 +11882,7 @@ SW.forward = (function () {
       return Object.assign(base, {
         s0: B[0], zd: B[1], omega: (+main.omega || 0) + th, theta: rel,
         H: len * Math.sin(rel * D2R), L0: len, faultSrc: "param",
-        branch: B, isSplay: true,
+        branch: B, isSplay: true, mainD: d, mainTheta: th,
       });
     }
     // FPF / cizalla: polilínea principal hasta la rama + el splay
