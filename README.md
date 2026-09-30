@@ -83,9 +83,13 @@ trace involved:
   template (constant bed length). The unfold amount can be partial (0–100%).
 - **Forward modeling** — deforms the selected lines (or every horizon and
   contact when nothing is selected) over a fault, with a live preview drawn
-  over the current section before anything is written. The fault is a
-  parametric flat–ramp(–flat) (base, detachment elevation, ramp angle,
-  height or initial tip, vergence; "Place" puts the base with a click and
+  over the current section before anything is written. There is no
+  vergence setting: the fault geometry (its dip) defines the hanging wall —
+  always the block above the fault — and the sign of the slip says where it
+  goes: positive up (reverse), negative down (normal; Suppe's kink-band
+  models only take reverse slip). The fault is a
+  parametric flat–ramp(–flat) (base, detachment elevation, dip and dip
+  direction, height or initial tip; "Place" puts the base with a click and
   "From fault" reads it from a drawn fault) or, for Parallel flow and Simple
   shear, any fault line clicked on the section. Methods:
   - *Fault Parallel Flow* (Egan et al., 1997) — hanging wall carried along

@@ -249,6 +249,10 @@ header button.active { background: rgba(37,99,235,.35); color: #fff;
 #toolrail .fwd-info .err { color: var(--danger); font-weight: 600; }
 #toolrail .fwd-info:empty { display: none; }
 #toolrail .fwd-hide { display: none !important; }
+#toolrail .rail-row > .fwd-dipdir { flex: 0 0 62px; }
+#toolrail .fwd-sense { font-size: 10.5px; font-weight: 600; }
+#toolrail .fwd-sense.up { color: #b91c1c; }
+#toolrail .fwd-sense.down { color: #1d4ed8; }
 #toolrail .fwd-note { font-size: 10.5px; color: var(--ink-3); white-space: normal; }
 #toolrail .fwd-note:empty { display: none; }
 #toolrail .fwd-sec, #toolrail .fwd-sec-check {
@@ -896,12 +900,6 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
               <option value="line">Selected fault line</option>
             </select>
           </label>
-          <label class="rail-field" title="Transport direction of the hanging wall">Vergence
-            <select id="fwd-verg">
-              <option value="1" selected>&#8594; toward +s</option>
-              <option value="-1">&#8592; toward &#8722;s</option>
-            </select>
-          </label>
           <div class="rail-row" data-geom>
             <label class="rail-field" title="Distance of the base of the ramp (on the detachment) — or drag the round handle on the section">Ramp base s
               <input id="fwd-s0" type="number" step="any">
@@ -910,9 +908,17 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
               <input id="fwd-zd" type="number" step="any">
             </label>
           </div>
-          <label class="rail-field" data-geom title="Ramp cutoff angle against the (horizontal) beds — or drag the ramp-top / tip handle (Shift = 5° steps)">Ramp &#952; (&#176;)
-            <input id="fwd-theta" type="number" min="1" max="89" step="1" value="25">
-          </label>
+          <div class="rail-row" data-geom>
+            <label class="rail-field" title="Dip of the ramp (its cutoff angle against the horizontal beds) — or drag the ramp-top / tip handle (Shift = 5° steps)">Fault dip &#952; (&#176;)
+              <input id="fwd-theta" type="number" min="1" max="89" step="1" value="25">
+            </label>
+            <label class="rail-field fwd-dipdir" title="Side the fault dips toward. The fault geometry defines the hanging wall (the block above it); drag the ramp handle across the base to flip it">Dips to
+              <select id="fwd-dipdir">
+                <option value="-1" selected>&#8592;</option>
+                <option value="1">&#8594;</option>
+              </select>
+            </label>
+          </div>
           <label class="rail-field" data-geom data-m="fpf fbf shear" title="Height of the upper flat above the detachment (Parallel flow / Simple shear: 0 = the ramp goes on up)">Ramp height (m)
             <input id="fwd-h" type="number" min="0" step="any">
           </label>
@@ -936,9 +942,10 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <label class="rail-field" data-m="shear" title="Angle of the shear direction from the vertical; positive leans toward the transport direction (antithetic to a fault that dips that way), negative leans back (synthetic)">Shear angle (&#176; from vertical)
             <input id="fwd-alpha" type="number" min="-89" max="89" step="5" value="0">
           </label>
-          <label class="rail-field" id="fwd-slip-label" title="Total slip on the fault (Simple shear: horizontal heave) — or drag the blue arrow along the fault">Slip (m)
+          <label class="rail-field" id="fwd-slip-label" title="Total slip on the fault (Simple shear: horizontal heave). Positive: the hanging wall goes up (reverse); negative: it goes down (normal). Or drag the arrow along the fault">Slip (m)
             <input id="fwd-slip" type="number" step="any">
           </label>
+          <div class="fwd-sense" id="fwd-sense"></div>
 
           <div class="fwd-sec">Steps &amp; animation</div>
           <label class="rail-field" title="Number of steps the slip is split into (Step writes one, Animate plays them, Apply writes all)">Steps n
@@ -11363,6 +11370,10 @@ SW.forward = (function () {
     if (needsTheta && !(th > 0 && th < 89 * D2R))
       return { error: "The ramp angle must be between 0° and 89°." };
     const slip = +p.slip || 0;
+    if ((p.method === "fbf" || p.method === "fpfold") && slip < 0)
+      return { error: "Suppe's kink-band folds are contractional: use a positive " +
+                      "(reverse) slip. For normal faulting use Trishear, Parallel " +
+                      "flow or Simple shear." };
     if (p.method === "fbf") {
       if (!(p.H > 0)) return { error: "The ramp height must be positive." };
       const gam = suppeGamma(th);
@@ -11410,7 +11421,7 @@ SW.forward = (function () {
         g.ck = Math.cos(g.k * g.psi / 2);
         g.ex = th / (g.psi * g.k);
       }
-      g.info.push("tip advances " + (g.ps * slip).toFixed(0) + " m",
+      g.info.push("tip advances " + (g.ps * Math.abs(slip)).toFixed(0) + " m",
                   g.psi > 0 ? "backlimb fan " + (+p.psi) + "°"
                             : "sharp backlimb kink");
     } else if (p.method === "shear") {
@@ -11468,7 +11479,7 @@ SW.forward = (function () {
 
   function vTrishear(g, x, z, s) {
     const th = g.th, r = g.r;
-    const Lt = g.L0 + g.ps * s;
+    const Lt = g.L0 + g.ps * Math.abs(s);
     const tx = Lt * r[0], tz = Lt * r[1];
     const dx = x - tx, dz = z - tz;
     const xt = dx * r[0] + dz * r[1];               // a lo largo de la falla
@@ -11520,7 +11531,7 @@ SW.forward = (function () {
     const n = Math.max(1, Math.round(steps) || 1);
     const ds = (sB - sA) / n;
     const out = pts.map(p => [p[0], p[1]]);
-    if (!(ds > 0)) return out;
+    if (!(Math.abs(ds) > 0)) return out;
     for (let k = 0; k < n; k++) {
       const s = sA + k * ds;
       for (const p of out) {
@@ -11550,7 +11561,7 @@ SW.forward = (function () {
       return [[Math.min(x0, -1), 0], [0, 0],
               [far, far * Math.tan(th)]];
     }
-    const Lt = g.L0 + g.ps * Math.max(0, slip);
+    const Lt = g.L0 + g.ps * Math.abs(slip);
     if (p.isSplay) return [[0, 0], [Lt * g.r[0], Lt * g.r[1]]];
     return [[Math.min(x0, -1), 0], [0, 0], [Lt * g.r[0], Lt * g.r[1]]];
   }
@@ -11565,13 +11576,13 @@ SW.forward = (function () {
       ray([0, 0], g.uA, "A");
       ray(g.P2, slip < g.L ? g.uB : g.uB0, slip < g.L ? "B" : "B0");
     } else if (p.method === "fpfold") {
-      const Lt = g.L0 + g.ps * slip;
+      const Lt = g.L0 + g.ps * Math.abs(slip);
       const T = [Lt * g.r[0], Lt * g.r[1]];
       ray([0, 0], g.uA, "A");
       ray(T, dirv(g.gs), "syncline");
       ray(T, dirv(2 * g.gs), "forelimb");
     } else if (p.method === "trishear") {
-      const Lt = g.L0 + g.ps * slip;
+      const Lt = g.L0 + g.ps * Math.abs(slip);
       const T = [Lt * g.r[0], Lt * g.r[1]];
       const half = Math.atan(g.m);
       ray(T, dirv(g.th + half), "trishear");
@@ -11757,7 +11768,7 @@ SW.forward = (function () {
     const F = frame(p);
     const span = Math.max(1, Math.abs((p.x1 - p.x0) || 1));
     const m = { ok: true, info: g.info, g: g, verg: F.v, p: p };
-    m.fault = slip => trace(p, g, Math.max(0, slip || 0));
+    m.fault = slip => trace(p, g, slip || 0);
 
     let bendAx = null;
     function bends() {
@@ -11796,7 +11807,6 @@ SW.forward = (function () {
       const d = (sB || 0) - (sA || 0);
       if (!pts.length || Math.abs(d) < EPS) return pts.map(q => [q[0], q[1]]);
       if (VFIELD[p.method]) {
-        if (d < 0) return pts.map(q => [q[0], q[1]]);   // no reversible
         const loc = pts.map(F.toLocal);
         return integrate(g, loc, sA, sB, increments).map(F.toSec);
       }
@@ -11986,7 +11996,9 @@ SW.forward = (function () {
     }
     const n = Math.max(1, Math.round(cfg.n) || 1);
     const from = Math.max(0, Math.round(cfg.from) || 0);
-    const S = +cfg.S || 0;
+    const Sraw = +cfg.S || 0;
+    const sgn = Sraw < 0 ? -1 : 1;      // + inversa (sube), − normal (baja)
+    const S = Math.abs(Sraw);
     const fr = Math.min(1, sps.reduce((a, b) => a + b.frac, 0));
     const mainFrac = Math.max(0, 1 - fr);
     const incr = Math.max(1, Math.round(cfg.increments || 20));
@@ -12022,21 +12034,21 @@ SW.forward = (function () {
         axKinds.push(tag + a.kind);
       }
     }
-    addAx(mm.axialActive(slipOf(0, s0)), "");
-    sps.forEach((sp, i) => addAx(sp.m.axialActive(slipOf(i + 1, s0)), "splay" + (i + 1) + ":"));
+    addAx(mm.axialActive(sgn * slipOf(0, s0)), "");
+    sps.forEach((sp, i) => addAx(sp.m.axialActive(sgn * slipOf(i + 1, s0)), "splay" + (i + 1) + ":"));
 
     const sets = {};
     for (const k of Object.keys(cfg.sets)) sets[k] = cfg.sets[k].map(q => q.slice());
     function snapshot(k) {
       const slip = k * S / n;
-      const faults = [mm.fault(slipOf(0, slip))]
+      const faults = [mm.fault(sgn * slipOf(0, slip))]
         .concat(sps.map((sp, i) => sp.m.p.drawFault ? sp.m.p.drawFault.map(q => q.slice())
-                                                     : sp.m.fault(slipOf(i + 1, slip))));
-      const axA = mm.axialActive(slipOf(0, slip));
-      sps.forEach((sp, i) => { for (const a of sp.m.axialActive(slipOf(i + 1, slip))) axA.push(a); });
+                                                     : sp.m.fault(sgn * slipOf(i + 1, slip))));
+      const axA = mm.axialActive(sgn * slipOf(0, slip));
+      sps.forEach((sp, i) => { for (const a of sp.m.axialActive(sgn * slipOf(i + 1, slip))) axA.push(a); });
       const cp = {};
       for (const key of Object.keys(sets)) cp[key] = sets[key].map(q => q.slice());
-      return { k: k, slip: slip, sets: cp, faults: faults, axActive: axA,
+      return { k: k, slip: sgn * slip, sets: cp, faults: faults, axActive: axA,
                axInactive: ax.map((a, i) => ({ kind: axKinds[i], pts: a.map(q => q.slice()) })) };
     }
     const frames = [snapshot(from)];
@@ -12048,15 +12060,15 @@ SW.forward = (function () {
       for (const key of keys) for (const q of sets[key]) flat.push(q);
       for (const a of ax) for (const q of a) flat.push(q);
       const a0 = slipOf(0, sA), a1 = slipOf(0, sB);
-      let moved = a1 > a0 ? mm.move(flat, a0, a1, Math.max(1, Math.round(incr * (a1 - a0) / (sB - sA || 1))))
+      let moved = a1 > a0 ? mm.move(flat, sgn * a0, sgn * a1, Math.max(1, Math.round(incr * (a1 - a0) / (sB - sA || 1))))
                           : flat.map(q => q.slice());
       sps.forEach(function (sp, si) {
         const b0 = slipOf(si + 1, sA), b1 = slipOf(si + 1, sB);
         if (!(b1 > b0)) return;
-        const hw = hwTest(slipOf(0, sB));
+        const hw = hwTest(sgn * slipOf(0, sB));
         const idx = [], sub = [];
         moved.forEach((q, i) => { if (!hw || hw(q)) { idx.push(i); sub.push(q); } });
-        const res = sp.m.move(sub, b0, b1, Math.max(1, Math.round(incr * (b1 - b0) / (sB - sA || 1))));
+        const res = sp.m.move(sub, sgn * b0, sgn * b1, Math.max(1, Math.round(incr * (b1 - b0) / (sB - sA || 1))));
         idx.forEach((i, j) => { moved[i] = res[j]; });
       });
       let i = 0;
@@ -12096,9 +12108,12 @@ SW.forward = (function () {
     return trace(p, g, slip === undefined ? +p.slip || 0 : slip);
   }
 
+  /* Dirección de cizalla: ángulo desde la vertical, positivo = antitética,
+   * es decir inclinada hacia donde MANTEA la falla (v es el sentido en que
+   * la falla sube, así que el manteo va hacia −v). */
   function shearDir(p, v) {
     const a = (+p.alpha || 0) * D2R;
-    return [Math.sin(a) * v, Math.cos(a)];
+    return [-Math.sin(a) * v, Math.cos(a)];
   }
 
   function extendEnds(verts, margin) {
@@ -12278,6 +12293,27 @@ window.SW = window.SW || {};
   }
   const isVelocity = () => st.method === "fbf" || st.method === "fpfold" ||
                            st.method === "trishear";
+  // ¿el método admite slip negativo (falla normal)?
+  const allowsNormal = () => st.method !== "fbf" && st.method !== "fpfold";
+
+  /* Sentido en que SUBE la falla (+1 hacia +s, −1 hacia −s): la geometría
+   * manda. Con una falla dibujada sale de su traza (el extremo derecho más
+   * alto que el izquierdo → sube hacia +s); con la rampa paramétrica, de la
+   * dirección de manteo (una falla que mantea hacia −s sube hacia +s). El
+   * bloque colgante es siempre el de arriba; el signo del slip dice si
+   * sube (+, inversa) o baja (−, normal). */
+  function riseDir() {
+    if (usesLine()) {
+      const fl = faultLine();
+      if (fl) {
+        const vs = fl.vertices;
+        const a = vs[0], b = vs[vs.length - 1];
+        const L = a[0] <= b[0] ? a : b, R = a[0] <= b[0] ? b : a;
+        return R[1] >= L[1] ? 1 : -1;
+      }
+    }
+    return -num("fwd-dipdir", -1) >= 0 ? 1 : -1;
+  }
 
   /* Líneas a deformar: la selección (sin la falla de referencia), o todos
    * los horizontes y contactos visibles si no hay nada más seleccionado. */
@@ -12362,7 +12398,7 @@ window.SW = window.SW || {};
     const span = Math.max(b.s1 - b.s0, b.z1 - b.z0);
     const h = b.z1 - b.z0;
     const nice = x => { const m = Math.pow(10, Math.floor(Math.log10(Math.max(x, 1e-9)))); return Math.max(1, m / 10); };
-    setBounds("fwd-slip", st.method === "shear" ? -round(span * 0.5) : 0, round(span * 0.6), nice(span));
+    setBounds("fwd-slip", allowsNormal() ? -round(span * 0.6) : 0, round(span * 0.6), nice(span));
     setBounds("fwd-theta", 1, 89, 1);
     setBounds("fwd-h", 0, round(h * 2), nice(h));
     setBounds("fwd-l0", 0, round(span * 0.6), nice(span));
@@ -12375,6 +12411,14 @@ window.SW = window.SW || {};
     setBounds("fwd-sp-frac", 0, 100, 1);
     setBounds("fwd-g-rise", 0, round(h * 0.25), nice(h) / 10);
     setBounds("fwd-nsteps", 1, 50, 1);
+  }
+
+  function dipLabels() {
+    const sec = SW.model.state.sec || {};
+    const sel = $("fwd-dipdir");
+    if (!sel) return;
+    sel.options[0].text = "\u2190 " + (sec.label_left || "");
+    sel.options[1].text = "\u2192 " + (sec.label_right || "");
   }
 
   /* Valores iniciales a partir de lo dibujado — sólo en campos vacíos. */
@@ -12418,7 +12462,7 @@ window.SW = window.SW || {};
       if (!quiet) SW.view.status("The fault must be inclined to define a ramp.");
       return false;
     }
-    setVal("fwd-verg", ds > 0 ? "1" : "-1");
+    setVal("fwd-dipdir", ds > 0 ? "-1" : "1");     // sube hacia +s → mantea hacia −s
     setVal("fwd-s0", round(lo[0]));
     setVal("fwd-zd", round(lo[1]));
     setVal("fwd-theta", Math.round(Math.atan2(dz, Math.abs(ds)) / D2R));
@@ -12451,7 +12495,7 @@ window.SW = window.SW || {};
       method: st.method,
       faultSrc: usesLine() ? "line" : "param",
       faultLine: fl ? fl.vertices.map(v => v.slice()) : null,
-      verg: num("fwd-verg", 1),
+      verg: riseDir(),
       s0: num("fwd-s0", box.s0), zd: num("fwd-zd", box.z0),
       theta: num("fwd-theta", 25), H: num("fwd-h", 0),
       L0: num("fwd-l0", 0), phi: num("fwd-phi", 60), ps: num("fwd-ps", 2),
@@ -12666,6 +12710,15 @@ window.SW = window.SW || {};
     tog("[data-strain]", checked("fwd-strain"));
     tog("[data-growth]", checked("fwd-growth"));
     tog("[data-splay]", checked("fwd-splay"));
+    const sense = $("fwd-sense");
+    if (sense) {
+      const sl = num("fwd-slip", 0);
+      sense.className = "fwd-sense" + (sl > 0 ? " up" : sl < 0 ? " down" : "");
+      sense.textContent = sl > 0 ? "\u25B2 Reverse: hanging wall up"
+        : sl < 0 ? (allowsNormal() ? "\u25BC Normal: hanging wall down"
+                                   : "\u25BC Normal slip is not available for this model")
+        : "";
+    }
     const lab = $("fwd-slip-label");
     if (lab && lab.firstChild)
       lab.firstChild.nodeValue = st.method === "shear" ? "Heave (m)" : "Slip (m)";
@@ -12740,6 +12793,12 @@ window.SW = window.SW || {};
     return tr ? tr.slice(1) : null;
   }
 
+  // punto lejano "aguas abajo" de la base: el despegue hacia atrás
+  function downFrom(pp, R) {
+    const far = Math.max(pp.span, 1) * 2;
+    return [R.base[0] - R.v * far, R.base[1]];
+  }
+
   function handles(pp) {
     const V = SW.view;
     const hs = [];
@@ -12765,9 +12824,14 @@ window.SW = window.SW || {};
       if (st.method === "shear")
         hs.push({ id: "slip", at: [R.base[0] + R.v * pp.p.slip, R.base[1]],
                   from: R.base, label: "heave " + Math.round(pp.p.slip) + " m" });
-      else if (path)
-        hs.push({ id: "slip", at: along(path, Math.max(0, pp.p.slip)), from: R.base,
-                  path: path, label: "slip " + Math.round(pp.p.slip) + " m" });
+      else if (path) {
+        // hacia abajo: por el despegue hacia atrás (o la rampa prolongada)
+        const back = [R.base.slice(), downFrom(pp, R)];
+        const sl = pp.p.slip;
+        hs.push({ id: "slip", at: sl >= 0 ? along(path, sl) : along(back, -sl),
+                  from: R.base, path: path, back: back,
+                  label: "slip " + Math.round(sl) + " m " + (sl >= 0 ? "(reverse)" : "(normal)") });
+      }
     }
     if (pp.splays && path) {
       const B = along(path, pp.splays.d);
@@ -12799,8 +12863,16 @@ window.SW = window.SW || {};
   }
 
   function dragTo(h, q, e) {
-    const pp = params();
-    const R = ramp(pp);
+    let pp = params();
+    let R = ramp(pp);
+    // arrastrar el tope/punta al otro lado de la base invierte el manteo
+    if ((h.id === "top" || h.id === "tip" || h.id === "angle") && !usesLine()) {
+      const dx = q[0] - R.base[0];
+      if (Math.abs(dx) > 1e-9 && Math.sign(dx) !== R.v) {
+        setVal("fwd-dipdir", String(-Math.sign(dx)));
+        pp = params(); R = ramp(pp);
+      }
+    }
     const rel = [(q[0] - R.base[0]) * R.v, q[1] - R.base[1]];
     const snapA = a => e && e.shiftKey ? Math.round(a / 5) * 5 : Math.round(a);
     const clampA = a => Math.max(1, Math.min(89, a));
@@ -12824,10 +12896,19 @@ window.SW = window.SW || {};
           }
         }
         break;
-      case "slip":
-        if (st.method === "shear") setVal("fwd-slip", Math.round(rel[0]));
-        else if (h.path) setVal("fwd-slip", Math.max(0, Math.round(arcOf(h.path, q))));
+      case "slip": {
+        let v;
+        if (st.method === "shear") v = Math.round(rel[0]);
+        else if (h.path) {
+          const up = arcOf(h.path, q), dn = arcOf(h.back, q);
+          const pu = along(h.path, up), pd = along(h.back, dn);
+          const du = Math.hypot(pu[0] - q[0], pu[1] - q[1]);
+          const dd = Math.hypot(pd[0] - q[0], pd[1] - q[1]);
+          v = (dd < du && dn > 0) ? -Math.round(dn) : Math.round(up);
+        }
+        if (v !== undefined) setVal("fwd-slip", allowsNormal() ? v : Math.max(0, v));
         break;
+      }
       case "branch": {
         const path = mainPath(pp);
         if (path) setVal("fwd-sp-d", Math.max(0, Math.round(arcOf(path, q))));
@@ -12886,8 +12967,9 @@ window.SW = window.SW || {};
         ctx.setLineDash(h.id === "slip" ? [] : [6, 4]);
         if (h.path) {
           const pts = [];
-          const L = Math.max(0, pp.p.slip);
-          for (let k = 0; k <= 40; k++) pts.push(along(h.path, L * k / 40));
+          const sl = pp.p.slip, L = Math.abs(sl), pl = sl >= 0 ? h.path : h.back;
+          if (sl < 0) ctx.strokeStyle = "rgba(29,78,216,.55)";
+          for (let k = 0; k <= 40; k++) pts.push(along(pl, L * k / 40));
           strokePath(ctx, pts); ctx.stroke();
         } else {
           ctx.beginPath();
@@ -13094,7 +13176,7 @@ window.SW = window.SW || {};
         const fl = SW.model.newLine("fault", f, "forward");
         fl.name = j === 0 ? "Fault (" + tag + ")" : "Splay " + j + " (" + tag + ")";
         fl.fault_style = Object.assign({}, fl.fault_style,
-          { sense: st.method === "shear" && pp.p.slip > 0 ? "normal" : "reverse" });
+          { sense: pp.p.slip < 0 ? "normal" : "reverse" });
         added.push(fl); nFault++;
       });
     }
@@ -13203,16 +13285,18 @@ window.SW = window.SW || {};
   function makeTool(method) {
     return {
       cursor: "crosshair",
-      hint: "Forward model (" + SW.forward.METHODS[method].short + "): drag " +
-            "the handles (base, ramp top/tip, slip arrow, splays, datum) or " +
-            "the sliders; click a fault to model on it and lines to choose " +
-            "what deforms (none = all horizons). Shift snaps angles to 5°.",
+      hint: "Forward model (" + SW.forward.METHODS[method].short + "): the " +
+            "fault geometry defines the hanging wall; slip + = up (reverse), " +
+            "− = down (normal). Drag the handles (base, ramp top/tip — across " +
+            "the base flips the dip —, slip arrow, splays, datum) or the " +
+            "sliders; click a fault to model on it. Shift snaps angles to 5°.",
       activate: function () {
         st.method = method;
         st.placing = false;
         st.cache = null; st.key = "";
         stopAnim();
         buildSliders();
+        dipLabels();
         // por defecto: la falla seleccionada
         const selFault = SW.view.selectedLines().find(l => l.kind === "fault");
         if (selFault) useFault(selFault, true);
@@ -13296,7 +13380,7 @@ window.SW = window.SW || {};
   METHODS.forEach(m => SW.tools.register("fwd_" + m, makeTool(m)));
 
   /* -- cableado del riel (el DOM ya existe: el script va al final) -------- */
-  const ids = ["fwd-verg", "fwd-s0", "fwd-zd", "fwd-theta", "fwd-h", "fwd-l0",
+  const ids = ["fwd-dipdir", "fwd-s0", "fwd-zd", "fwd-theta", "fwd-h", "fwd-l0",
                "fwd-phi", "fwd-ps", "fwd-psi", "fwd-conc", "fwd-alpha",
                "fwd-slip", "fwd-steps", "fwd-mspace", "fwd-fault-src",
                "fwd-preview", "fwd-axial", "fwd-strain", "fwd-nsteps",
