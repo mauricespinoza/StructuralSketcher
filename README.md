@@ -42,6 +42,16 @@ Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
 - **Footer** — live readouts: cursor position, elevation, scale status,
   measurement, angle, tool hint and last action.
 
+Drawing and editing helpers:
+
+- **Shift while drawing** a line constrains the active segment to 0°, 45°,
+  90°… (true angles in section space, as the angle readout reports them).
+- **Transform** on one or more selected lines shows a box with corner
+  handles (Shift keeps the proportions, so nothing is distorted), edge
+  handles, a circular-arrows handle on top that rotates everything around
+  the pivot — by default the centre of the selection; drag it to move the
+  axis — with Shift for 15° steps, and a live angle/scale readout.
+
 On touch devices (or a mouse+touchscreen hybrid), controls grow to
 44px-class tap targets automatically; below ~1250px wide the header
 collapses to icon-only buttons so it still fits in one row.
@@ -93,6 +103,22 @@ trace involved:
     Cristallini & Allmendinger (2002) at the fault bend (0° = sharp kink).
   - *Inclined simple shear* (White et al., 1986) — hanging-wall collapse
     over any fault shape with a shear direction inclined from the vertical.
+
+  By default the tool works on the **selected fault** (the ramp is fitted to
+  its geometry; Parallel flow and Simple shear move directly over its trace)
+  and on the **selected layers**. Interactive handles on the section set
+  the ramp base, the ramp top or fault tip (angle and height/initial tip),
+  the slip (blue arrow dragged along the fault), splay branch points and
+  tips, and the syncline datum; every numeric field also has a slider.
+  The slip is split into **n steps**: *Step* writes the next one, *Play*
+  animates them in the preview (a scrub slider picks any step) and *Apply*
+  writes all that remain. Options per stage:
+  - **Syntectonic strata** — after every step a horizontal stratum is
+    deposited at datum + k × rise and onlaps the relief, so the growth
+    wedge is folded by the following steps.
+  - **Splay faults** — one or more splays branching from the main fault at
+    a given distance/spacing, dip and length, each taking a share of the
+    slip, in sequence after the main fault or synchronously.
 
   Checkboxes show the **axial surfaces** (active, fixed to the fault, and
   inactive, carried by the hanging wall) and **strain markers** — a grid of

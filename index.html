@@ -249,6 +249,18 @@ header button.active { background: rgba(37,99,235,.35); color: #fff;
 #toolrail .fwd-info .err { color: var(--danger); font-weight: 600; }
 #toolrail .fwd-info:empty { display: none; }
 #toolrail .fwd-hide { display: none !important; }
+#toolrail .fwd-note { font-size: 10.5px; color: var(--ink-3); white-space: normal; }
+#toolrail .fwd-note:empty { display: none; }
+#toolrail .fwd-sec, #toolrail .fwd-sec-check {
+  margin-top: 4px; padding-top: 6px; border-top: 1px solid #cfdcf8;
+  font-size: 11px; font-weight: 600; color: var(--ink); white-space: normal; }
+#toolrail .fwd-btns { gap: 3px; }
+#toolrail .fwd-btns button { padding: 3px 2px; gap: 2px; font-size: 10.5px; }
+#toolrail .fwd-btns .ic { width: 11px; height: 11px; }
+#toolrail .fwd-sec-check input { margin: 0; }
+#toolrail .fwd-range { width: 100%; margin: 1px 0 0; height: 16px;
+  accent-color: var(--accent); }
+#toolrail .fwd-frame { accent-color: #b45309; }
 #toolrail .mini.active { background: var(--accent); color: #fff;
   border-color: var(--accent); }
 #toolrail-resize {
@@ -623,6 +635,10 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-fwd-fpfold" viewBox="0 0 24 24"><path d="M2 21h5l5-6" stroke-dasharray="2.2 1.8"/><circle cx="12" cy="15" r="1.3"/><path d="M2 10h5l3.5-4h3.5l2.5 8H22"/></symbol>
   <symbol id="i-fwd-trishear" viewBox="0 0 24 24"><path d="M2 21l9-6" stroke-dasharray="2.2 1.8"/><path d="M11 15l11-9M11 15l11 2" opacity=".6"/><path d="M2 12c5 0 7-5 10-5s5 4 10 4"/></symbol>
   <symbol id="i-fwd-shear" viewBox="0 0 24 24"><path d="M4 20L8 4M10 20l4-16M16 20l4-16"/><path d="M2 12h20" opacity=".55"/></symbol>
+  <symbol id="i-fwd-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+  <symbol id="i-fwd-step" viewBox="0 0 24 24"><path d="M5 5l10 7-10 7z"/><path d="M19 5v14"/></symbol>
+  <symbol id="i-fwd-reset" viewBox="0 0 24 24"><path d="M5 5v14"/><path d="M19 5L9 12l10 7z"/></symbol>
+  <symbol id="i-rot" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 0 1 12.8-5.3"/><path d="M18 3v4h-4"/><path d="M19.5 12a7.5 7.5 0 0 1-12.8 5.3"/><path d="M6 21v-4h4"/></symbol>
   <symbol id="i-flip" viewBox="0 0 24 24"><path d="M4 8h15m-3.5-3.5L19 8l-3.5 3.5"/><path d="M20 16H5m3.5-3.5L5 16l3.5 3.5"/></symbol>
   <symbol id="i-datum" viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M12 4v11m-3.5-3.5L12 15l3.5-3.5"/></symbol>
   <symbol id="i-csv" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6m-2.5-2.5L12 17l2.5-2.5"/></symbol>
@@ -873,64 +889,105 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
         </div>
         <div class="rail-opts" data-for="fwd_fpf fwd_fbf fwd_fpfold fwd_trishear fwd_shear">
           <div class="fwd-title" id="fwd-title"></div>
-          <label class="rail-field" data-m="fpf shear" title="Use a flat-ramp-flat fault built from the numbers below, or a fault line clicked on the section">Fault
+          <div class="fwd-note" id="fwd-fault-name"></div>
+          <label class="rail-field" data-m="fpf shear" title="Move the hanging wall over the selected (clicked) fault line, or over a flat-ramp-flat built from the numbers below">Fault
             <select id="fwd-fault-src">
               <option value="param" selected>Parametric ramp</option>
-              <option value="line">Clicked fault line</option>
+              <option value="line">Selected fault line</option>
             </select>
           </label>
-          <label class="rail-field" data-geom title="Transport direction of the hanging wall">Vergence
+          <label class="rail-field" title="Transport direction of the hanging wall">Vergence
             <select id="fwd-verg">
               <option value="1" selected>&#8594; toward +s</option>
               <option value="-1">&#8592; toward &#8722;s</option>
             </select>
           </label>
           <div class="rail-row" data-geom>
-            <label class="rail-field" title="Distance of the base of the ramp (on the detachment)">Ramp base s
+            <label class="rail-field" title="Distance of the base of the ramp (on the detachment) — or drag the round handle on the section">Ramp base s
               <input id="fwd-s0" type="number" step="any">
             </label>
             <label class="rail-field" title="Elevation of the detachment (lower flat)">Detachment z
               <input id="fwd-zd" type="number" step="any">
             </label>
           </div>
-          <div class="rail-row" data-geom>
-            <label class="rail-field" title="Ramp cutoff angle against the (horizontal) beds">Ramp &#952; (&#176;)
-              <input id="fwd-theta" type="number" min="1" max="89" step="1" value="25">
-            </label>
-            <label class="rail-field" data-m="fpf fbf shear" title="Height of the upper flat above the detachment (Parallel flow / Simple shear: empty or 0 = the ramp goes on up)">Ramp height
-              <input id="fwd-h" type="number" min="0" step="any">
-            </label>
-            <label class="rail-field" data-m="fpfold trishear" title="Initial length of the fault along the ramp, from its base to the tip">Initial tip
-              <input id="fwd-l0" type="number" min="0" step="any" value="0">
-            </label>
-          </div>
+          <label class="rail-field" data-geom title="Ramp cutoff angle against the (horizontal) beds — or drag the ramp-top / tip handle (Shift = 5° steps)">Ramp &#952; (&#176;)
+            <input id="fwd-theta" type="number" min="1" max="89" step="1" value="25">
+          </label>
+          <label class="rail-field" data-geom data-m="fpf fbf shear" title="Height of the upper flat above the detachment (Parallel flow / Simple shear: 0 = the ramp goes on up)">Ramp height (m)
+            <input id="fwd-h" type="number" min="0" step="any">
+          </label>
+          <label class="rail-field" data-geom data-m="fpfold trishear" title="Initial length of the fault along the ramp, from its base to the tip — or drag the tip handle">Initial tip (m)
+            <input id="fwd-l0" type="number" min="0" step="any" value="0">
+          </label>
+          <label class="rail-field" data-m="trishear" title="Total apical angle of the trishear zone">Trishear &#966; (&#176;)
+            <input id="fwd-phi" type="number" min="1" max="179" step="5" value="60">
+          </label>
           <div class="rail-row" data-m="trishear">
-            <label class="rail-field" title="Total apical angle of the trishear zone">Trishear &#966; (&#176;)
-              <input id="fwd-phi" type="number" min="1" max="179" step="5" value="60">
-            </label>
             <label class="rail-field" title="Propagation-to-slip ratio of the fault tip">P/S
               <input id="fwd-ps" type="number" min="0" step="0.1" value="2">
-            </label>
-          </div>
-          <div class="rail-row" data-m="trishear">
-            <label class="rail-field" title="Backlimb trishear angle at the fault bend (0 = sharp kink on the bisector)">Backlimb &#968; (&#176;)
-              <input id="fwd-psi" type="number" min="0" max="170" step="5" value="30">
             </label>
             <label class="rail-field" title="Velocity concentration factor s (1 = linear velocity field)">Concentr. s
               <input id="fwd-conc" type="number" min="0.1" step="0.1" value="1">
             </label>
           </div>
+          <label class="rail-field" data-m="trishear" title="Backlimb trishear angle at the fault bend (0 = sharp kink on the bisector)">Backlimb &#968; (&#176;)
+            <input id="fwd-psi" type="number" min="0" max="170" step="5" value="30">
+          </label>
           <label class="rail-field" data-m="shear" title="Angle of the shear direction from the vertical; positive leans toward the transport direction (antithetic to a fault that dips that way), negative leans back (synthetic)">Shear angle (&#176; from vertical)
             <input id="fwd-alpha" type="number" min="-89" max="89" step="5" value="0">
           </label>
-          <div class="rail-row">
-            <label class="rail-field" id="fwd-slip-label" title="Slip on the fault (Simple shear: horizontal heave). Positive moves the hanging wall in the vergence direction">Slip (m)
-              <input id="fwd-slip" type="number" step="any">
-            </label>
-            <label class="rail-field" data-m="fbf fpfold trishear" title="Number of slip increments used to integrate the velocity field">Increments
-              <input id="fwd-steps" type="number" min="10" max="2000" step="10" value="100">
+          <label class="rail-field" id="fwd-slip-label" title="Total slip on the fault (Simple shear: horizontal heave) — or drag the blue arrow along the fault">Slip (m)
+            <input id="fwd-slip" type="number" step="any">
+          </label>
+
+          <div class="fwd-sec">Steps &amp; animation</div>
+          <label class="rail-field" title="Number of steps the slip is split into (Step writes one, Animate plays them, Apply writes all)">Steps n
+            <input id="fwd-nsteps" type="number" min="1" max="200" step="1" value="10">
+          </label>
+          <input id="fwd-frame" class="fwd-range fwd-frame" type="range" min="0" max="10" step="1" value="10" title="Scrub the preview through the steps">
+          <div class="fwd-note" id="fwd-stepinfo"></div>
+          <div class="rail-row fwd-btns">
+            <button id="fwd-reset-btn" class="mini" title="Restart the stage: the next Step starts again from slip 0"><svg class="ic"><use href="#i-fwd-reset"/></svg>Reset</button>
+            <button id="fwd-anim-btn" class="mini" title="Animate: play the steps in the preview"><svg class="ic"><use href="#i-fwd-play"/></svg>Play</button>
+            <button id="fwd-step-btn" class="mini" title="Write the next step in the section"><svg class="ic"><use href="#i-fwd-step"/></svg>Step</button>
+          </div>
+
+          <label class="rail-check fwd-sec-check" title="Deposit a horizontal stratum after every step, at datum + k × rise, onlapping the relief (growth strata)"><input id="fwd-growth" type="checkbox"> Syntectonic strata</label>
+          <div class="rail-row" data-growth>
+            <label class="rail-field" title="Elevation of the depositional datum (regional level) — or drag the orange line on the section">Datum z
+              <input id="fwd-g-datum" type="number" step="any">
             </label>
           </div>
+          <label class="rail-field" data-growth title="Rise of the depositional surface per step (sedimentation per step)">Rise per step (m)
+            <input id="fwd-g-rise" type="number" min="0" step="any">
+          </label>
+
+          <label class="rail-check fwd-sec-check" title="Splay faults branching from the main fault"><input id="fwd-splay" type="checkbox"> Splay faults</label>
+          <div class="rail-row" data-splay>
+            <label class="rail-field" title="Number of splays, one every 'distance' along the main fault from the base of the ramp">Count
+              <input id="fwd-sp-n" type="number" min="1" max="8" step="1" value="1">
+            </label>
+            <label class="rail-field" title="Order: the main fault first and then each splay (in sequence), or all at the same time">Timing
+              <select id="fwd-sp-mode">
+                <option value="sequence" selected>In sequence</option>
+                <option value="sync">Synchronous</option>
+              </select>
+            </label>
+          </div>
+          <label class="rail-field" data-splay title="Distance along the main fault, from the base of the ramp, of the first branch point (and spacing of the next ones) — or drag the branch handle">Distance / spacing (m)
+            <input id="fwd-sp-d" type="number" min="0" step="any">
+          </label>
+          <label class="rail-field" data-splay title="Dip of the splays against the horizontal (steeper than the main ramp) — or drag the splay tip handle">Splay &#952; (&#176;)
+            <input id="fwd-sp-theta" type="number" min="1" max="89" step="1" value="45">
+          </label>
+          <label class="rail-field" data-splay title="Length of each splay from its branch point">Splay length (m)
+            <input id="fwd-sp-len" type="number" min="0" step="any">
+          </label>
+          <label class="rail-field" data-splay title="Share of the total slip taken by each splay (the rest stays on the main fault)">Slip per splay (%)
+            <input id="fwd-sp-frac" type="number" min="0" max="100" step="5" value="30">
+          </label>
+
+          <div class="fwd-sec">Display</div>
           <label class="rail-check" title="Draw the deformed section over the current one"><input id="fwd-preview" type="checkbox" checked> Preview</label>
           <label class="rail-check" title="Active (fixed to the fault) and inactive (carried by the hanging wall) axial surfaces"><input id="fwd-axial" type="checkbox" checked> Axial surfaces</label>
           <label class="rail-check" title="Circles on a regular grid, deformed with the rock into strain ellipses"><input id="fwd-strain" type="checkbox"> Strain markers</label>
@@ -940,15 +997,18 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <div class="fwd-info" id="fwd-info"></div>
           <div class="rail-row" data-geom>
             <button id="fwd-place-btn" class="mini" title="Click on the section to place the base of the ramp"><svg class="ic"><use href="#i-datum"/></svg>Place</button>
-            <button id="fwd-fit-btn" class="mini" title="Take base, angle and height/tip from the clicked (or selected) fault line"><svg class="ic"><use href="#i-add-fault"/></svg>From fault</button>
+            <button id="fwd-fit-btn" class="mini" title="Fit base, angle and height/tip to the selected fault line"><svg class="ic"><use href="#i-add-fault"/></svg>From fault</button>
           </div>
           <details class="rail-more">
-            <summary>On Apply, also add</summary>
-            <label class="rail-check"><input id="fwd-add-fault" type="checkbox" checked> Fault line</label>
-            <label class="rail-check"><input id="fwd-add-axial" type="checkbox"> Shown axial surfaces</label>
-            <label class="rail-check"><input id="fwd-add-strain" type="checkbox"> Shown strain markers</label>
+            <summary>Apply options</summary>
+            <label class="rail-field" data-m="fbf fpfold trishear" title="Number of integration increments of the velocity field for the whole slip (precision)">Increments
+              <input id="fwd-steps" type="number" min="10" max="2000" step="10" value="100">
+            </label>
+            <label class="rail-check"><input id="fwd-add-fault" type="checkbox" checked> Add fault &amp; splay lines</label>
+            <label class="rail-check"><input id="fwd-add-axial" type="checkbox"> Add shown axial surfaces</label>
+            <label class="rail-check"><input id="fwd-add-strain" type="checkbox"> Add shown strain markers</label>
           </details>
-          <button id="fwd-apply-btn" class="primary mini" title="Deform the lines (selected ones, or every horizon and contact if none is selected)"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
+          <button id="fwd-apply-btn" class="primary mini" title="Write all the remaining steps (selected lines, or every horizon and contact if none is selected)"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
         </div>
       </div>
     </div>
@@ -7301,6 +7361,30 @@ window.SW = window.SW || {};
   let pts = [];
   let preview = null;
   let snapMark = null;
+  let lastPos = null;          // último puntero (para rehacer la vista al tocar Shift)
+  const ANGLE_STEP = 45;       // Shift: 0°, 45°, 90°… (en (s, z) reales)
+
+  /* Shift sostenido: el segmento desde el último vértice se orienta al
+   * múltiplo de 45° más cercano, medido en (s, z) reales — lo mismo que
+   * informa #ro-angle, así "45°" es un manteo real aunque la VE lo dibuje
+   * más empinado — y su largo es la proyección del cursor sobre esa
+   * dirección. Manda sobre el snap a otras líneas. */
+  function constrain(q, shift) {
+    if (!shift || !pts.length) return q;
+    const a = pts[pts.length - 1];
+    const ds = q[0] - a[0], dz = q[1] - a[1];
+    if (Math.hypot(ds, dz) < 1e-12) return q;
+    const step = ANGLE_STEP * Math.PI / 180;
+    const ang = Math.round(Math.atan2(dz, ds) / step) * step;
+    const ux = Math.cos(ang), uz = Math.sin(ang);
+    const L = ds * ux + dz * uz;
+    snapMark = null;
+    return [a[0] + L * ux, a[1] + L * uz];
+  }
+  function pointFor(pos, shift) {
+    const q = snapPos(pos);
+    return constrain(q, shift);
+  }
 
   function snapEnabled() {
     const cb = document.getElementById("digitize-snap");
@@ -7373,6 +7457,17 @@ window.SW = window.SW || {};
     SW.view.requestDraw();
   }
 
+  // Shift apretado o soltado sin mover el puntero: rehacer el segmento
+  function reshape(shift) {
+    if (!pts.length || !lastPos || SW.tools.activeToolName() !== "digitize") return;
+    preview = pointFor(lastPos, shift);
+    angleReadout(pts[pts.length - 1], preview);
+    SW.view.requestDraw();
+  }
+  window.addEventListener("keyup", function (e) {
+    if (e.key === "Shift") reshape(false);
+  });
+
   function cancel() {
     const had = pts.length;
     pts = []; preview = null; snapMark = null;
@@ -7383,13 +7478,13 @@ window.SW = window.SW || {};
 
   SW.tools.register("digitize", {
     cursor: "crosshair",
-    hint: "Click adds vertices · double/right click finishes · S snap · " +
-          "Esc cancels",
+    hint: "Click adds vertices · double/right click finishes · hold Shift " +
+          "for 0°/45°/90° segments · S snap · Esc cancels",
     hasPending: function () { return pts.length > 0; },
     deactivate: function () { pts = []; preview = null; snapMark = null; angleReadout(null, null); },
     onClick: function (e, pos) {
       if (e.button === 0) {
-        pts.push(snapPos(pos));
+        pts.push(pointFor(pos, e.shiftKey));
         SW.view.requestDraw();
       } else if (e.button === 2) {
         finish();
@@ -7400,13 +7495,15 @@ window.SW = window.SW || {};
       finish();
     },
     onMove: function (e, pos) {
+      lastPos = pos;
       if (!pts.length) { angleReadout(null, null); return; }
-      preview = snapPos(pos);
+      preview = pointFor(pos, e.shiftKey);
       angleReadout(pts[pts.length - 1], preview);
       SW.view.requestDraw();
     },
     onKey: function (e) {
       if (e.key === "Escape") { cancel(); return true; }
+      if (e.key === "Shift") { reshape(true); return false; }
       // "S" alterna el snap sin soltar el trazo ni ir al riel — el gesto
       // habitual cuando hay que colocar UN vértice libre entre varios
       // enganchados.
@@ -7904,11 +8001,14 @@ window.SW = window.SW || {};
   // modo que los mismos tiradores sirven con mouse, lápiz y dedo.
   const HANDLE_PX = () => SW.view.hitPx(7);
   const PIVOT_PX = () => SW.view.hitPx(6);
-  const ROTATE_OFFSET_PX = () => SW.view.hitPx(30);
+  const ROTATE_OFFSET_PX = () => SW.view.hitPx(34);
 
   let pivot = null;         // [s,z] — persiste mientras la selección no cambie
   let pivotKey = null;      // ids de línea seleccionados, para invalidar el pivote
   let drag = null;          // {lines:[{line,before}], bbox, mode, ...}
+  let hover = null;         // tirador bajo el puntero (para resaltarlo)
+  let readout = "";         // ángulo / escala en curso, junto al puntero
+  const ROT_SNAP = 15;      // Shift al rotar: pasos de 15°
 
   function selKey() {
     return SW.view.selectedLineIds().slice().sort().join(",");
@@ -7958,7 +8058,7 @@ window.SW = window.SW || {};
   function hitHandle(pos, bbox) {
     const V = SW.view;
     const rp = rotateHandlePx(bbox);
-    if (Math.hypot(pos.x - rp.x, pos.y - rp.y) <= HANDLE_PX() + 2)
+    if (Math.hypot(pos.x - rp.x, pos.y - rp.y) <= HANDLE_PX() + 6)
       return { kind: "rotate" };
     const pv = { x: V.sx(pivot[0]), y: V.zy(pivot[1]) };
     if (Math.hypot(pos.x - pv.x, pos.y - pv.y) <= PIVOT_PX() + 2)
@@ -8017,14 +8117,15 @@ window.SW = window.SW || {};
 
   SW.tools.register("transform", {
     cursor: "move",
-    hint: "Drag inside the box to move; corner/edge handles scale (Shift " +
-          "= proportional); the top handle rotates around the pivot " +
-          "(draggable). Esc cancels.",
+    hint: "Drag inside the box to move · corner handles scale (Shift keeps " +
+          "the proportions) · the circular-arrows handle on top rotates " +
+          "everything around the pivot (Shift = 15° steps; drag the pivot " +
+          "to move the axis) · Esc cancels.",
     activate: function () {
       const lines = activeLines();
       if (lines.length) ensurePivot(lines);
     },
-    deactivate: function () { drag = null; },
+    deactivate: function () { drag = null; hover = null; readout = ""; },
     onDown: function (e, pos) {
       if (e.button !== 0) return;
       const lines = activeLines();
@@ -8064,7 +8165,19 @@ window.SW = window.SW || {};
       return "capture";
     },
     onMove: function (e, pos) {
-      if (!drag) return;
+      if (!drag) {
+        const lines = activeLines();
+        const bbox = lines.length ? computeBBox(lines) : null;
+        if (bbox) ensurePivot(lines);
+        const h = bbox ? hitHandle(pos, bbox) : null;
+        const key = h ? h.kind + (h.handle || "") : null;
+        if ((hover && hover.key) !== key) {
+          hover = h ? { key: key, kind: h.kind, handle: h.handle } : null;
+          SW.view.setCursor(!h ? "" : h.kind === "move" ? "" : "pointer");
+          SW.view.requestDraw();
+        }
+        return;
+      }
       const V = SW.view;
       if (drag.mode === "pivot") {
         const p = V.toSection(pos);
@@ -8083,7 +8196,16 @@ window.SW = window.SW || {};
         const curAngle = Math.atan2(pos.y - pv.y, pos.x - pv.x);
         // el screen-y está invertido respecto de z (zy invierte): una
         // rotación visual "horaria" en pantalla es antihoraria en (s,z).
-        const angle = -(curAngle - drag.startAngle);
+        let angle = -(curAngle - drag.startAngle);
+        // (-π, π]: el readout y el snap no deben dar vueltas enteras
+        angle = Math.atan2(Math.sin(angle), Math.cos(angle));
+        if (e.shiftKey) {
+          const st = ROT_SNAP * Math.PI / 180;
+          angle = Math.round(angle / st) * st;
+        }
+        readout = (angle * 180 / Math.PI).toFixed(1) + "°" +
+                  (e.shiftKey ? "" : "  (Shift: " + ROT_SNAP + "° steps)");
+        drag.at = pos;
         applyPreview({ pivot: pivot, angle: angle });
         return;
       }
@@ -8104,11 +8226,18 @@ window.SW = window.SW || {};
           scaleS = drag.axisS ? (scaleS < 0 ? -u : u) : 1;
           scaleZ = drag.axisZ ? (scaleZ < 0 ? -u : u) : 1;
         }
+        readout = (drag.axisS && drag.axisZ && e.shiftKey)
+          ? "× " + Math.abs(scaleS).toFixed(3) + " (proportional)"
+          : "× " + Math.abs(scaleS).toFixed(3) + " s, × " +
+            Math.abs(scaleZ).toFixed(3) + " z" +
+            (drag.axisS && drag.axisZ ? "  (Shift: proportional)" : "");
+        drag.at = pos;
         applyPreview({ pivot: pivot, scaleS: scaleS, scaleZ: scaleZ });
         return;
       }
     },
     onUp: function () {
+      readout = "";
       if (!drag) return;
       const label = { move: "Move", scale: "Scale", rotate: "Rotate",
                       pivot: "Move pivot" }[drag.mode] || "Transform";
@@ -8118,7 +8247,7 @@ window.SW = window.SW || {};
     onKey: function (e) {
       if (e.key !== "Escape" || !drag) return false;
       for (const item of drag.lines) item.line.vertices = item.before;
-      drag = null;
+      drag = null; readout = "";
       SW.view.requestDraw();
       return true;
     },
@@ -8129,43 +8258,100 @@ window.SW = window.SW || {};
       if (!bbox) return;
       ensurePivot(lines);
       const V = SW.view;
+      const HP = HANDLE_PX(), PP = PIVOT_PX();
+      const sel = SW.render.COLORS.select;
       const x0 = V.sx(bbox.s0), x1 = V.sx(bbox.s1);
       const y0 = V.zy(bbox.z1), y1 = V.zy(bbox.z0);
+      const L = Math.min(x0, x1), T = Math.min(y0, y1);
+      const R = Math.max(x0, x1), B = Math.max(y0, y1);
+      const hot = (kind, handle) => {
+        const cur = drag ? { kind: drag.mode, handle: drag.handle } : hover;
+        return !!cur && cur.kind === kind && (handle === undefined || cur.handle === handle);
+      };
       ctx.save();
-      ctx.strokeStyle = SW.render.COLORS.select;
+      ctx.strokeStyle = sel;
       ctx.setLineDash([5, 3]); ctx.lineWidth = 1.2;
-      ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1),
-                     Math.abs(x1 - x0), Math.abs(y1 - y0));
+      ctx.strokeRect(L, T, R - L, B - T);
       ctx.setLineDash([]);
       const hp = handlePositions(bbox);
-      ctx.fillStyle = "#fff"; ctx.strokeStyle = SW.render.COLORS.select;
-      ctx.lineWidth = 1.4;
       for (const name of Object.keys(hp)) {
-        const p = hp[name];
+        const x = V.sx(hp[name][0]), y = V.zy(hp[name][1]);
+        const corner = name.length === 2;
+        const on = hot("scale", name);
+        const r = corner ? HP + 2 : HP * 0.75;
+        ctx.fillStyle = on ? sel : "#fff";
+        ctx.strokeStyle = sel; ctx.lineWidth = 1.4;
         ctx.beginPath();
-        ctx.rect(V.sx(p[0]) - HANDLE_PX / 2, V.zy(p[1]) - HANDLE_PX / 2,
-                 HANDLE_PX, HANDLE_PX);
+        ctx.rect(x - r, y - r, 2 * r, 2 * r);
         ctx.fill(); ctx.stroke();
+        if (corner) {
+          // icono: flecha doble en diagonal (hacia afuera de la caja)
+          const sx = name[1] === "e" ? 1 : -1, sy = name[0] === "s" ? 1 : -1;
+          const k = r * 0.6, hd = r * 0.42;
+          ctx.strokeStyle = on ? "#fff" : sel; ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.moveTo(x - sx * k, y - sy * k); ctx.lineTo(x + sx * k, y + sy * k);
+          ctx.moveTo(x + sx * k, y + sy * k); ctx.lineTo(x + sx * (k - hd), y + sy * k);
+          ctx.moveTo(x + sx * k, y + sy * k); ctx.lineTo(x + sx * k, y + sy * (k - hd));
+          ctx.moveTo(x - sx * k, y - sy * k); ctx.lineTo(x - sx * (k - hd), y - sy * k);
+          ctx.moveTo(x - sx * k, y - sy * k); ctx.lineTo(x - sx * k, y - sy * (k - hd));
+          ctx.stroke();
+        }
       }
+      // rotación: flechas en arco sobre el borde superior
       const rp = rotateHandlePx(bbox);
       const topMidPx = { x: V.sx((bbox.s0 + bbox.s1) / 2), y: V.zy(bbox.z1) };
+      ctx.strokeStyle = sel; ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(topMidPx.x, topMidPx.y);
-      ctx.lineTo(rp.x, rp.y);
+      ctx.lineTo(rp.x, rp.y + HP + 3);
       ctx.stroke();
+      const rr = HP + 5, onR = hot("rotate");
       ctx.beginPath();
-      ctx.arc(rp.x, rp.y, HANDLE_PX, 0, 7);
-      ctx.fillStyle = "#fff"; ctx.fill(); ctx.stroke();
+      ctx.arc(rp.x, rp.y, rr, 0, 7);
+      ctx.fillStyle = onR ? sel : "#fff"; ctx.fill();
+      ctx.lineWidth = 1.4; ctx.stroke();
+      const ic = onR ? "#fff" : sel, ar = rr * 0.58;
+      ctx.strokeStyle = ic; ctx.fillStyle = ic; ctx.lineWidth = 1.5;
+      for (const [a0, a1] of [[Math.PI * 1.05, Math.PI * 1.85], [Math.PI * 0.05, Math.PI * 0.85]]) {
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, ar, a0, a1);
+        ctx.stroke();
+        const ex = rp.x + ar * Math.cos(a1), ey = rp.y + ar * Math.sin(a1);
+        const tx = -Math.sin(a1), ty = Math.cos(a1);          // tangente
+        const nx = Math.cos(a1), ny = Math.sin(a1);
+        ctx.beginPath();
+        ctx.moveTo(ex + tx * 3.2, ey + ty * 3.2);
+        ctx.lineTo(ex + nx * 2.6 - tx * 0.6, ey + ny * 2.6 - ty * 0.6);
+        ctx.lineTo(ex - nx * 2.6 - tx * 0.6, ey - ny * 2.6 - ty * 0.6);
+        ctx.closePath(); ctx.fill();
+      }
+      // pivote (eje de rotación y centro de escala)
       const pv = { x: V.sx(pivot[0]), y: V.zy(pivot[1]) };
+      ctx.strokeStyle = SW.render.COLORS.aux; ctx.lineWidth = hot("pivot") ? 2.4 : 1.6;
       ctx.beginPath();
-      ctx.moveTo(pv.x - PIVOT_PX, pv.y); ctx.lineTo(pv.x + PIVOT_PX, pv.y);
-      ctx.moveTo(pv.x, pv.y - PIVOT_PX); ctx.lineTo(pv.x, pv.y + PIVOT_PX);
-      ctx.strokeStyle = SW.render.COLORS.aux; ctx.lineWidth = 1.6;
+      ctx.moveTo(pv.x - PP - 3, pv.y); ctx.lineTo(pv.x + PP + 3, pv.y);
+      ctx.moveTo(pv.x, pv.y - PP - 3); ctx.lineTo(pv.x, pv.y + PP + 3);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(pv.x, pv.y, PIVOT_PX, 0, 7);
-      ctx.strokeStyle = SW.render.COLORS.aux;
+      ctx.arc(pv.x, pv.y, PP, 0, 7);
       ctx.stroke();
+      if (drag && drag.mode === "rotate") {
+        // radio del giro: del pivote al puntero
+        ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pv.x, pv.y);
+        ctx.lineTo(drag.at ? drag.at.x : rp.x, drag.at ? drag.at.y : rp.y);
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+      if (drag && readout && drag.at) {
+        ctx.font = "600 11.5px 'Segoe UI', sans-serif";
+        ctx.textBaseline = "bottom"; ctx.textAlign = "left";
+        const w = ctx.measureText(readout).width;
+        ctx.fillStyle = "rgba(255,255,255,.92)";
+        ctx.fillRect(drag.at.x + 12, drag.at.y - 26, w + 10, 18);
+        ctx.fillStyle = "#1f2933";
+        ctx.fillText(readout, drag.at.x + 17, drag.at.y - 11);
+      }
       ctx.restore();
     },
   });
@@ -11151,10 +11337,20 @@ SW.forward = (function () {
    * transporte (verg = ±1), z hacia arriba. */
   function frame(p) {
     const v = p.verg < 0 ? -1 : 1;
+    // ω: inclinación de la falla "de abajo" (0 = despegue horizontal; un
+    // splay usa la dirección de la falla principal en su punto de rama),
+    // positiva hacia arriba en el sentido del transporte
+    const w = (+p.omega || 0) * D2R, c = Math.cos(w), sn = Math.sin(w);
     return {
       v: v,
-      toLocal: q => [(q[0] - p.s0) * v, q[1] - p.zd],
-      toSec: q => [p.s0 + v * q[0], p.zd + q[1]],
+      toLocal: function (q) {
+        const dx = (q[0] - p.s0) * v, dz = q[1] - p.zd;
+        return [dx * c + dz * sn, -dx * sn + dz * c];
+      },
+      toSec: function (q) {
+        const dx = q[0] * c - q[1] * sn, dz = q[0] * sn + q[1] * c;
+        return [p.s0 + v * dx, p.zd + dz];
+      },
     };
   }
 
@@ -11295,15 +11491,17 @@ SW.forward = (function () {
 
   const VFIELD = { fbf: vFBF, fpfold: vFPFold, trishear: vTrishear };
 
-  /* Integra una nube de puntos (marco local) con RK2 de punto medio. */
-  function integrate(g, pts, slip, steps) {
+  /* Integra una nube de puntos (marco local) con RK2 de punto medio, del
+   * slip acumulado sA al sB (la posición de la punta y el cambio de régimen
+   * del FBF dependen del slip ACUMULADO, no del incremento). */
+  function integrate(g, pts, sA, sB, steps) {
     const vf = VFIELD[g.method];
     const n = Math.max(1, Math.round(steps) || 1);
-    const ds = slip / n;
+    const ds = (sB - sA) / n;
     const out = pts.map(p => [p[0], p[1]]);
-    if (!(slip > 0)) return out;
+    if (!(ds > 0)) return out;
     for (let k = 0; k < n; k++) {
-      const s = k * ds;
+      const s = sA + k * ds;
       for (const p of out) {
         const v1 = vf(g, p[0], p[1], s);
         const mx = p[0] + v1[0] * ds / 2, mz = p[1] + v1[1] * ds / 2;
@@ -11332,18 +11530,16 @@ SW.forward = (function () {
               [far, far * Math.tan(th)]];
     }
     const Lt = g.L0 + g.ps * Math.max(0, slip);
+    if (p.isSplay) return [[0, 0], [Lt * g.r[0], Lt * g.r[1]]];
     return [[Math.min(x0, -1), 0], [0, 0], [Lt * g.r[0], Lt * g.r[1]]];
   }
 
-  /* -- superficies axiales activas (marco local), al slip dado ------------ */
-  function axialsLocal(p, g, slip, top) {
+  /* -- superficies axiales activas, al slip dado ---------------------------
+   * Rayos en el marco local {o, u, kind}; `axialRays` los pasa a la sección
+   * y los corta en la cota `top`. */
+  function raysLocal(p, g, slip) {
     const out = [];
-    function ray(o, u, kind) {
-      if (u[1] <= EPS) return;
-      const t = (top - o[1]) / u[1];
-      if (!(t > 0)) return;
-      out.push({ kind: kind, pts: [o.slice(), [o[0] + u[0] * t, o[1] + u[1] * t]] });
-    }
+    const ray = (o, u, kind) => out.push({ o: o, u: u, kind: kind });
     if (p.method === "fbf") {
       ray([0, 0], g.uA, "A");
       ray(g.P2, slip < g.L ? g.uB : g.uB0, slip < g.L ? "B" : "B0");
@@ -11358,15 +11554,26 @@ SW.forward = (function () {
       const T = [Lt * g.r[0], Lt * g.r[1]];
       const half = Math.atan(g.m);
       ray(T, dirv(g.th + half), "trishear");
-      // el borde inferior del triángulo apunta hacia abajo si θ < φ/2
-      const lo = dirv(g.th - half);
-      const reach = Math.max(1, top) * 2;
-      out.push({ kind: "trishear",
-                 pts: [T.slice(), [T[0] + lo[0] * reach, T[1] + lo[1] * reach]] });
+      ray(T, dirv(g.th - half), "trishear");
       if (g.psi > 0) {
         ray([0, 0], dirv(g.am - g.psi / 2), "backlimb");
         ray([0, 0], dirv(g.am + g.psi / 2), "backlimb");
       } else ray([0, 0], dirv(g.am), "A");
+    }
+    return out;
+  }
+  function axialRays(p, g, F, slip, top, reach) {
+    const out = [];
+    for (const r of raysLocal(p, g, slip)) {
+      const o = F.toSec(r.o);
+      const e = F.toSec([r.o[0] + r.u[0], r.o[1] + r.u[1]]);
+      const ux = e[0] - o[0], uz = e[1] - o[1];
+      let t;
+      if (uz > EPS) t = (top - o[1]) / uz;
+      else if (r.kind === "trishear") t = reach;   // borde inferior del triángulo
+      else continue;
+      if (!(t > 0)) continue;
+      out.push({ kind: r.kind, pts: [o, [o[0] + ux * t, o[1] + uz * t]] });
     }
     return out;
   }
@@ -11513,35 +11720,30 @@ SW.forward = (function () {
   }
 
   /* -- API principal ---------------------------------------------------------
-   * run(p, sets) -> {ok, error, info, fault (sección), axialActive,
-   *                  outputs: sets deformados (mismas claves), ...}
-   * p: parámetros (method, s0, zd, verg, theta, H, L0, phi, ps, conc, psi,
-   *    alpha, slip, steps, faultSrc, faultLine (vértices), top, x0, x1).
-   * sets: {clave: [[s,z], ...]} — puntos en coordenadas de la sección. */
-  function run(p, sets) {
+   * prepare(p) -> modelo listo para mover puntos en incrementos de slip:
+   *   {ok, error, info, g, verg,
+   *    fault(slip)        traza de la falla (sección) con la punta a ese slip,
+   *    axialActive(slip)  superficies axiales activas a ese slip,
+   *    axialInitial()     las mismas a slip 0 (las inactivas = éstas deformadas),
+   *    move(pts, sA, sB, increments)  puntos de la sección de sA a sB}.
+   * p: method, s0, zd, verg, omega, theta, H, L0, phi, ps, conc, psi, alpha,
+   *    slip, steps, faultSrc, faultLine, top, x0, x1. */
+  function prepare(p) {
     const g = setup(p);
     if (!g.ok) return { ok: false, error: g.error };
-    const F = frame(p);
-    const slip = +p.slip || 0;
-    const res = { ok: true, info: g.info, g: g, outputs: {} };
-    const top = p.top;
-
-    let axActive = [];
     if (usesLine(p) && (p.faultLine || []).length < 2)
       return { ok: false, error: "Click a fault line on the section first." };
-    const faultSec = trace(p, g, slip);
-    res.fault = faultSec;
-    res.fault0 = trace(p, g, 0);
+    const F = frame(p);
+    const span = Math.max(1, Math.abs((p.x1 - p.x0) || 1));
+    const m = { ok: true, info: g.info, g: g, verg: F.v, p: p };
+    m.fault = slip => trace(p, g, Math.max(0, slip || 0));
 
-    // superficies axiales activas e iniciales (las inactivas se deforman)
-    let ax0 = [];
-    if (VFIELD[p.method]) {
-      const topL = top - p.zd;
-      ax0 = axialsLocal(p, g, 0, topL).map(a => ({ kind: a.kind, pts: a.pts.map(F.toSec) }));
-      axActive = axialsLocal(p, g, slip, topL).map(a => ({ kind: a.kind, pts: a.pts.map(F.toSec) }));
-    } else {
+    let bendAx = null;
+    function bends() {
+      if (bendAx) return bendAx;
+      bendAx = [];
       // quiebres de la falla: bisectriz (FPF) o dirección de cizalla
-      const lr = SW.restore.orientLR(faultSec);
+      const lr = SW.restore.orientLR(m.fault(0));
       const sh = p.method === "shear" ? shearDir(p, F.v) : null;
       for (let i = 1; i < lr.length - 1; i++) {
         let u;
@@ -11555,59 +11757,306 @@ SW.forward = (function () {
           u = [nx / L, nz / L];
         }
         if (u[1] <= EPS) continue;
-        const t = (top - lr[i][1]) / u[1];
+        const t = (p.top - lr[i][1]) / u[1];
         if (!(t > 0)) continue;
-        ax0.push({ kind: "bend", pts: [lr[i].slice(), [lr[i][0] + u[0] * t, lr[i][1] + u[1] * t]] });
+        bendAx.push({ kind: "bend", pts: [lr[i].slice(),
+                      [lr[i][0] + u[0] * t, lr[i][1] + u[1] * t]] });
       }
-      axActive = ax0.map(a => ({ kind: a.kind, pts: a.pts.map(q => q.slice()) }));
+      return bendAx;
     }
-    res.axialActive = axActive;
+    m.axialActive = function (slip) {
+      if (VFIELD[p.method]) return axialRays(p, g, F, slip, p.top, span * 2);
+      return bends().map(a => ({ kind: a.kind, pts: a.pts.map(q => q.slice()) }));
+    };
+    m.axialInitial = () => m.axialActive(0);
 
-    // todo lo que se deforma, en un único lote
-    const keys = Object.keys(sets);
+    let mapper = null;
+    m.move = function (pts, sA, sB, increments) {
+      const d = (sB || 0) - (sA || 0);
+      if (!pts.length || Math.abs(d) < EPS) return pts.map(q => [q[0], q[1]]);
+      if (VFIELD[p.method]) {
+        if (d < 0) return pts.map(q => [q[0], q[1]]);   // no reversible
+        const loc = pts.map(F.toLocal);
+        return integrate(g, loc, sA, sB, increments).map(F.toSec);
+      }
+      const lr = SW.restore.orientLR(m.fault(0));
+      if (p.method === "fpf") {
+        mapper = mapper || fpfMapper(lr, span * 3);
+        return pts.map(q => mapper(q, d * F.v));
+      }
+      if (!mapper) {
+        const side = fpfMapper(lr, span * 3).isHW;
+        mapper = { ext: extendEnds(lr, span * 3), side: side };
+      }
+      const f = shearMapper(mapper.ext, shearDir(p, F.v), [d * F.v, 0], mapper.side);
+      return pts.map(f);
+    };
+    return m;
+  }
+
+  /* Corrida de una sola vez (0 → slip) sobre conjuntos de puntos; la usan
+   * las pruebas y el modo sin pasos. */
+  function run(p, sets) {
+    const m = prepare(p);
+    if (!m.ok) return m;
+    const slip = +p.slip || 0;
+    const res = { ok: true, info: m.info, g: m.g, outputs: {} };
+    res.fault = m.fault(slip);
+    res.fault0 = m.fault(0);
+    res.axialActive = m.axialActive(slip);
+    const ax0 = m.axialInitial();
     const AXN = 48;
-    // la raíz de cada superficie axial está SOBRE la falla, que cuenta como
-    // yaciente: se la corre un pelo hacia el bloque colgante para que viaje
-    // con él
-    const nudge = Math.max(1e-6, Math.abs(p.x1 - p.x0) * 1e-6);
-    const axSamples = ax0.map(function (a) {
-      const q = a.pts.map(v => v.slice());
-      const dx = q[1][0] - q[0][0], dz = q[1][1] - q[0][1];
-      const L = Math.hypot(dx, dz) || 1;
-      q[0] = [q[0][0] + dx / L * nudge, q[0][1] + dz / L * nudge];
-      return sampleLine(q, AXN);
-    });
+    const axSamples = ax0.map(a => sampleLine(nudgeRoot(a.pts, p), AXN));
+    const keys = Object.keys(sets);
     const flat = [];
     for (const k of keys) for (const q of sets[k]) flat.push(q);
     for (const a of axSamples) for (const q of a) flat.push(q);
-
-    let moved;
-    if (VFIELD[p.method]) {
-      const loc = flat.map(F.toLocal);
-      moved = integrate(g, loc, Math.max(0, slip), p.steps).map(F.toSec);
-    } else if (p.method === "fpf") {
-      const lr = SW.restore.orientLR(faultSec);
-      const span = Math.max(1, (p.x1 - p.x0) || 1);
-      const f = fpfMapper(lr, span * 3);
-      moved = flat.map(q => f(q, slip * F.v));
-    } else {
-      const lr = SW.restore.orientLR(faultSec);
-      const span = Math.max(1, (p.x1 - p.x0) || 1);
-      const ext = extendEnds(lr, span * 3);
-      const side = fpfMapper(lr, span * 3).isHW;
-      const f = shearMapper(ext, shearDir(p, F.v), [slip * F.v, 0], side);
-      moved = flat.map(f);
-    }
+    const moved = m.move(flat, 0, slip, p.steps);
     let i = 0;
     for (const k of keys) {
       res.outputs[k] = moved.slice(i, i + sets[k].length);
       i += sets[k].length;
     }
     res.axialInactive = axSamples.map(function (a, j) {
-      const pts = moved.slice(i + j * AXN, i + (j + 1) * AXN);
-      return { kind: ax0[j].kind, pts: pts };
+      return { kind: ax0[j].kind, pts: moved.slice(i + j * AXN, i + (j + 1) * AXN) };
     });
     return res;
+  }
+
+  /* La raíz de cada superficie axial está SOBRE la falla, que cuenta como
+   * yaciente: se la corre un pelo hacia el bloque colgante para que viaje
+   * con él. */
+  function nudgeRoot(pts, p) {
+    const nudge = Math.max(1e-6, Math.abs(p.x1 - p.x0) * 1e-6);
+    const q = pts.map(v => v.slice());
+    const dx = q[1][0] - q[0][0], dz = q[1][1] - q[0][1];
+    const L = Math.hypot(dx, dz) || 1;
+    q[0] = [q[0][0] + dx / L * nudge, q[0][1] + dz / L * nudge];
+    return q;
+  }
+
+  /* -- splays ---------------------------------------------------------------
+   * Parámetros de un splay que nace de la falla principal a `d` metros de
+   * la base de la rampa (medidos sobre la falla), sube con `theta` grados
+   * sobre la horizontal y mide `len` metros. Con los métodos de campo de
+   * velocidades el splay es el mismo modelo en un marco girado a la
+   * dirección de la rampa principal (su "despegue" es esa rampa); con FPF y
+   * cizalla simple es una polilínea: la falla principal hasta la rama y el
+   * splay desde ahí. El splay queda fijo en el espacio (aproximación
+   * cinemática habitual de los modelos de avance por pasos). */
+  function splayParams(main, spec) {
+    const gm = setup(main);
+    if (!gm.ok) return { error: gm.error };
+    const d = Math.max(0, +spec.d || 0);
+    const ts = (+spec.theta || 0);
+    const len = Math.max(1, +spec.len || 1);
+    const base = Object.assign({}, main, { slip: 0 });
+    delete base.faultLine;
+    if (VFIELD[main.method] && main.method !== "fbf") {
+      const Fm = frame(main);
+      const th = +main.theta || 0;
+      const rel = ts - th;
+      if (!(rel > 1)) return { error: "Splays must be steeper than the main ramp." };
+      const B = Fm.toSec([d * gm.r[0], d * gm.r[1]]);
+      return Object.assign(base, {
+        s0: B[0], zd: B[1], omega: (+main.omega || 0) + th, theta: rel,
+        H: len * Math.sin(rel * D2R), L0: len, faultSrc: "param",
+        branch: B, isSplay: true,
+      });
+    }
+    // FPF / cizalla: polilínea principal hasta la rama + el splay
+    const mf = usesLine(main) ? (main.faultLine || []).map(q => q.slice())
+                              : faultLocal(main, gm, 0, main.x0, main.x1).map(frame(main).toSec);
+    if (mf.length < 2) return { error: "The main fault is missing." };
+    // desde la base: el vértice de la rampa (paramétrica) o el extremo más bajo
+    let path = mf;
+    if (usesLine(main)) {
+      if (mf[0][1] > mf[mf.length - 1][1]) path = mf.slice().reverse();
+    } else path = mf.slice(1);                       // arranca en la base
+    let acc = 0, B = path[path.length - 1], k = path.length - 1;
+    for (let i = 1; i < path.length; i++) {
+      const L = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
+      if (acc + L >= d) {
+        const t = L > 0 ? (d - acc) / L : 0;
+        B = [path[i - 1][0] + t * (path[i][0] - path[i - 1][0]),
+             path[i - 1][1] + t * (path[i][1] - path[i - 1][1])];
+        k = i;
+        break;
+      }
+      acc += L;
+    }
+    const v = main.verg < 0 ? -1 : 1;
+    const tip = [B[0] + v * len * Math.cos(ts * D2R), B[1] + len * Math.sin(ts * D2R)];
+    // la parte de la principal "detrás" de la rama (hacia el despegue)
+    let behind = path.slice(0, k).concat([B]);
+    if (!usesLine(main)) behind = [mf[0]].concat(behind);
+    // con un FBF principal el splay se mueve por flujo paralelo a la
+    // polilínea (kinks en las bisectrices), coherente con el pliegue por
+    // bandas de kink
+    return Object.assign(base, { method: main.method === "fbf" ? "fpf" : main.method,
+                                 faultSrc: "line", faultLine: behind.concat([tip]),
+                                 branch: B, drawFault: [B, tip] });
+  }
+
+  /* -- depositación sintectónica ------------------------------------------
+   * Capa horizontal a la cota `level` entre s0 y s1 que sólo existe donde
+   * queda por encima de la superficie actual (envolvente superior de
+   * `surfaces`): termina en onlap contra el relieve. */
+  function growthBed(level, surfaces, s0, s1, spacing) {
+    const n = Math.max(2, Math.min(4000, Math.ceil((s1 - s0) / Math.max(spacing, 1e-9))));
+    const xs = [], env = [];
+    for (let i = 0; i <= n; i++) { xs.push(s0 + (s1 - s0) * i / n); env.push(-Infinity); }
+    for (const pl of surfaces) {
+      for (let j = 0; j < pl.length - 1; j++) {
+        const a = pl[j], b = pl[j + 1];
+        const lo = Math.min(a[0], b[0]), hi = Math.max(a[0], b[0]);
+        if (hi < s0 || lo > s1) continue;
+        const i0 = Math.max(0, Math.ceil((lo - s0) / (s1 - s0) * n));
+        const i1 = Math.min(n, Math.floor((hi - s0) / (s1 - s0) * n));
+        for (let i = i0; i <= i1; i++) {
+          const t = hi - lo > 1e-12 ? (xs[i] - a[0]) / (b[0] - a[0]) : 0;
+          const z = hi - lo > 1e-12 ? a[1] + t * (b[1] - a[1]) : Math.max(a[1], b[1]);
+          if (z > env[i]) env[i] = z;
+        }
+      }
+    }
+    const out = [];
+    let cur = null;
+    for (let i = 0; i <= n; i++) {
+      const above = level > env[i];
+      if (above) {
+        if (!cur) {
+          // entrada: dónde la envolvente cruza la cota
+          let x = xs[i];
+          if (i > 0 && isFinite(env[i - 1]) && isFinite(env[i]) && env[i - 1] !== env[i])
+            x = xs[i - 1] + (xs[i] - xs[i - 1]) * (env[i - 1] - level) / (env[i - 1] - env[i]);
+          cur = [[x, level]];
+        }
+      } else if (cur) {
+        let x = xs[i - 1];
+        if (isFinite(env[i - 1]) && isFinite(env[i]) && env[i] !== env[i - 1])
+          x = xs[i - 1] + (xs[i] - xs[i - 1]) * (level - env[i - 1]) / (env[i] - env[i - 1]);
+        cur.push([x, level]);
+        if (cur[1][0] - cur[0][0] > spacing * 0.5) out.push(cur);
+        cur = null;
+      }
+    }
+    if (cur) { cur.push([xs[n], level]); if (cur[1][0] - cur[0][0] > spacing * 0.5) out.push(cur); }
+    return out;
+  }
+
+  /* -- simulación por pasos -------------------------------------------------
+   * cfg: {main, splays: [{p, frac}], sets: {clave: puntos}, surfaceKeys:
+   *       fn(clave) → ¿cuenta como superficie para el onlap?, S (slip total),
+   *       n (pasos), from (pasos ya aplicados), increments (subpasos de
+   *       integración por paso), growth: null | {datum, rise, s0, s1,
+   *       spacing}}.
+   * Devuelve {ok, error, frames}: frames[0] es el estado de partida y
+   * frames[i] el estado tras el paso from+i. Cada cuadro: {k, slip, sets,
+   * growth (claves nuevas), faults, axActive, axInactive}. */
+  function simulate(cfg) {
+    const mm = prepare(cfg.main);
+    if (!mm.ok) return { ok: false, error: mm.error };
+    const sps = [];
+    for (const sp of cfg.splays || []) {
+      const m = prepare(sp.p);
+      if (!m.ok) return { ok: false, error: "Splay: " + m.error };
+      sps.push({ m: m, frac: sp.frac });
+    }
+    const n = Math.max(1, Math.round(cfg.n) || 1);
+    const from = Math.max(0, Math.round(cfg.from) || 0);
+    const S = +cfg.S || 0;
+    const fr = Math.min(1, sps.reduce((a, b) => a + b.frac, 0));
+    const mainFrac = Math.max(0, 1 - fr);
+    const incr = Math.max(1, Math.round(cfg.increments || 20));
+    const seq = cfg.splayMode !== "sync";
+    const p = cfg.main;
+    /* Línea de tiempo del slip "global" g ∈ [0, S]: en secuencia la falla
+     * principal toma [0, (1−Σf)S] y cada splay el tramo siguiente; en modo
+     * sincrónico todas se mueven a la vez en proporción. slipOf(i, g) = slip
+     * acumulado de la falla i (0 = principal) cuando el global vale g. */
+    const fracs = [mainFrac].concat(sps.map(x => x.frac));
+    const starts = [];
+    let acc = 0;
+    for (const f of fracs) { starts.push(acc); acc += f; }
+    function slipOf(i, g) {
+      if (!seq) return g * fracs[i];
+      return Math.max(0, Math.min(fracs[i] * S, g - starts[i] * S));
+    }
+    // hanging wall de la principal (los splays sólo mueven lo que está sobre ella)
+    const span = Math.max(1, Math.abs((p.x1 - p.x0) || 1));
+    function hwTest(slip) {
+      if (!VFIELD[p.method]) return null;
+      const f = fpfMapper(SW.restore.orientLR(mm.fault(slip)), span * 3);
+      return f.isHW;
+    }
+    // superficies axiales inactivas: las activas al slip de partida, deformadas
+    const s0 = from * S / n;
+    const AXN = 48;
+    let ax = [];
+    const axKinds = [];
+    function addAx(list, tag) {
+      for (const a of list) {
+        ax.push(sampleLine(nudgeRoot(a.pts, p), AXN));
+        axKinds.push(tag + a.kind);
+      }
+    }
+    addAx(mm.axialActive(slipOf(0, s0)), "");
+    sps.forEach((sp, i) => addAx(sp.m.axialActive(slipOf(i + 1, s0)), "splay" + (i + 1) + ":"));
+
+    const sets = {};
+    for (const k of Object.keys(cfg.sets)) sets[k] = cfg.sets[k].map(q => q.slice());
+    function snapshot(k) {
+      const slip = k * S / n;
+      const faults = [mm.fault(slipOf(0, slip))]
+        .concat(sps.map((sp, i) => sp.m.p.drawFault ? sp.m.p.drawFault.map(q => q.slice())
+                                                     : sp.m.fault(slipOf(i + 1, slip))));
+      const axA = mm.axialActive(slipOf(0, slip));
+      sps.forEach((sp, i) => { for (const a of sp.m.axialActive(slipOf(i + 1, slip))) axA.push(a); });
+      const cp = {};
+      for (const key of Object.keys(sets)) cp[key] = sets[key].map(q => q.slice());
+      return { k: k, slip: slip, sets: cp, faults: faults, axActive: axA,
+               axInactive: ax.map((a, i) => ({ kind: axKinds[i], pts: a.map(q => q.slice()) })) };
+    }
+    const frames = [snapshot(from)];
+    let gcount = 0;
+    for (let k = from + 1; k <= n; k++) {
+      const sA = (k - 1) * S / n, sB = k * S / n;
+      const keys = Object.keys(sets);
+      const flat = [];
+      for (const key of keys) for (const q of sets[key]) flat.push(q);
+      for (const a of ax) for (const q of a) flat.push(q);
+      const a0 = slipOf(0, sA), a1 = slipOf(0, sB);
+      let moved = a1 > a0 ? mm.move(flat, a0, a1, Math.max(1, Math.round(incr * (a1 - a0) / (sB - sA || 1))))
+                          : flat.map(q => q.slice());
+      sps.forEach(function (sp, si) {
+        const b0 = slipOf(si + 1, sA), b1 = slipOf(si + 1, sB);
+        if (!(b1 > b0)) return;
+        const hw = hwTest(slipOf(0, sB));
+        const idx = [], sub = [];
+        moved.forEach((q, i) => { if (!hw || hw(q)) { idx.push(i); sub.push(q); } });
+        const res = sp.m.move(sub, b0, b1, Math.max(1, Math.round(incr * (b1 - b0) / (sB - sA || 1))));
+        idx.forEach((i, j) => { moved[i] = res[j]; });
+      });
+      let i = 0;
+      for (const key of keys) { sets[key] = moved.slice(i, i + sets[key].length); i += sets[key].length; }
+      ax = ax.map(a => { const r = moved.slice(i, i + a.length); i += a.length; return r; });
+      const newKeys = [];
+      if (cfg.growth) {
+        const G = cfg.growth;
+        const level = G.datum + k * G.rise;
+        const surf = Object.keys(sets).filter(key => cfg.surfaceKeys(key)).map(key => sets[key]);
+        for (const pc of growthBed(level, surf, G.s0, G.s1, G.spacing)) {
+          const key = "g" + k + "_" + (gcount++);
+          sets[key] = SW.geom.resamplePolyline(pc, G.spacing);
+          newKeys.push(key);
+        }
+      }
+      const fr_ = snapshot(k);
+      fr_.growth = newKeys;
+      frames.push(fr_);
+    }
+    return { ok: true, frames: frames, info: mm.info, main: mm, splays: sps };
   }
 
   function usesLine(p) {
@@ -11737,7 +12186,7 @@ SW.forward = (function () {
     return out;
   }
 
-  return { METHODS, run, setup, faultTrace, suppeGamma, strainGrid, ellipseOf,
+  return { METHODS, run, prepare, simulate, splayParams, growthBed, nudgeRoot, setup, faultTrace, suppeGamma, strainGrid, ellipseOf,
            splitAtFault, cutAtFault, sampleLine, extendEnds,
            _v: VFIELD, _integrate: integrate };
 })();
@@ -11747,27 +12196,54 @@ SW.forward = (function () {
  * fwd_fpfold, fwd_trishear, fwd_shear) que comparten estado y el bloque de
  * opciones del riel. Deforma las líneas seleccionadas (o, sin selección,
  * todos los horizontes y contactos visibles) con SW.forward y muestra en
- * vivo el resultado: la sección deformada, la falla, las superficies
- * axiales activas (fijas a la falla) e inactivas (llevadas por el bloque
- * colgante) y los marcadores de strain (círculos que se vuelven elipses).
- * Clic en una línea de falla = falla de referencia (para "From fault" y
- * para Parallel flow / Simple shear con "Clicked fault line"); clic en
- * otra línea = agregarla/quitarla de la selección; "Place" + clic = base
- * de la rampa. Apply lo escribe en la sección en un solo paso de undo. */
+ * vivo el resultado: la sección deformada, la falla (y sus splays), las
+ * superficies axiales activas e inactivas, los marcadores de strain y los
+ * estratos sintectónicos.
+ *
+ * Interacción:
+ *  - Por defecto trabaja con la falla SELECCIONADA: al activar la tool (o
+ *    al hacer clic en una falla) la toma como referencia y ajusta la rampa
+ *    a su geometría; Parallel flow y Simple shear se deforman directamente
+ *    sobre ella.
+ *  - Tiradores sobre el lienzo: base de la rampa, tope/punta (ángulo y
+ *    altura o largo inicial), slip (flecha sobre la falla), punto de rama y
+ *    punta de los splays, y la cota del dátum sintectónico. Cada campo
+ *    numérico tiene además su deslizador.
+ *  - Pasos: el slip se reparte en n pasos. "Step" escribe el siguiente paso
+ *    en la sección; "Animate" reproduce los pasos en la vista previa y el
+ *    deslizador de cuadro permite recorrerlos; "Apply" escribe todos los
+ *    pasos que faltan. Con depositación sintectónica, tras cada paso se
+ *    deposita una capa horizontal en dátum + k·ascenso que termina en onlap
+ *    contra el relieve. */
 "use strict";
 window.SW = window.SW || {};
 
 (function () {
   const METHODS = ["fpf", "fbf", "fpfold", "trishear", "shear"];
-  const st = { method: null, faultId: null, placing: false,
-               cache: null, key: "", timer: null };
+  const st = {
+    method: null, faultId: null, fittedId: null, placing: false,
+    cache: null, key: "", timer: null,
+    done: 0,            // pasos ya escritos en la sección (etapa en curso)
+    frame: null,        // cuadro de la vista previa (null = el último)
+    anim: null,         // temporizador de la animación
+    drag: null,         // tirador que se arrastra {id, ...}
+    hover: null,        // tirador bajo el puntero
+    fast: false,        // menos subpasos mientras se arrastra
+  };
   const $ = id => document.getElementById(id);
+  const D2R = Math.PI / 180;
 
   function num(id, def) {
     const el = $(id);
     if (!el) return def;
     const v = String(el.value).trim();
     return v === "" || !isFinite(+v) ? def : +v;
+  }
+  function setVal(id, v) {
+    const el = $(id);
+    if (!el) return;
+    el.value = v;
+    syncRange(el);
   }
   function checked(id) { const el = $(id); return !!(el && el.checked); }
   function faultLine() {
@@ -11779,9 +12255,11 @@ window.SW = window.SW || {};
     return (st.method === "fpf" || st.method === "shear") &&
            src && src.value === "line";
   }
+  const isVelocity = () => st.method === "fbf" || st.method === "fpfold" ||
+                           st.method === "trishear";
 
-  /* Líneas a deformar: la selección, o todos los horizontes y contactos
-   * visibles si no hay nada seleccionado. Nunca la falla de referencia. */
+  /* Líneas a deformar: la selección (sin la falla de referencia), o todos
+   * los horizontes y contactos visibles si no hay nada más seleccionado. */
   function targets() {
     const fid = st.faultId;
     const ok = l => l && !l.locked && l.visible !== false &&
@@ -11817,17 +12295,133 @@ window.SW = window.SW || {};
     return Math.round(x / step) * step;
   };
 
+  /* -- deslizadores ----------------------------------------------------------
+   * Cada campo numérico listado tiene un <input type=range> gemelo; sus
+   * límites dependen del tamaño del modelo (se recalculan al activar). */
+  const SLIDERS = ["fwd-slip", "fwd-theta", "fwd-h", "fwd-l0", "fwd-phi",
+                   "fwd-psi", "fwd-alpha", "fwd-sp-theta", "fwd-sp-d",
+                   "fwd-sp-len", "fwd-sp-frac", "fwd-g-rise", "fwd-nsteps"];
+  function rangeFor(el) { return el && el._range; }
+  function syncRange(el) {
+    const r = rangeFor(el);
+    if (!r) return;
+    const v = +el.value;
+    if (isFinite(v)) {
+      if (v > +r.max) r.max = String(v);
+      if (v < +r.min) r.min = String(v);
+      r.value = String(v);
+    }
+  }
+  function buildSliders() {
+    for (const id of SLIDERS) {
+      const el = $(id);
+      if (!el || el._range) continue;
+      const r = document.createElement("input");
+      r.type = "range";
+      r.className = "fwd-range";
+      r.tabIndex = -1;
+      el.insertAdjacentElement("afterend", r);
+      el._range = r;
+      r.addEventListener("input", function () {
+        el.value = r.value;
+        st.fast = true;
+        refresh();
+      });
+      r.addEventListener("change", function () { st.fast = false; refresh(); });
+    }
+  }
+  function setBounds(id, min, max, step) {
+    const el = $(id), r = rangeFor(el);
+    if (!r) return;
+    r.min = String(min); r.max = String(max); r.step = String(step);
+    syncRange(el);
+  }
+  function updateBounds() {
+    const b = bbox(targets());
+    const span = Math.max(b.s1 - b.s0, b.z1 - b.z0);
+    const h = b.z1 - b.z0;
+    const nice = x => { const m = Math.pow(10, Math.floor(Math.log10(Math.max(x, 1e-9)))); return Math.max(1, m / 10); };
+    setBounds("fwd-slip", st.method === "shear" ? -round(span * 0.5) : 0, round(span * 0.6), nice(span));
+    setBounds("fwd-theta", 1, 89, 1);
+    setBounds("fwd-h", 0, round(h * 2), nice(h));
+    setBounds("fwd-l0", 0, round(span * 0.6), nice(span));
+    setBounds("fwd-phi", 5, 150, 1);
+    setBounds("fwd-psi", 0, 120, 1);
+    setBounds("fwd-alpha", -80, 80, 1);
+    setBounds("fwd-sp-theta", 1, 89, 1);
+    setBounds("fwd-sp-d", 0, round(span * 0.6), nice(span));
+    setBounds("fwd-sp-len", 0, round(span * 0.6), nice(span));
+    setBounds("fwd-sp-frac", 0, 100, 1);
+    setBounds("fwd-g-rise", 0, round(h * 0.25), nice(h) / 10);
+    setBounds("fwd-nsteps", 1, 50, 1);
+  }
+
   /* Valores iniciales a partir de lo dibujado — sólo en campos vacíos. */
   function ensureDefaults() {
     const b = bbox(targets());
     const w = b.s1 - b.s0, h = b.z1 - b.z0;
-    const fill = (id, v) => { const el = $(id); if (el && String(el.value).trim() === "") el.value = round(v); };
+    const fill = (id, v) => { const el = $(id); if (el && String(el.value).trim() === "") setVal(id, round(v)); };
     fill("fwd-s0", b.s0 + 0.3 * w);
     fill("fwd-zd", b.z0);
     fill("fwd-h", Math.max(h * 0.45, 1));
     fill("fwd-slip", Math.max(w * 0.08, 1));
+    fill("fwd-g-datum", b.z1);
+    fill("fwd-g-rise", Math.max(h * 0.03, 1));
+    fill("fwd-sp-d", Math.max(w * 0.05, 1));
+    fill("fwd-sp-len", Math.max(w * 0.12, 1));
   }
 
+  /* -- la falla seleccionada manda ---------------------------------------- */
+  /* Ajusta la rampa paramétrica a una falla dibujada: el tramo más empinado
+   * es la rampa; su extremo inferior la base; el tope, la altura (FBF) y el
+   * extremo superior de toda la falla, la punta inicial. */
+  function fitFromLine(fl, quiet) {
+    const vs = fl.vertices.slice();
+    if (vs[0][1] > vs[vs.length - 1][1]) vs.reverse();       // de abajo hacia arriba
+    let best = -1, bi = 0;
+    for (let i = 0; i < vs.length - 1; i++) {
+      const ds = vs[i + 1][0] - vs[i][0], dz = vs[i + 1][1] - vs[i][1];
+      const L = Math.hypot(ds, dz);
+      if (L < 1e-9) continue;
+      const dip = Math.abs(Math.atan2(dz, Math.abs(ds)));
+      if (dz > 0 && dip > best) { best = dip; bi = i; }
+    }
+    // la rampa: tramos contiguos casi con el mismo manteo que el más empinado
+    let i0 = bi, i1 = bi + 1;
+    const dipOf = i => Math.atan2(vs[i + 1][1] - vs[i][1], Math.abs(vs[i + 1][0] - vs[i][0]));
+    while (i0 > 0 && Math.abs(dipOf(i0 - 1) - dipOf(bi)) < 12 * D2R) i0--;
+    while (i1 < vs.length - 1 && Math.abs(dipOf(i1) - dipOf(bi)) < 12 * D2R) i1++;
+    const lo = vs[i0], hi = vs[i1], top = vs[vs.length - 1];
+    const ds = hi[0] - lo[0], dz = hi[1] - lo[1];
+    if (!(dz > 0) || Math.abs(ds) < 1e-9) {
+      if (!quiet) SW.view.status("The fault must be inclined to define a ramp.");
+      return false;
+    }
+    setVal("fwd-verg", ds > 0 ? "1" : "-1");
+    setVal("fwd-s0", round(lo[0]));
+    setVal("fwd-zd", round(lo[1]));
+    setVal("fwd-theta", Math.round(Math.atan2(dz, Math.abs(ds)) / D2R));
+    setVal("fwd-h", round(dz));
+    setVal("fwd-l0", round(Math.hypot(top[0] - lo[0], top[1] - lo[1])));
+    st.fittedId = fl.id;
+    if (!quiet) SW.view.status("Ramp taken from " + (fl.name || "the fault") +
+                               ": base, angle, height and initial tip.");
+    return true;
+  }
+
+  function useFault(line, quiet) {
+    st.faultId = line.id;
+    const src = $("fwd-fault-src");
+    if (src && (st.method === "fpf" || st.method === "shear")) src.value = "line";
+    if (st.fittedId !== line.id) fitFromLine(line, true);
+    resetStage();
+    if (!quiet)
+      SW.view.status("Working on the fault " + (line.name || "") +
+        (usesLine() ? " (the hanging wall moves over its trace)."
+                    : " (ramp fitted to it; drag the handles to adjust)."));
+  }
+
+  /* -- parámetros ------------------------------------------------------------ */
   function params() {
     const lines = targets();
     const box = bbox(lines);
@@ -11845,21 +12439,29 @@ window.SW = window.SW || {};
       steps: Math.max(10, Math.min(2000, num("fwd-steps", 100))),
     };
     const span = Math.max(box.s1 - box.s0, box.z1 - box.z0);
-    // extremos locales del despegue y del plano superior, y techo de las
-    // superficies axiales
     const v = p.verg < 0 ? -1 : 1;
     const xa = (box.s0 - p.s0) * v, xb = (box.s1 - p.s0) * v;
     p.x0 = Math.min(xa, xb) - 0.1 * span;
     p.x1 = Math.max(xa, xb) + 0.1 * span;
     p.top = box.z1 + 0.15 * (box.z1 - box.z0 || span);
-    return { p, lines, box, span };
+    const n = Math.max(1, Math.min(200, Math.round(num("fwd-nsteps", 10))));
+    const growth = checked("fwd-growth") ? {
+      datum: num("fwd-g-datum", box.z1), rise: num("fwd-g-rise", 0),
+    } : null;
+    const splays = checked("fwd-splay") ? {
+      count: Math.max(1, Math.min(8, Math.round(num("fwd-sp-n", 1)))),
+      d: num("fwd-sp-d", 0), theta: num("fwd-sp-theta", 45),
+      len: num("fwd-sp-len", 0), frac: num("fwd-sp-frac", 30) / 100,
+      mode: ($("fwd-sp-mode") || {}).value || "sequence",
+    } : null;
+    return { p, lines, box, span, n, growth, splays };
   }
 
-  /* Firma barata de todo lo que cambia el resultado (entradas del riel,
-   * líneas en juego y sus vértices), para no recalcular al hacer pan/zoom. */
+  /* Firma barata de todo lo que cambia el resultado. */
   function signature(pp) {
-    const parts = [JSON.stringify(pp.p), checked("fwd-axial"),
-                   checked("fwd-strain"), num("fwd-mspace", 0)];
+    const parts = [JSON.stringify([pp.p, pp.n, pp.growth, pp.splays, st.done]),
+                   checked("fwd-axial"), checked("fwd-strain"),
+                   num("fwd-mspace", 0), st.fast];
     for (const l of pp.lines) {
       let a = 0;
       for (const v of l.vertices) a += v[0] * 1.3 + v[1] * 0.7;
@@ -11870,18 +12472,29 @@ window.SW = window.SW || {};
 
   function markerSpacing(pp) {
     const user = num("fwd-mspace", 0);
-    if (user > 0) return user;
-    return pp.span / 14;
+    return user > 0 ? user : pp.span / 14;
   }
 
+  function splaySpecs(pp) {
+    if (!pp.splays) return [];
+    const out = [];
+    for (let i = 1; i <= pp.splays.count; i++) {
+      const sp = SW.forward.splayParams(pp.p, { d: pp.splays.d * i,
+        theta: pp.splays.theta, len: pp.splays.len });
+      if (sp.error) return { error: sp.error };
+      out.push({ p: sp, frac: pp.splays.frac });
+    }
+    return out;
+  }
+
+  /* -- cálculo --------------------------------------------------------------- */
   function compute() {
     const pp = params();
     const key = signature(pp);
     if (st.cache && st.key === key) return st.cache;
     st.key = key;
     const { p, lines, box, span } = pp;
-    const out = { ok: false, lines: [], markers: [], axActive: [],
-                  axInactive: [], p: p };
+    const out = { ok: false, pp: pp, p: p, frames: [], views: [], lines: lines };
     const sp = span / 400;
     const f0 = SW.forward.faultTrace(p, 0);
     const sets = {};
@@ -11890,48 +12503,93 @@ window.SW = window.SW || {};
       if (f0) v = SW.forward.cutAtFault(v, f0, sp * 0.05);
       sets["l" + i] = v;
     });
-    let rings = [];
+    let rings = 0;
     if (checked("fwd-strain")) {
-      const msp = markerSpacing(pp);
       const pad = 0.02 * span;
-      rings = SW.forward.strainGrid({ s0: box.s0 + pad, s1: box.s1 - pad,
-                                      z0: box.z0 + pad, z1: box.z1 - pad },
-                                    msp, 36);
-      rings.forEach((r, i) => { sets["m" + i] = r; });
+      const grid = SW.forward.strainGrid({ s0: box.s0 + pad, s1: box.s1 - pad,
+                                           z0: box.z0 + pad, z1: box.z1 - pad },
+                                         markerSpacing(pp), 36);
+      grid.forEach((r, i) => { sets["m" + i] = r; });
+      rings = grid.length;
     }
+    const spl = splaySpecs(pp);
+    if (spl.error) { out.error = spl.error; st.cache = out; return out; }
     let res;
-    try { res = SW.forward.run(p, sets); }
-    catch (e) { console.error(e); res = { ok: false, error: String(e.message || e) }; }
-    if (!res.ok) {
-      out.error = res.error;
-      st.cache = out;
-      return out;
-    }
+    try {
+      res = SW.forward.simulate({
+        main: p, splays: spl, sets: sets,
+        surfaceKeys: k => k[0] === "l" || k[0] === "g",
+        S: p.slip, n: pp.n, from: Math.min(st.done, pp.n),
+        increments: Math.max(2, Math.round((st.fast ? Math.min(p.steps, 40) : p.steps) / pp.n)),
+        splayMode: pp.splays ? pp.splays.mode : "sequence",
+        growth: pp.growth ? { datum: pp.growth.datum, rise: pp.growth.rise,
+                              s0: box.s0 - 0.05 * span, s1: box.s1 + 0.05 * span,
+                              spacing: sp } : null,
+      });
+    } catch (e) { console.error(e); res = { ok: false, error: String(e.message || e) }; }
+    if (!res.ok) { out.error = res.error; st.cache = out; return out; }
     out.ok = true;
     out.info = res.info;
-    out.fault = res.fault;
-    const tol = sp * 0.02;
-    lines.forEach(function (l, i) {
-      const pieces = SW.forward.splitAtFault(res.outputs["l" + i], res.fault)
-        .map(pc => SW.geom.simplifyDP(pc, tol))
-        .filter(pc => pc.length >= 2);
-      out.lines.push({ line: l, pieces: pieces });
-    });
-    rings.forEach(function (r, i) {
-      const def = res.outputs["m" + i];
-      const pcs = SW.forward.splitAtFault(def, res.fault);
-      out.markers.push({ pieces: pcs, closed: pcs.length === 1,
-                         ell: pcs.length === 1 ? SW.forward.ellipseOf(def) : null });
-    });
-    if (checked("fwd-axial")) {
-      out.axActive = res.axialActive;
-      out.axInactive = res.axialInactive.map(a => ({
-        kind: a.kind, pieces: SW.forward.splitAtFault(a.pts, res.fault) }));
-    }
+    out.frames = res.frames;
+    out.rings = rings;
+    out.sp = sp;
     st.cache = out;
+    if (st.frame !== null && st.frame >= res.frames.length) st.frame = null;
+    syncFrameSlider(out);
     return out;
   }
 
+  /* Vista de un cuadro: líneas cortadas por las fallas, simplificadas;
+   * marcadores con su elipse; superficies axiales. Se calcula al pedirla. */
+  function frameView(res, i) {
+    if (res.views[i]) return res.views[i];
+    const fr = res.frames[i];
+    const cut = function (pl) {
+      let pcs = [pl];
+      for (const f of fr.faults) {
+        const nx = [];
+        for (const pc of pcs) for (const q of SW.forward.splitAtFault(pc, f)) nx.push(q);
+        pcs = nx;
+      }
+      return pcs;
+    };
+    const tol = res.sp * 0.02;
+    const view = { lines: [], growth: [], markers: [], faults: fr.faults,
+                   axActive: [], axInactive: [], slip: fr.slip, k: fr.k };
+    res.lines.forEach(function (l, i2) {
+      const pts = fr.sets["l" + i2];
+      const pieces = pts ? cut(pts).map(pc => SW.geom.simplifyDP(pc, tol))
+                                   .filter(pc => pc.length >= 2) : [];
+      view.lines.push({ line: l, pieces: pieces });
+    });
+    for (const key of Object.keys(fr.sets)) {
+      if (key[0] !== "g") continue;
+      const k = +key.slice(1).split("_")[0];
+      for (const pc of cut(fr.sets[key])) {
+        const q = SW.geom.simplifyDP(pc, tol);
+        if (q.length >= 2) view.growth.push({ k: k, pts: q });
+      }
+    }
+    for (let m = 0; m < res.rings; m++) {
+      const def = fr.sets["m" + m];
+      const pcs = cut(def);
+      view.markers.push({ pieces: pcs, closed: pcs.length === 1,
+                          ell: pcs.length === 1 ? SW.forward.ellipseOf(def) : null });
+    }
+    if (checked("fwd-axial")) {
+      view.axActive = fr.axActive;
+      view.axInactive = fr.axInactive.map(a => ({ kind: a.kind, pieces: cut(a.pts) }));
+    }
+    res.views[i] = view;
+    return view;
+  }
+
+  function shownIndex(res) {
+    const last = res.frames.length - 1;
+    return st.frame === null ? last : Math.max(0, Math.min(last, st.frame));
+  }
+
+  /* -- rótulos y visibilidad del riel ------------------------------------- */
   function renderInfo(res) {
     const el = $("fwd-info");
     if (!el) return;
@@ -11944,48 +12602,229 @@ window.SW = window.SW || {};
       el.appendChild(b);
       return;
     }
+    const pp = res.pp;
+    const view = frameView(res, shownIndex(res));
     const n = res.lines.length;
-    const txt = (res.info || []).join(" · ") +
-      (n ? " · " + n + " line" + (n === 1 ? "" : "s") : " · no lines to deform");
-    el.textContent = txt;
-    if (res.markers.length) {
-      let rmax = 1;
-      for (const m of res.markers) if (m.ell) rmax = Math.max(rmax, m.ell.ratio);
-      el.textContent += " · max strain ratio " + rmax.toFixed(2);
+    const bits = (res.info || []).slice();
+    bits.push(n ? n + " line" + (n === 1 ? "" : "s") : "no lines to deform");
+    let rmax = 1;
+    for (const m of view.markers) if (m.ell) rmax = Math.max(rmax, m.ell.ratio);
+    if (view.markers.length) bits.push("max strain ratio " + rmax.toFixed(2));
+    el.textContent = bits.join(" · ");
+    const stepEl = $("fwd-stepinfo");
+    if (stepEl) {
+      const S = pp.p.slip;
+      stepEl.textContent = !(Math.abs(S) > 0)
+        ? "Set a slip (or drag the blue arrow) to start a stage."
+        : "Step " + view.k + " / " + pp.n + " · slip " +
+          Math.round(view.slip) + " of " + Math.round(S) + " m" +
+          (st.done ? " · " + st.done + " written" : "");
     }
   }
 
-  /* -- visibilidad de campos según el método ------------------------------ */
+  function syncFrameSlider(res) {
+    const r = $("fwd-frame");
+    if (!r) return;
+    r.min = "0";
+    r.max = String(Math.max(0, res.frames.length - 1));
+    r.value = String(shownIndex(res));
+  }
+
   function syncFields() {
     const title = $("fwd-title");
     if (title && st.method) title.textContent = SW.forward.METHODS[st.method].label;
-    const geom = !(st.method === "fpf" || st.method === "shear") || !usesLine();
+    const geom = !usesLine();
     document.querySelectorAll("#toolrail [data-m]").forEach(function (el) {
-      const on = el.dataset.m.split(/\s+/).indexOf(st.method) >= 0;
-      el.classList.toggle("fwd-hide", !on);
+      el.classList.toggle("fwd-hide", el.dataset.m.split(/\s+/).indexOf(st.method) < 0);
     });
     document.querySelectorAll("#toolrail [data-geom]").forEach(function (el) {
       el.classList.toggle("fwd-hide", !geom);
     });
-    const strain = checked("fwd-strain");
-    document.querySelectorAll("#toolrail [data-strain]").forEach(function (el) {
-      el.classList.toggle("fwd-hide", !strain);
-    });
+    const tog = (sel, on) => document.querySelectorAll("#toolrail " + sel)
+      .forEach(el => el.classList.toggle("fwd-hide", !on));
+    tog("[data-strain]", checked("fwd-strain"));
+    tog("[data-growth]", checked("fwd-growth"));
+    tog("[data-splay]", checked("fwd-splay"));
     const lab = $("fwd-slip-label");
     if (lab && lab.firstChild)
       lab.firstChild.nodeValue = st.method === "shear" ? "Heave (m)" : "Slip (m)";
     const place = $("fwd-place-btn");
     if (place) place.classList.toggle("active", st.placing);
+    const an = $("fwd-anim-btn");
+    if (an) {
+      an.classList.toggle("active", !!st.anim);
+      an.lastChild.nodeValue = st.anim ? "Stop" : "Play";
+    }
+    const fl = faultLine();
+    const fe = $("fwd-fault-name");
+    if (fe) fe.textContent = fl ? "Fault: " + (fl.name || "fault") : "No fault selected — parametric ramp";
   }
 
   function refresh() {
     syncFields();
     SW.view.requestDraw();
   }
-
   function refreshSoon() {
     clearTimeout(st.timer);
     st.timer = setTimeout(refresh, 120);
+  }
+  function resetStage() {
+    st.done = 0; st.frame = null;
+    stopAnim();
+  }
+
+  /* -- tiradores sobre el lienzo ------------------------------------------ */
+  function ramp(pp) {
+    const v = pp.p.verg < 0 ? -1 : 1;
+    const th = pp.p.theta * D2R;
+    return { v: v, th: th, r: [v * Math.cos(th), Math.sin(th)],
+             base: [pp.p.s0, pp.p.zd] };
+  }
+  // punto a arco `u` sobre una polilínea
+  function along(pl, u) {
+    let acc = 0;
+    for (let i = 1; i < pl.length; i++) {
+      const L = Math.hypot(pl[i][0] - pl[i - 1][0], pl[i][1] - pl[i - 1][1]);
+      if (acc + L >= u || i === pl.length - 1) {
+        const t = L > 0 ? Math.max(0, Math.min(1, (u - acc) / L)) : 0;
+        return [pl[i - 1][0] + t * (pl[i][0] - pl[i - 1][0]),
+                pl[i - 1][1] + t * (pl[i][1] - pl[i - 1][1])];
+      }
+      acc += L;
+    }
+    return pl[pl.length - 1].slice();
+  }
+  // arco de la proyección de q sobre la polilínea
+  function arcOf(pl, q) {
+    let best = Infinity, arc = 0, acc = 0;
+    for (let i = 1; i < pl.length; i++) {
+      const a = pl[i - 1], b = pl[i];
+      const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz;
+      const t = L2 > 0 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dz) / L2)) : 0;
+      const d = Math.hypot(a[0] + t * dx - q[0], a[1] + t * dz - q[1]);
+      if (d < best) { best = d; arc = acc + t * Math.sqrt(L2); }
+      acc += Math.sqrt(L2);
+    }
+    return arc;
+  }
+  // camino de la falla principal desde la base de la rampa, hacia arriba
+  function mainPath(pp) {
+    if (usesLine()) {
+      const fl = faultLine();
+      if (!fl) return null;
+      const vs = fl.vertices.map(q => q.slice());
+      return vs[0][1] <= vs[vs.length - 1][1] ? vs : vs.reverse();
+    }
+    const tr = SW.forward.faultTrace(Object.assign({}, pp.p, { slip: 0 }), 0);
+    return tr ? tr.slice(1) : null;
+  }
+
+  function handles(pp) {
+    const V = SW.view;
+    const hs = [];
+    const R = ramp(pp);
+    const minLen = 55 / Math.max(V.state.scale, 1e-9);
+    const path = mainPath(pp);
+    if (!usesLine()) {
+      hs.push({ id: "base", at: R.base, label: "base" });
+      if (st.method === "fbf" || (!isVelocity() && pp.p.H > 0)) {
+        const H = pp.p.H;
+        hs.push({ id: "top", at: [R.base[0] + R.v * H / Math.tan(R.th), R.base[1] + H],
+                  label: "θ " + pp.p.theta + "° · H " + Math.round(H) + " m" });
+      } else if (st.method === "fpfold" || st.method === "trishear") {
+        const L = Math.max(pp.p.L0, minLen);
+        hs.push({ id: "tip", at: [R.base[0] + R.r[0] * L, R.base[1] + R.r[1] * L],
+                  label: "tip " + Math.round(pp.p.L0) + " m · θ " + pp.p.theta + "°" });
+      } else {
+        const L = Math.max(minLen * 2, pp.span * 0.2);
+        hs.push({ id: "angle", at: [R.base[0] + R.r[0] * L, R.base[1] + R.r[1] * L],
+                  label: "θ " + pp.p.theta + "°" });
+      }
+      // slip: flecha sobre la falla desde la base (rechazo horizontal en cizalla)
+      if (st.method === "shear")
+        hs.push({ id: "slip", at: [R.base[0] + R.v * pp.p.slip, R.base[1]],
+                  from: R.base, label: "heave " + Math.round(pp.p.slip) + " m" });
+      else if (path)
+        hs.push({ id: "slip", at: along(path, Math.max(0, pp.p.slip)), from: R.base,
+                  path: path, label: "slip " + Math.round(pp.p.slip) + " m" });
+    }
+    if (pp.splays && path) {
+      const B = along(path, pp.splays.d);
+      const ts = pp.splays.theta * D2R;
+      hs.push({ id: "branch", at: B, label: "splay at " + Math.round(pp.splays.d) + " m" });
+      hs.push({ id: "splaytip",
+                at: [B[0] + R.v * pp.splays.len * Math.cos(ts), B[1] + pp.splays.len * Math.sin(ts)],
+                from: B, label: "splay θ " + pp.splays.theta + "° · " + Math.round(pp.splays.len) + " m" });
+    }
+    if (pp.growth) {
+      const r = V.plotRect();
+      const sMid = V.xs ? V.xs(r.x + r.w - 40) : pp.box.s1;
+      hs.push({ id: "datum", at: [sMid, pp.growth.datum], label: "datum " + Math.round(pp.growth.datum) + " m" });
+    }
+    return hs;
+  }
+
+  function hitHandle(pos, hs) {
+    const V = SW.view;
+    const tol = V.hitPx ? V.hitPx(9) : 9;
+    let best = null, bd = tol;
+    for (let i = hs.length - 1; i >= 0; i--) {
+      const h = hs[i];
+      let d = Math.hypot(V.sx(h.at[0]) - pos.x, V.zy(h.at[1]) - pos.y);
+      if (h.id === "datum") d = Math.abs(V.zy(h.at[1]) - pos.y);
+      if (d < bd) { bd = d; best = h; }
+    }
+    return best;
+  }
+
+  function dragTo(h, q, e) {
+    const pp = params();
+    const R = ramp(pp);
+    const rel = [(q[0] - R.base[0]) * R.v, q[1] - R.base[1]];
+    const snapA = a => e && e.shiftKey ? Math.round(a / 5) * 5 : Math.round(a);
+    const clampA = a => Math.max(1, Math.min(89, a));
+    switch (h.id) {
+      case "base":
+        setVal("fwd-s0", Math.round(q[0])); setVal("fwd-zd", Math.round(q[1]));
+        break;
+      case "top":
+        if (rel[1] > 0 && rel[0] > 0) {
+          setVal("fwd-theta", clampA(snapA(Math.atan2(rel[1], rel[0]) / D2R)));
+          setVal("fwd-h", Math.round(rel[1]));
+        }
+        break;
+      case "tip": case "angle":
+        if (rel[0] > 0 || rel[1] > 0) {
+          setVal("fwd-theta", clampA(snapA(Math.atan2(Math.max(rel[1], 1e-9), rel[0]) / D2R)));
+          if (h.id === "tip") {
+            const minLen = 55 / Math.max(SW.view.state.scale, 1e-9);
+            const L = Math.hypot(rel[0], rel[1]);
+            setVal("fwd-l0", L < minLen * 1.05 ? 0 : Math.round(L));
+          }
+        }
+        break;
+      case "slip":
+        if (st.method === "shear") setVal("fwd-slip", Math.round(rel[0]));
+        else if (h.path) setVal("fwd-slip", Math.max(0, Math.round(arcOf(h.path, q))));
+        break;
+      case "branch": {
+        const path = mainPath(pp);
+        if (path) setVal("fwd-sp-d", Math.max(0, Math.round(arcOf(path, q))));
+        break;
+      }
+      case "splaytip": {
+        const B = h.from;
+        const dx = (q[0] - B[0]) * R.v, dz = q[1] - B[1];
+        if (dz > 0) {
+          setVal("fwd-sp-theta", clampA(snapA(Math.atan2(dz, dx) / D2R)));
+          setVal("fwd-sp-len", Math.round(Math.hypot(dx, dz)));
+        }
+        break;
+      }
+      case "datum":
+        setVal("fwd-g-datum", Math.round(q[1]));
+        break;
+    }
   }
 
   /* -- dibujo ---------------------------------------------------------------- */
@@ -11995,6 +12834,81 @@ window.SW = window.SW || {};
     pts.forEach((v, i) => i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1]))
                             : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
     if (close) ctx.closePath();
+  }
+
+  function growthColor(k, n) {
+    // del amarillo (primeros) al naranja (últimos): se leen como una cuña
+    const t = n > 1 ? (k - 1) / (n - 1) : 0;
+    const r = 245, g = Math.round(200 - 110 * t), b = Math.round(40 - 20 * t);
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+
+  function drawHandles(ctx, pp) {
+    const V = SW.view;
+    const hs = handles(pp);
+    const fc = SW.render.COLORS.kinds.fault || "#d92d3a";
+    ctx.save();
+    for (const h of hs) {
+      const x = V.sx(h.at[0]), y = V.zy(h.at[1]);
+      const hot = (st.drag && st.drag.id === h.id) || (st.hover && st.hover.id === h.id);
+      if (h.id === "datum") {
+        const r = V.plotRect();
+        ctx.strokeStyle = "#b45309"; ctx.lineWidth = hot ? 2 : 1.2;
+        ctx.setLineDash([10, 4, 2, 4]);
+        ctx.beginPath(); ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (h.from && (h.id === "slip" || h.id === "splaytip")) {
+        // flecha: el slip se dibuja SOBRE la falla, el splay como segmento
+        ctx.strokeStyle = h.id === "slip" ? "rgba(37,99,235,.55)" : fc;
+        ctx.lineWidth = h.id === "slip" ? 5 : 2;
+        ctx.setLineDash(h.id === "slip" ? [] : [6, 4]);
+        if (h.path) {
+          const pts = [];
+          const L = Math.max(0, pp.p.slip);
+          for (let k = 0; k <= 40; k++) pts.push(along(h.path, L * k / 40));
+          strokePath(ctx, pts); ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(V.sx(h.from[0]), V.zy(h.from[1])); ctx.lineTo(x, y); ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+      ctx.beginPath();
+      if (h.id === "slip") {
+        // cabeza de flecha
+        ctx.arc(x, y, hot ? 8 : 6.5, 0, 7);
+        ctx.fillStyle = "#2563eb"; ctx.fill();
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+      } else if (h.id === "datum") {
+        ctx.rect(x - 7, y - 7, 14, 14);
+        ctx.fillStyle = "#fff"; ctx.fill();
+        ctx.strokeStyle = "#b45309"; ctx.lineWidth = 2; ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4);
+        ctx.moveTo(x - 3, y - 1.5); ctx.lineTo(x, y - 4.5); ctx.lineTo(x + 3, y - 1.5);
+        ctx.moveTo(x - 3, y + 1.5); ctx.lineTo(x, y + 4.5); ctx.lineTo(x + 3, y + 1.5);
+        ctx.stroke();
+      } else {
+        ctx.arc(x, y, hot ? 8 : 6, 0, 7);
+        ctx.fillStyle = "#fff"; ctx.fill();
+        ctx.strokeStyle = h.id === "branch" || h.id === "splaytip" ? "#b91c1c" : fc;
+        ctx.lineWidth = 2.2; ctx.stroke();
+        if (h.id === "base") {
+          ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fillStyle = fc; ctx.fill();
+        }
+      }
+      if (hot) {
+        ctx.font = "600 11px 'Segoe UI', sans-serif";
+        ctx.textBaseline = "bottom"; ctx.textAlign = "left";
+        const w = ctx.measureText(h.label).width;
+        ctx.fillStyle = "rgba(255,255,255,.9)";
+        ctx.fillRect(x + 10, y - 22, w + 8, 16);
+        ctx.fillStyle = "#1f2933";
+        ctx.fillText(h.label, x + 14, y - 8);
+      }
+    }
+    ctx.restore();
   }
 
   function drawOverlay(ctx) {
@@ -12010,45 +12924,45 @@ window.SW = window.SW || {};
       strokePath(ctx, fl.vertices); ctx.stroke();
       ctx.restore();
     }
-    if (!res.ok) return;
+    if (!res.ok) { drawHandles(ctx, params()); return; }
+    const pp = res.pp;
+    const i = shownIndex(res);
+    const view = frameView(res, i);
     const r = V.plotRect();
     ctx.save();
     ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
     if (preview) {
-      // velo sobre la sección actual para que resalte la deformada
       ctx.fillStyle = "rgba(255,255,255,0.6)";
       ctx.fillRect(r.x, r.y, r.w, r.h);
-      for (const e of res.lines) {
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      for (const e of view.lines) {
         ctx.strokeStyle = SW.render.lineColor(e.line);
         ctx.lineWidth = Math.max(1.5, +(e.line.style || {}).width || 2);
-        ctx.lineJoin = "round"; ctx.lineCap = "round";
         for (const pc of e.pieces) { strokePath(ctx, pc); ctx.stroke(); }
       }
+      for (const gb of view.growth) {
+        ctx.strokeStyle = growthColor(gb.k, pp.n);
+        ctx.lineWidth = 1.8;
+        strokePath(ctx, gb.pts); ctx.stroke();
+      }
     }
-    // falla (con la punta en su posición final)
+    // fallas (principal con la punta en su posición del cuadro, y splays)
     ctx.strokeStyle = SW.render.COLORS.kinds.fault || "#d92d3a";
     ctx.lineWidth = 2.2;
     ctx.setLineDash(preview ? [] : [7, 4]);
-    strokePath(ctx, res.fault); ctx.stroke();
+    for (const f of view.faults) { strokePath(ctx, f); ctx.stroke(); }
     ctx.setLineDash([]);
-    if (!usesLine()) {                            // base de la rampa
-      const b = [res.p.s0, res.p.zd];
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = SW.render.COLORS.kinds.fault || "#d92d3a";
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(V.sx(b[0]), V.zy(b[1]), 5, 0, 7);
-      ctx.fill(); ctx.stroke();
-    }
     if (preview) {
       const axc = SW.settings.sym("axialColor") || "#6a6ac8";
       ctx.strokeStyle = axc;
       ctx.lineWidth = 1.6; ctx.setLineDash([8, 5]);
-      for (const a of res.axActive) { strokePath(ctx, a.pts); ctx.stroke(); }
+      for (const a of view.axActive) { strokePath(ctx, a.pts); ctx.stroke(); }
       ctx.lineWidth = 1.2; ctx.setLineDash([2, 4]);
-      for (const a of res.axInactive)
+      for (const a of view.axInactive)
         for (const pc of a.pieces) { strokePath(ctx, pc); ctx.stroke(); }
       ctx.setLineDash([]);
-      for (const m of res.markers) {
+      const mpx = markerSpacing(pp) * (V.state.scale || 1);
+      for (const m of view.markers) {
         ctx.strokeStyle = "#0f766e"; ctx.lineWidth = 1.2;
         ctx.fillStyle = "rgba(15,118,110,0.12)";
         for (const pc of m.pieces) {
@@ -12057,10 +12971,9 @@ window.SW = window.SW || {};
           ctx.stroke();
         }
         if (m.ell && m.ell.ratio > 1.02) {        // eje mayor de la elipse
-          const c = m.ell.center, a = m.ell.angleDeg * Math.PI / 180;
-          const len = markerSpacingPx(res) * 0.36 * Math.sqrt(m.ell.ratio);
+          const c = m.ell.center, a = m.ell.angleDeg * D2R;
+          const len = mpx * 0.36 * Math.sqrt(m.ell.ratio);
           const cx = V.sx(c[0]), cy = V.zy(c[1]);
-          // el ángulo está en (s, z); en pantalla z crece hacia abajo y con VE
           const dx = Math.cos(a), dy = -Math.sin(a) * (V.state.ve || 1);
           const L = Math.hypot(dx, dy) || 1;
           ctx.beginPath();
@@ -12071,50 +12984,37 @@ window.SW = window.SW || {};
       }
     }
     ctx.restore();
+    drawHandles(ctx, pp);
   }
 
-  function markerSpacingPx(res) {
-    const pp = params();
-    return markerSpacing(pp) * (SW.view.state.scale || 1);
+  /* -- animación ------------------------------------------------------------- */
+  function stopAnim() {
+    if (st.anim) { clearInterval(st.anim); st.anim = null; }
   }
-
-  /* -- acciones -------------------------------------------------------------- */
-  function setFaultFromLine(line) {
-    st.faultId = line.id;
-    SW.view.status("Reference fault: " + (line.name || "fault") +
-      (st.method === "fpf" || st.method === "shear"
-        ? ". Choose \"Clicked fault line\" to deform over it, or press \"From fault\"."
-        : ". Press \"From fault\" to take the ramp from it."));
-    refresh();
-  }
-
-  function fitFromFault() {
-    let fl = faultLine();
-    if (!fl) {
-      const sel = SW.view.selectedLines().filter(l => l.kind === "fault");
-      if (sel.length) { fl = sel[0]; st.faultId = fl.id; }
-    }
-    if (!fl) { SW.view.status("Click a fault line on the section first."); return; }
-    const vs = fl.vertices;
-    const a = vs[0], b = vs[vs.length - 1];
-    const lo = a[1] <= b[1] ? a : b, hi = a[1] <= b[1] ? b : a;
-    const ds = hi[0] - lo[0], dz = hi[1] - lo[1];
-    if (!(dz > 0) || Math.abs(ds) < 1e-9) {
-      SW.view.status("The fault must be inclined to define a ramp.");
+  function toggleAnim() {
+    if (st.anim) { stopAnim(); refresh(); return; }
+    const res = compute();
+    if (!res.ok || res.frames.length < 2) {
+      SW.view.status("Nothing to animate: set a slip and at least 2 steps.");
       return;
     }
-    const set = (id, v) => { const el = $(id); if (el) el.value = v; };
-    set("fwd-verg", ds > 0 ? "1" : "-1");
-    set("fwd-s0", round(lo[0]));
-    set("fwd-zd", round(lo[1]));
-    set("fwd-theta", Math.round(Math.atan2(dz, Math.abs(ds)) * 180 / Math.PI));
-    set("fwd-h", round(dz));
-    set("fwd-l0", round(Math.hypot(ds, dz)));
-    SW.view.status("Ramp taken from " + (fl.name || "the fault") +
-                   ": base, angle, height and initial tip.");
+    st.frame = 0;
+    const last = res.frames.length - 1;
+    const dt = Math.max(60, Math.min(600, 2400 / last));
+    st.anim = setInterval(function () {
+      const r = st.cache;
+      if (!r || !r.ok) { stopAnim(); refresh(); return; }
+      if (st.frame === null || st.frame >= r.frames.length - 1) {
+        stopAnim(); st.frame = null; refresh(); return;
+      }
+      st.frame++;
+      syncFrameSlider(r);
+      SW.view.requestDraw();
+    }, dt);
     refresh();
   }
 
+  /* -- escribir en la sección ---------------------------------------------- */
   function copyProps(src, dst, name) {
     dst.style = JSON.parse(JSON.stringify(src.style || dst.style));
     dst.unit_id = src.unit_id || null;
@@ -12124,30 +13024,31 @@ window.SW = window.SW || {};
     return dst;
   }
 
-  function apply() {
-    const res = compute();
-    if (!res.ok) { SW.view.status(res.error || "Invalid parameters."); return; }
-    if (!res.lines.length) {
-      SW.view.status("Nothing to deform: select lines or draw horizons first.");
-      return;
-    }
+  /* Escribe el cuadro `i` de la simulación. `final`: la etapa terminó, así
+   * que también van la falla, los splays, las superficies axiales y los
+   * marcadores si se pidieron. */
+  function writeFrame(res, i, final) {
+    const view = frameView(res, i);
+    const pp = res.pp;
     const redo = [], undo = [], added = [], unitAdds = [];
     let moved = 0, split = 0;
-    for (const e of res.lines) {
+    // ¿las capas vienen de la selección? (la falla de referencia no cuenta)
+    const wasSelected = SW.view.selectedLines()
+      .some(l => l.id !== st.faultId && l.kind !== "fault");
+    for (const e of view.lines) {
       const l = e.line;
       if (!e.pieces.length) continue;
-      // el tramo más largo conserva la línea original (id, unidad, nombre)
       let main = 0, best = -1;
-      e.pieces.forEach(function (pc, i) {
+      e.pieces.forEach(function (pc, j) {
         const L = SW.geom.polylineLength(pc);
-        if (L > best) { best = L; main = i; }
+        if (L > best) { best = L; main = j; }
       });
       redo.push({ op: "replace_vertices", id: l.id, vertices: e.pieces[main] });
       undo.push({ op: "replace_vertices", id: l.id, vertices: l.vertices });
       moved++;
       let k = 1;
-      e.pieces.forEach(function (pc, i) {
-        if (i === main) return;
+      e.pieces.forEach(function (pc, j) {
+        if (j === main) return;
         const nl = copyProps(l, SW.model.newLine(l.kind, pc, "forward"),
                              (l.name || "Line") + " (" + (++k) + ")");
         added.push(nl);
@@ -12155,42 +13056,55 @@ window.SW = window.SW || {};
         split++;
       });
     }
+    // estratos sintectónicos nuevos (los de pasos ya escritos son líneas)
+    let nG = 0;
+    for (const gb of view.growth) {
+      const g = SW.model.newLine("horizon", gb.pts, "forward");
+      g.name = "Growth " + gb.k;
+      const rgb = growthColor(gb.k, pp.n).match(/\d+/g).map(Number);
+      g.style.color = rgb;
+      added.push(g); nG++;
+    }
     const tag = SW.forward.METHODS[st.method].short;
     let nFault = 0, nAx = 0, nMk = 0;
-    if (checked("fwd-add-fault") && !usesLine()) {
-      const f = SW.model.newLine("fault", res.fault, "forward");
-      f.name = "Fault (" + tag + ")";
-      added.push(f); nFault = 1;
+    if (final && checked("fwd-add-fault")) {
+      view.faults.forEach(function (f, j) {
+        if (j === 0 && usesLine()) return;          // la falla ya existe
+        const fl = SW.model.newLine("fault", f, "forward");
+        fl.name = j === 0 ? "Fault (" + tag + ")" : "Splay " + j + " (" + tag + ")";
+        fl.fault_style = Object.assign({}, fl.fault_style,
+          { sense: st.method === "shear" && pp.p.slip > 0 ? "normal" : "reverse" });
+        added.push(fl); nFault++;
+      });
     }
-    if (checked("fwd-add-axial")) {
+    if (final && checked("fwd-add-axial")) {
       const mk = (pts, name, width) => {
         const a = SW.model.newLine("axial", pts, "forward");
         a.name = name; a.style.width = width;
         added.push(a); nAx++;
       };
-      res.axActive.forEach((a, i) => mk(a.pts, "Active axial surface " + (i + 1) + " (" + tag + ")", 1.5));
-      res.axInactive.forEach((a, i) => a.pieces.forEach(pc =>
-        mk(pc, "Inactive axial surface " + (i + 1) + " (" + tag + ")", 1)));
+      view.axActive.forEach((a, j) => mk(a.pts, "Active axial surface " + (j + 1) + " (" + tag + ")", 1.5));
+      view.axInactive.forEach((a, j) => a.pieces.forEach(pc =>
+        mk(pc, "Inactive axial surface " + (j + 1) + " (" + tag + ")", 1)));
     }
-    if (checked("fwd-add-strain")) {
-      res.markers.forEach(function (m, i) {
+    if (final && checked("fwd-add-strain")) {
+      view.markers.forEach(function (m, j) {
         m.pieces.forEach(function (pc) {
           const s = SW.model.newLine("sketch", pc, "forward");
-          s.name = "Strain marker " + (i + 1) +
+          s.name = "Strain marker " + (j + 1) +
                    (m.ell ? " (R=" + m.ell.ratio.toFixed(2) + ")" : "");
-          s.style.width = 1;
-          s.style.dash = false;
+          s.style.width = 1; s.style.dash = false;
           added.push(s); nMk++;
         });
       });
     }
+    if (!redo.length && !added.length) return null;
     for (const a of added) {
       redo.push({ op: "add_line", line: JSON.parse(JSON.stringify(a)) });
       undo.unshift({ op: "delete_line", id: a.id });
     }
-    SW.undo.push({ label: "Forward model: " + tag, redo: redo, undo: undo });
-    // las piezas nuevas quedan en la unidad de su línea madre (igual que
-    // "+ Unit", fuera de la pila de undo; un id borrado no molesta)
+    SW.undo.push({ label: "Forward model: " + tag +
+                   (final ? "" : " (step " + view.k + ")"), redo: redo, undo: undo });
     if (unitAdds.length) {
       for (const [uid, lid] of unitAdds) {
         const u = SW.model.unitById(uid);
@@ -12199,17 +13113,68 @@ window.SW = window.SW || {};
       SW.model.syncUnitIds();
       if (SW.panels.horizons && SW.panels.horizons.sync) SW.panels.horizons.sync();
     }
-    const slipEl = $("fwd-slip");
-    if (slipEl) slipEl.value = 0;               // el próximo paso parte de acá
-    st.cache = null; st.key = "";
+    // si se trabajaba con una selección, las piezas y capas nuevas entran en
+    // ella para que el paso siguiente también las deforme
+    if (wasSelected) {
+      const refs = SW.view.selectedLineIds().map(id => ({ type: "line", id: id }));
+      for (const a of added)
+        if (a.kind === "horizon" || a.kind === "contact")
+          refs.push({ type: "line", id: a.id });
+      SW.view.setSelection(refs);
+    }
+    return { moved, split, nG, nFault, nAx, nMk, tag };
+  }
+
+  function report(r, what) {
+    if (!r) { SW.view.status("Nothing to write."); return; }
     const extra = [];
-    if (split) extra.push(split + " new piece(s) cut by the fault");
-    if (nFault) extra.push("fault line added");
-    if (nAx) extra.push(nAx + " axial surface(s)");
-    if (nMk) extra.push(nMk + " strain marker(s)");
-    SW.view.status(tag + ": deformed " + moved + " line(s)" +
-                   (extra.length ? " — " + extra.join(", ") : "") +
-                   ". Slip reset to 0 to continue from here.");
+    if (r.split) extra.push(r.split + " piece(s) cut by the faults");
+    if (r.nG) extra.push(r.nG + " growth stratum/strata");
+    if (r.nFault) extra.push(r.nFault + " fault line(s)");
+    if (r.nAx) extra.push(r.nAx + " axial surface(s)");
+    if (r.nMk) extra.push(r.nMk + " strain marker(s)");
+    SW.view.status(r.tag + ": " + what + " — " + r.moved + " line(s)" +
+                   (extra.length ? ", " + extra.join(", ") : "") + ".");
+  }
+
+  function finishStage() {
+    st.done = 0; st.frame = null;
+    setVal("fwd-slip", 0);
+  }
+
+  function apply() {
+    stopAnim();
+    const res = compute();
+    if (!res.ok) { SW.view.status(res.error || "Invalid parameters."); return; }
+    if (!res.lines.length) {
+      SW.view.status("Nothing to deform: select lines or draw horizons first.");
+      return;
+    }
+    const last = res.frames.length - 1;
+    if (last < 1) { SW.view.status("All steps are already written."); return; }
+    const r = writeFrame(res, last, true);
+    finishStage();
+    st.cache = null; st.key = "";
+    report(r, "applied " + last + " step(s); slip reset to 0 for the next stage");
+    refresh();
+  }
+
+  function step() {
+    stopAnim();
+    const res = compute();
+    if (!res.ok) { SW.view.status(res.error || "Invalid parameters."); return; }
+    if (!res.lines.length) {
+      SW.view.status("Nothing to deform: select lines or draw horizons first.");
+      return;
+    }
+    if (res.frames.length < 2) { SW.view.status("All steps are already written."); return; }
+    const n = res.pp.n;
+    const final = st.done + 1 >= n;
+    const r = writeFrame(res, 1, final);
+    if (final) finishStage(); else { st.done++; st.frame = null; }
+    st.cache = null; st.key = "";
+    report(r, final ? "last step written; stage complete"
+                    : "step " + st.done + " of " + n + " written");
     refresh();
   }
 
@@ -12217,27 +13182,65 @@ window.SW = window.SW || {};
   function makeTool(method) {
     return {
       cursor: "crosshair",
-      hint: "Forward model (" + SW.forward.METHODS[method].short + "): set " +
-            "the fault and slip in the rail; click lines to choose what to " +
-            "deform (none = all horizons), click a fault line to use it; " +
-            "Apply writes the result.",
+      hint: "Forward model (" + SW.forward.METHODS[method].short + "): drag " +
+            "the handles (base, ramp top/tip, slip arrow, splays, datum) or " +
+            "the sliders; click a fault to model on it and lines to choose " +
+            "what deforms (none = all horizons). Shift snaps angles to 5°.",
       activate: function () {
         st.method = method;
         st.placing = false;
         st.cache = null; st.key = "";
+        stopAnim();
+        buildSliders();
+        // por defecto: la falla seleccionada
+        const selFault = SW.view.selectedLines().find(l => l.kind === "fault");
+        if (selFault) useFault(selFault, true);
         ensureDefaults();
+        updateBounds();
         syncFields();
       },
       deactivate: function () {
         st.placing = false;
+        st.drag = null; st.hover = null; st.fast = false;
+        stopAnim();
         st.cache = null; st.key = "";
+      },
+      onDown: function (e, pos) {
+        if (e.button !== 0 || st.placing) return;
+        const pp = params();
+        const h = hitHandle(pos, handles(pp));
+        if (!h) return;
+        stopAnim();
+        st.drag = h; st.fast = true; st.frame = null;
+        return "capture";
+      },
+      onMove: function (e, pos) {
+        if (st.drag) {
+          const q = SW.view.toSection(pos);
+          dragTo(st.drag, [q.s, q.z], e);
+          syncFields();
+          SW.view.requestDraw();
+          return;
+        }
+        const h = hitHandle(pos, handles(params()));
+        const id = h ? h.id : null;
+        if ((st.hover && st.hover.id) !== id) {
+          st.hover = h;
+          SW.view.setCursor(h ? (h.id === "datum" ? "ns-resize" : "pointer") : "crosshair");
+          SW.view.requestDraw();
+        }
+      },
+      onUp: function () {
+        if (!st.drag) return;
+        st.drag = null; st.fast = false;
+        st.cache = null; st.key = "";
+        refresh();
       },
       onClick: function (e, pos) {
         if (e.button === 2) return;
         if (st.placing) {
           const q = SW.view.toSection(pos);
-          const set = (id, v) => { const el = $(id); if (el) el.value = v; };
-          set("fwd-s0", round(q.s)); set("fwd-zd", round(q.z));
+          setVal("fwd-s0", round(q.s)); setVal("fwd-zd", round(q.z));
           st.placing = false;
           SW.view.status("Ramp base placed at s = " + round(q.s) +
                          ", z = " + round(q.z) + ".");
@@ -12246,14 +13249,23 @@ window.SW = window.SW || {};
         }
         const hit = SW.view.hitLine(pos, 10);
         if (!hit) return;
-        if (hit.line.kind === "fault") { setFaultFromLine(hit.line); return; }
+        if (hit.line.kind === "fault" && hit.line.id !== st.faultId) {
+          st.fittedId = null;
+          useFault(hit.line);
+          refresh();
+          return;
+        }
         SW.view.toggleSelection({ type: "line", id: hit.line.id });
+        resetStage();
         SW.view.requestDraw();
       },
       onKey: function (e) {
         if (e.key !== "Escape") return false;
-        if (st.placing) st.placing = false;
-        else st.faultId = null;
+        if (st.drag) { st.drag = null; st.fast = false; }
+        else if (st.anim) stopAnim();
+        else if (st.placing) st.placing = false;
+        else { st.faultId = null; st.fittedId = null;
+               const src = $("fwd-fault-src"); if (src) src.value = "param"; }
         refresh();
         return true;
       },
@@ -12266,26 +13278,52 @@ window.SW = window.SW || {};
   const ids = ["fwd-verg", "fwd-s0", "fwd-zd", "fwd-theta", "fwd-h", "fwd-l0",
                "fwd-phi", "fwd-ps", "fwd-psi", "fwd-conc", "fwd-alpha",
                "fwd-slip", "fwd-steps", "fwd-mspace", "fwd-fault-src",
-               "fwd-preview", "fwd-axial", "fwd-strain"];
+               "fwd-preview", "fwd-axial", "fwd-strain", "fwd-nsteps",
+               "fwd-growth", "fwd-g-datum", "fwd-g-rise", "fwd-splay",
+               "fwd-sp-n", "fwd-sp-d", "fwd-sp-theta", "fwd-sp-len",
+               "fwd-sp-frac", "fwd-sp-mode"];
   for (const id of ids) {
     const el = $(id);
     if (!el) continue;
-    el.addEventListener("input", refreshSoon);
-    el.addEventListener("change", refresh);
+    el.addEventListener("input", function () { syncRange(el); st.frame = null; refreshSoon(); });
+    el.addEventListener("change", function () { syncRange(el); st.frame = null; refresh(); });
   }
-  const place = $("fwd-place-btn");
-  if (place) place.addEventListener("click", function () {
+  const bind = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
+  bind("fwd-place-btn", function () {
     st.placing = !st.placing;
     if (st.placing) SW.view.status("Click on the section to place the base of the ramp.");
     refresh();
   });
-  const fit = $("fwd-fit-btn");
-  if (fit) fit.addEventListener("click", fitFromFault);
-  const ap = $("fwd-apply-btn");
-  if (ap) ap.addEventListener("click", apply);
+  bind("fwd-fit-btn", function () {
+    let fl = faultLine();
+    if (!fl) {
+      const sel = SW.view.selectedLines().filter(l => l.kind === "fault");
+      if (sel.length) fl = sel[0];
+    }
+    if (!fl) { SW.view.status("Click a fault line on the section first."); return; }
+    st.faultId = fl.id;
+    fitFromLine(fl, false);
+    resetStage();
+    refresh();
+  });
+  bind("fwd-apply-btn", apply);
+  bind("fwd-step-btn", step);
+  bind("fwd-anim-btn", toggleAnim);
+  bind("fwd-reset-btn", function () {
+    resetStage();
+    SW.view.status("Stage restarted: the next Step starts from slip 0.");
+    refresh();
+  });
+  const fr = $("fwd-frame");
+  if (fr) fr.addEventListener("input", function () {
+    stopAnim();
+    st.frame = +fr.value;
+    SW.view.requestDraw();
+  });
 
   SW.actions = SW.actions || {};
   SW.actions.forwardApply = apply;
+  SW.actions.forwardStep = step;
 })();
 
 /* ==== js/panels/horizons.js ==== */
