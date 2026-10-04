@@ -15791,6 +15791,7 @@ SW.view = (function () {
   let drawQueued = false;
   let pendingClick = null;
   let capturing = false;
+  let capturePointer = null;      // pointerId que sostiene la captura
   let pendingFit = false;   // encuadre pedido mientras el canvas medía 0 px
 
   const $ = id => document.getElementById(id);
@@ -15995,7 +15996,23 @@ SW.view = (function () {
   function resetInteraction() {
     pendingClick = null;
     capturing = false;
+    capturePointer = null;
     if (state.panning) endPan();
+  }
+
+  /* Cierra una captura cuyo `pointerup` se perdió (lápiz levantado fuera de
+   * la ventana, dedo que toca afuera, pérdida de captura…). Antes sólo se
+   * apagaba la bandera y la herramienta se quedaba con su arrastre abierto
+   * para siempre; ahora se le entrega el onUp, que confirma lo hecho. */
+  function finishCapture(e) {
+    if (!capturing) return false;
+    capturing = false;
+    capturePointer = null;
+    cancelLongPress();
+    const pos = lastPos || { x: 0, y: 0 };
+    SW.tools.dispatch("onUp", e || fakeEvent(0, 0, 0), pos);
+    requestDraw();
+    return true;
   }
 
   /* Botones de tool (riel y botonera de medición) y opciones contextuales
@@ -16212,6 +16229,7 @@ SW.view = (function () {
      * sin moverse, se despacha onClick. El botón central siempre panea. */
     cv.addEventListener("pointerdown", function (e) {
       // rechazo de palma: con el lápiz en uso, la mano apoyada no cuenta
+      if (capturing && !pointers.has(capturePointer)) finishCapture(e);
       if (e.pointerType === "touch" && Date.now() < penUntil) return;
       if (e.pointerType === "pen") penUntil = Date.now() + PEN_PALM_MS;
       lastPointerType = e.pointerType || "mouse";
@@ -16232,7 +16250,8 @@ SW.view = (function () {
       // quedó `capturing`/`pendingClick` en pie es porque se perdió el up
       // (soltar fuera de la ventana). Sin este reset la vista queda "pegada"
       // en modo arrastre y ningún click vuelve a seleccionar nada.
-      if (capturing || pendingClick || state.panning) resetInteraction();
+      if (capturing) finishCapture(e);
+      if (pendingClick || state.panning) resetInteraction();
       if (cv.setPointerCapture) {
         try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
       }
@@ -16249,6 +16268,7 @@ SW.view = (function () {
       const t = SW.tools.active();
       if (t && t.onDown && t.onDown(e, pos) === "capture") {
         capturing = true;
+        capturePointer = e.pointerId;
         return;
       }
       if (e.button === 0 || e.button === 2)
@@ -16280,8 +16300,22 @@ SW.view = (function () {
           Math.hypot(pos.x - rec.x0, pos.y - rec.y0) > clickTol())
         cancelLongPress();
 
-      if ((capturing || state.panning || pendingClick) && e.buttons === 0)
+      // `buttons` sólo es fiable con mouse: con lápiz/dedo puede llegar 0 en
+      // pleno contacto. Con mouse, buttons=0 significa que se soltó fuera.
+      if (e.pointerType === "mouse" &&
+          (capturing || state.panning || pendingClick) && e.buttons === 0) {
+        if (capturing) finishCapture(e);
         resetInteraction();
+      }
+      // lápiz que reporta hover (buttons=0) sobre su propia captura: ya se
+      // levantó y el up se perdió → confirmar y salir
+      if (capturing && e.pointerType === "pen" && e.buttons === 0 &&
+          e.pointerId === capturePointer) {
+        pointers.delete(e.pointerId);
+        finishCapture(e);
+        return;
+      }
+      if (capturing && e.pointerId !== capturePointer) return;
       if (state.panning) {
         doPan(pos);
       } else if (capturing) {
@@ -16323,6 +16357,7 @@ SW.view = (function () {
         endPan();
       } else if (capturing) {
         capturing = false;
+        capturePointer = null;
         SW.tools.dispatch("onUp", e, pos);
       } else if (pendingClick) {
         pendingClick = null;
@@ -16350,6 +16385,22 @@ SW.view = (function () {
     }
 
     window.addEventListener("pointerup", endPointer);
+    // Si el navegador retira la captura (cambio de app, gesto del sistema,
+    // Scribble) sin mandar up, la edición se cierra en vez de quedar abierta.
+    cv.addEventListener("lostpointercapture", function (e) {
+      if (e.pointerId !== capturePointer) return;
+      pointers.delete(e.pointerId);
+      cancelLongPress();
+      if (capturing) finishCapture(e);
+      else if (state.panning) endPan();
+    });
+    window.addEventListener("blur", function () {
+      pointers.clear();
+      cancelLongPress();
+      if (capturing) finishCapture();
+      if (state.panning) endPan();
+      pendingClick = null;
+    });
     window.addEventListener("pointercancel", function (e) {
       cancelLongPress();
       longPressFired = false;
