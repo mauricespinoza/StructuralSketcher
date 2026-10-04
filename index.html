@@ -881,6 +881,10 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
             <button id="restore-flip-btn" class="mini" title="Flip hanging-wall side"><svg class="ic"><use href="#i-flip"/></svg>Flip</button>
             <button id="restore-apply-btn" class="primary mini" title="Apply FPF restoration"><svg class="ic"><use href="#i-check"/></svg>Apply</button>
           </div>
+          <label class="rail-field" title="Cutoffs closer than this are welded into one line; farther ones are reported as misfit (empty = 10 px on screen)">Join tolerance (m)
+            <input id="restore-join-tol" type="number" min="0" step="any" placeholder="auto">
+          </label>
+          <button id="restore-join-btn" class="mini" title="After restoring the fault: weld each layer back across it (pieces of the same unit or base name whose cutoffs meet); larger gaps are reported as misfit, not bridged"><svg class="ic"><use href="#i-join"/></svg>Join cutoffs</button>
         </div>
         <div class="rail-opts" data-for="unfold">
           <div class="rail-row">
@@ -1014,6 +1018,15 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
             <input id="fwd-sp-frac" type="number" min="0" max="100" step="5" value="30">
           </label>
 
+          <label class="rail-check fwd-sec-check" data-m="fpf" title="Tectonic wedge / triangle zone: the main fault ends at a branch point and a backthrust rises from there toward the hinterland. The wedge below the backthrust advances along the main fault; the passive roof above it does not move horizontally and is uplifted, so the backthrust offsets the layers and never cuts the main fault"><input id="fwd-bt" type="checkbox"> Backthrust (wedge)</label>
+          <label class="rail-field" data-bt title="Where the main fault ends and the backthrust is rooted: distance along the main fault from the base of the ramp (a drawn fault: from its lower end) — or drag the root handle">Root at (m along the fault)
+            <input id="fwd-bt-d" type="number" min="0" step="any">
+          </label>
+          <label class="rail-field" data-bt title="Dip of the backthrust, toward the foreland (it rises toward the hinterland) — or drag its handle (Shift = 5° steps)">Backthrust dip &#946; (&#176;)
+            <input id="fwd-bt-beta" type="number" min="5" max="80" step="1" value="30">
+          </label>
+          <button id="fwd-bt-join" class="mini" data-bt title="After a restoration (negative slip): weld each layer back across the main fault and the backthrust where its cutoffs meet; larger gaps are reported as misfit, not bridged"><svg class="ic"><use href="#i-join"/></svg>Join cutoffs</button>
+
           <div class="fwd-sec">Display</div>
           <label class="rail-check" title="Draw the deformed section over the current one"><input id="fwd-preview" type="checkbox" checked> Preview</label>
           <label class="rail-check" title="Active (fixed to the fault) and inactive (carried by the hanging wall) axial surfaces"><input id="fwd-axial" type="checkbox" checked> Axial surfaces</label>
@@ -1104,7 +1117,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.11.0",
+  version: "0.12.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1116,6 +1129,16 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.12.0", date: "2026-10-04", highlights: [
+      "Forward modeling (Parallel flow): backthrust wedge / triangle zone — " +
+        "the backthrust is rooted at the propagating tip of the main fault, " +
+        "offsets the beds without cutting it and uplifts a passive roof; " +
+        "negative slip restores it exactly.",
+      "Lines ending on a fault (cutoffs, rooted backthrusts or splays) now " +
+        "slide along it in forward modeling and FPF restoration.",
+      "Join cutoffs: weld layers back across a restored fault and report " +
+        "the misfit instead of bridging it.",
+    ] },
     { version: "0.11.0", date: "2026-10-04", highlights: [
       "Tablet: lifting the pencil or finger (or tapping outside) now always " +
         "closes a move/transform/vertex edit instead of leaving it open.",
@@ -2874,6 +2897,42 @@ SW.restore = (function () {
     return { vertices: verts, moved: moved };
   }
 
+  /* -- fallas que nacen de otra ----------------------------------------------
+   * Un retrocorrimiento o un splay dibujado termina SOBRE la falla de la que
+   * nace. Para moverlo con el bloque colgante sin que se corte contra ella:
+   * `rootedEnds` dice qué extremo está apoyado (a menos de `tol`: [0] o [1]
+   * = el último; null si ninguno, ambos, o si la cruza) y `seatEnds` lo
+   * pone sobre la falla y lo corre `eps` hacia su vértice vecino (su lado
+   * de la falla); después de moverlo, snapEndsToFault lo vuelve a apoyar. */
+  function rootedEnds(v, f, tol) {
+    if (v.length < 2) return null;
+    for (let i = 1; i < v.length - 2; i++)
+      for (let k = 0; k < f.length - 1; k++) {
+        const h = geom.segmentIntersection(v[i], v[i + 1], f[k], f[k + 1]);
+        if (h && h[0] > 1e-6 && h[0] < 1 - 1e-6) return null;
+      }
+    const ends = [];
+    [0, v.length - 1].forEach(function (i, e) {
+      const near = geom.nearestPointOnPolyline(f, v[i]);
+      if (near[3] <= tol) ends.push(e);
+    });
+    return ends.length === 1 ? ends : null;
+  }
+  /* Apoya cada extremo indicado sobre la falla `f` y lo corre `eps` hacia
+   * el vértice vecino (su lado de la falla). */
+  function seatEnds(v, ends, f, eps) {
+    const q = v.map(x => x.slice());
+    for (const e of ends) {
+      const i = e === 0 ? 0 : q.length - 1, j = e === 0 ? 1 : q.length - 2;
+      q[i] = geom.nearestPointOnPolyline(f, q[i])[2].slice();
+      const dx = q[j][0] - q[i][0], dz = q[j][1] - q[i][1];
+      const L = Math.hypot(dx, dz) || 1;
+      const t = Math.min(eps, L * 0.25);
+      q[i] = [q[i][0] + dx / L * t, q[i][1] + dz / L * t];
+    }
+    return q;
+  }
+
   /* -- Fault Parallel Flow --------------------------------------------------- */
   function faultParallelFlow(fault, points, slip, hwSide, moveFootwall, margin) {
     hwSide = hwSide === undefined ? 1 : hwSide;
@@ -2979,9 +3038,52 @@ SW.restore = (function () {
     return { points: out, info: { moved: out.length, pin_ambiguous: nCrossings > 1 } };
   }
 
+  /* -- unir cortes a través de una falla restaurada ---------------------------
+   * Tras restaurar una falla, cada capa que cortaba queda en dos piezas
+   * cuyos cortes (los extremos sobre la falla) deberían coincidir.
+   * `cutoffPairs` empareja, de menor a mayor distancia, extremos de piezas
+   * compatibles (`same(i, j)`) que están a menos de `search` de la falla y
+   * entre sí; cada extremo entra en un solo par. Los pares a menos de `tol`
+   * se sueldan; los demás son el desajuste (misfit) de la restauración, que
+   * se informa en vez de taparse con un puente recto.
+   * Devuelve [{i, j, ei, ej, d, weld}] (ei/ej: 0 = primer vértice). */
+  function cutoffPairs(fault, pieces, tol, search, same) {
+    // una falla o una lista de fallas
+    const list = (fault.length && Array.isArray(fault[0][0]) ? fault : [fault])
+      .filter(f => f && f.length >= 2)
+      .map(f => extendEnds(orientLR(f), Math.max(search, tol) * 2));
+    if (!list.length) return [];
+    const near = q => list.some(f => geom.nearestPointOnPolyline(f, q)[3] <= search);
+    const ends = [];
+    pieces.forEach(function (v, i) {
+      if (!v || v.length < 2) return;
+      [0, v.length - 1].forEach(function (k, e) {
+        if (near(v[k])) ends.push({ i: i, e: e, p: v[k] });
+      });
+    });
+    const cand = [];
+    for (let a = 0; a < ends.length; a++)
+      for (let b = a + 1; b < ends.length; b++) {
+        const A = ends[a], B = ends[b];
+        if (A.i === B.i || !same(A.i, B.i)) continue;
+        const d = geom.dist(A.p, B.p);
+        if (d <= search) cand.push({ a: a, b: b, d: d });
+      }
+    cand.sort((x, y) => x.d - y.d);
+    const used = new Set(), out = [];
+    for (const c of cand) {
+      if (used.has(c.a) || used.has(c.b)) continue;
+      used.add(c.a); used.add(c.b);
+      const A = ends[c.a], B = ends[c.b];
+      out.push({ i: A.i, j: B.i, ei: A.e, ej: B.e, d: c.d, weld: c.d <= tol });
+    }
+    return out;
+  }
+
   return {
     pointAtArclength, arcLengthAt,
     faultParallelFlow, slipFromCutoffs, snapEndsToFault,
+    rootedEnds, seatEnds, cutoffPairs,
     hangingWallSide, flexuralSlipUnfold, pinShear, MAX_PIN_TILT_DEG,
     orientLR, leftNormal,
   };
@@ -11210,11 +11312,22 @@ window.SW = window.SW || {};
       return;
     }
     const redo = [], undo = [];
-    let moved = 0;
+    let moved = 0, rootedN = 0;
+    const tol = SW.view.tolS(8);
     for (const line of lines) {
-      const res = SW.restore.faultParallelFlow(fault.vertices, line.vertices,
+      /* Una línea que termina sobre la falla (el corte de una capa, la raíz
+       * de un retro o un splay) viaja con su bloque deslizando SOBRE la
+       * falla: sin esto, el extremo apoyado cuenta como yaciente y se queda. */
+      const ends = SW.restore.rootedEnds(line.vertices, fault.vertices, tol);
+      const src = ends ? SW.restore.seatEnds(line.vertices, ends, fault.vertices, tol * 1e-3)
+                       : line.vertices;
+      const res = SW.restore.faultParallelFlow(fault.vertices, src,
                                                slip, side, false);
       if (!res.info.moved) continue;
+      if (ends) {
+        res.points = SW.restore.snapEndsToFault(res.points, fault.vertices, tol).vertices;
+        rootedN++;
+      }
       redo.push({ op: "replace_vertices", id: line.id, vertices: res.points });
       undo.push({ op: "replace_vertices", id: line.id, vertices: line.vertices });
       moved++;
@@ -11229,7 +11342,82 @@ window.SW = window.SW || {};
       redo: redo, undo: undo,
     });
     SW.view.status("Restored " + moved + " line(s), slip " +
-                   SW.units.len(slip) + ".");
+                   SW.units.len(slip) +
+                   (rootedN ? " (" + rootedN + " cutoff(s)/root(s) kept on the fault)" : "") +
+                   ". Join cutoffs welds the layers back across the fault.");
+    SW.view.requestDraw();
+  };
+
+  /* Une las capas a través de la falla activa (SW.restore.cutoffPairs): las
+   * piezas de la misma unidad (o, sin unidad, del mismo nombre base:
+   * "Top K" y "Top K (2)") cuyos cortes quedaron a menos de `tol` se
+   * sueldan en una sola línea; los cortes más separados no se tocan y se
+   * informan como desajuste. Trabaja sobre la selección o, si hay menos de
+   * dos líneas seleccionadas, sobre todos los horizontes y contactos. */
+  SW.actions.restoreJoinCutoffs = function (tolIn, traces, label) {
+    const t = SW.tools.get("restore_fault");
+    let fault = t && SW.tools.activeToolName() === "restore_fault" ? t.faultLine() : null;
+    if (!fault && !traces) fault = SW.view.selectedLines().find(l => l.kind === "fault") || null;
+    if (!fault && !traces) { SW.view.status("Pick the restored fault first."); return; }
+    // `traces`: fallas dadas como polilíneas (p. ej. principal + retro)
+    const across = traces || [fault.vertices];
+    const name = label || (fault && fault.name) || "fault";
+    const okLine = l => l && !l.locked && l.visible !== false &&
+                        l.kind !== "fault" && (l.vertices || []).length >= 2;
+    let lines = SW.view.selectedLines().filter(okLine);
+    if (lines.length < 2)
+      lines = (SW.model.state.sec.lines || []).filter(l => okLine(l) &&
+        (l.kind === "horizon" || l.kind === "contact"));
+    const tol = tolIn > 0 ? tolIn : SW.view.tolS(10);
+    const stem = n => String(n || "").replace(/\s*\(\d+\)\s*$/, "").trim();
+    const same = (i, j) => {
+      const a = lines[i], b = lines[j];
+      if (a.kind !== b.kind) return false;
+      if (a.unit_id || b.unit_id) return a.unit_id === b.unit_id;
+      return stem(a.name) === stem(b.name);
+    };
+    const pairs = SW.restore.cutoffPairs(across, lines.map(l => l.vertices),
+                                         tol, tol * 25, same);
+    // grupos de piezas soldadas (una capa cortada varias veces por la falla)
+    const parent = lines.map((_, i) => i);
+    const find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+    for (const pr of pairs) if (pr.weld) parent[find(pr.i)] = find(pr.j);
+    const groups = {};
+    lines.forEach((_, i) => { (groups[find(i)] = groups[find(i)] || []).push(i); });
+    const redo = [], undo = [], dels = [];
+    let joined = 0;
+    for (const k of Object.keys(groups)) {
+      const g = groups[k];
+      if (g.length < 2) continue;
+      g.sort((a, b) => SW.model.lineIndex(lines[a].id) - SW.model.lineIndex(lines[b].id));
+      const res = SW.geom.joinPolylines(g.map(i => lines[i].vertices), tol,
+                                        SW.view.state.ve || 1);
+      if (res.vertices.length < 2) continue;
+      const keep = lines[g[0]];
+      redo.push({ op: "replace_vertices", id: keep.id, vertices: res.vertices });
+      undo.push({ op: "replace_vertices", id: keep.id, vertices: keep.vertices });
+      for (const i of g.slice(1)) dels.push(lines[i]);
+      joined++;
+    }
+    const withIdx = dels.map(l => ({ line: l, index: SW.model.lineIndex(l.id) }))
+      .sort((a, b) => b.index - a.index);
+    for (const x of withIdx) redo.push({ op: "delete_line", id: x.line.id });
+    // al deshacer: reponer de menor a mayor índice (cada uno vuelve a su sitio)
+    const restores = withIdx.slice().reverse()
+      .map(x => ({ op: "restore_line", line: SW.model.clone(x.line), index: x.index }));
+    undo.unshift.apply(undo, restores);
+    const misfit = pairs.filter(pr => !pr.weld)
+      .map(pr => (lines[pr.i].name || "line") + " " + SW.units.len(pr.d));
+    if (redo.length) {
+      SW.undo.push({ label: "Join cutoffs across " + name,
+                     redo: redo, undo: undo });
+      SW.model.syncUnitIds();
+      if (SW.panels.horizons && SW.panels.horizons.sync) SW.panels.horizons.sync();
+    }
+    SW.view.status((joined ? "Joined " + joined + " layer(s) across the fault"
+                           : "No cutoffs within " + SW.units.len(tol) + " to join") +
+      (misfit.length ? ". Misfit (not joined): " + misfit.join(", ") +
+                       " — adjust the slip and restore again." : "."));
     SW.view.requestDraw();
   };
 })();
@@ -11811,6 +11999,15 @@ SW.forward = (function () {
     }
     // ¿bloque colgante? (lado izquierdo = arriba de la falla orientada)
     mapper.isHW = function (p) { const loc = locate(p); return !!loc && loc.h > 0; };
+    // dirección unitaria (izq → der) de la lámina que pasa por p, es decir
+    // la velocidad del flujo por unidad de slip; null en el yaciente
+    mapper.dir = function (p) {
+      const loc = locate(p);
+      if (!loc || loc.h <= 0) return null;
+      const a = f[loc.j], c = f[loc.j + 1];
+      const L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1;
+      return [(c[0] - a[0]) / L, (c[1] - a[1]) / L];
+    };
     return mapper;
   }
 
@@ -11890,6 +12087,7 @@ SW.forward = (function () {
         else {
           const n0 = SW.restore.leftNormal(lr, i - 1);
           const n1 = SW.restore.leftNormal(lr, i);
+          if (Math.abs(cross(n0[0], n0[1], n1[0], n1[1])) < 2e-3) continue;   // sin quiebre
           const nx = n0[0] + n1[0], nz = n0[1] + n1[1];
           const L = Math.hypot(nx, nz);
           if (L < EPS) continue;
@@ -12036,6 +12234,140 @@ SW.forward = (function () {
                                  branch: B, drawFault: [B, tip] });
   }
 
+  /* -- retrocorrimiento desde la punta: cuña tectónica / zona triangular ---
+   * La falla principal (FPF) termina en J, a `d` metros de la base de la
+   * rampa medidos sobre ella (con una falla dibujada, desde su extremo más
+   * bajo); desde J el retrocorrimiento sube hacia el traspaís con manteo β
+   * hasta el tope del modelo. Tres bloques:
+   *  - cuña C: bloque colgante de la principal bajo el retro; avanza por
+   *    flujo paralelo a la principal (velocidad = dirección de su lámina).
+   *    La punta J y el retro son líneas materiales de C: J se propaga por la
+   *    falla (P/S = 1) y el retro se traslada con ella, sin cortarla nunca.
+   *  - techo pasivo B: sobre el retro y detrás de la vertical por J. No se
+   *    mueve en la horizontal; para que su deslizamiento relativo a C sea
+   *    paralelo al retro sube con v = sin θ + cos θ · tan β (θ = manteo de
+   *    la principal en J), y el retro acumula s = cos θ / cos β por unidad
+   *    de slip.
+   *  - antepaís (delante de la vertical por J) y yaciente: fijos.
+   * La vertical por J es la superficie axial activa del flanco frontal del
+   * techo: la roca que la cruza se levanta y forma el monoclinal (las capas
+   * del techo quedan paralelas al retro si la principal es plana en J).
+   * Todas las discontinuidades conservan el flujo normal, así que el campo
+   * conserva área; el retro corta y desplaza las capas, la principal no
+   * queda cortada por él. Slip negativo = restauración: el mismo campo
+   * recorrido hacia atrás (la punta y el retro retroceden), inversa exacta
+   * del modelo directo salvo la discretización. */
+  function wedge(p, spec, span) {
+    const g = setup(p);
+    if (!g.ok) return { error: g.error };
+    if (p.method !== "fpf")
+      return { error: "The backthrust wedge works with Fault Parallel Flow." };
+    if (usesLine(p) && (p.faultLine || []).length < 2)
+      return { error: "Click a fault line on the section first." };
+    const tr = trace(p, g, 0);
+    if (tr.length < 2) return { error: "The main fault is missing." };
+    const beta = (+spec.beta || 0) * D2R;
+    if (!(beta >= 5 * D2R - EPS && beta <= 80 * D2R + EPS))
+      return { error: "The backthrust dip must be between 5° and 80°." };
+    const v = p.verg < 0 ? -1 : 1;
+    // camino de la principal desde la base (paramétrica) o su extremo bajo
+    let path, behind;
+    if (usesLine(p)) {
+      path = tr[0][1] <= tr[tr.length - 1][1] ? tr : tr.slice().reverse();
+      behind = [];
+    } else { path = tr.slice(1); behind = [tr[0]]; }
+    const cum = [0];
+    for (let i = 1; i < path.length; i++)
+      cum.push(cum[i - 1] + Math.hypot(path[i][0] - path[i - 1][0],
+                                       path[i][1] - path[i - 1][1]));
+    const total = cum[cum.length - 1];
+    const d = Math.max(0, +spec.d || 0);
+    if (d + Math.min(0, +p.slip || 0) < -EPS)
+      return { error: "Restoring more slip than the distance from the root to the start of the main fault." };
+    /* Punto a arco u (más allá del extremo, la prolongación del último
+     * tramo: por ahí se propaga la punta), dirección del tramo hacia arriba
+     * de la falla y k = cuántos vértices del camino quedan detrás. */
+    function at(u) {
+      let i = 0;
+      while (i < path.length - 2 && cum[i + 1] < u) i++;
+      const a = path[i], b = path[i + 1];
+      const L = cum[i + 1] - cum[i] || 1;
+      const dir = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+      const t = u - cum[i];
+      return { pt: [a[0] + dir[0] * t, a[1] + dir[1] * t], dir: dir,
+               k: u >= total ? path.length : i + 1 };
+    }
+    const ub = [-v * Math.cos(beta), Math.sin(beta)];      // retro, hacia arriba
+    const tanB = Math.tan(beta);
+    const fpf = fpfMapper(SW.restore.orientLR(tr), Math.max(1, span) * 3);
+    const rates = j => {
+      const c = Math.abs(j.dir[0]), sn = j.dir[1];
+      return { bt: c / Math.cos(beta), up: sn + c * tanB };
+    };
+    function vel(q, s) {
+      const j = at(d + s), J = j.pt;
+      if (v * (q[0] - J[0]) >= 0) return [0, 0];          // delante de J
+      const u = fpf.dir(q);
+      if (!u) return [0, 0];                               // yaciente
+      const zbt = J[1] + (q[0] - J[0]) / ub[0] * ub[1];
+      if (q[1] > zbt) return [0, rates(j).up];             // techo pasivo
+      return [u[0] * v, u[1] * v];                         // cuña
+    }
+    // subpaso máximo: la roca que cruza la vertical por J (o el retro) se
+    // clasifica una vez por subpaso, así el error queda acotado por él
+    const dsMax = Math.max(1, span) / 4000;
+    function move(pts, sA, sB, increments) {
+      const out = pts.map(q => [q[0], q[1]]);
+      const n = Math.max(1, Math.round(increments) || 1,
+                         Math.ceil(Math.abs((sB || 0) - (sA || 0)) / dsMax));
+      const ds = ((sB || 0) - (sA || 0)) / n;
+      if (!(Math.abs(ds) > 0)) return out;
+      for (let k = 0; k < n; k++) {
+        const s = sA + k * ds;
+        for (const q of out) {
+          const v1 = vel(q, s);
+          const m = [q[0] + v1[0] * ds / 2, q[1] + v1[1] * ds / 2];
+          const v2 = vel(m, s + ds / 2);
+          q[0] += v2[0] * ds; q[1] += v2[1] * ds;
+        }
+      }
+      return out;
+    }
+    const arcAt = s => Math.max(0, d + (s || 0));
+    function fault(s) {
+      const j = at(arcAt(s));
+      return behind.map(q => q.slice()).concat(path.slice(0, j.k).map(q => q.slice()), [j.pt]);
+    }
+    // el retro llega por encima del techo levantado (que puede pasar el
+    // tope), así corta todas las capas que desplaza
+    const zEnd = p.top + Math.max(0, +p.slip || 0) * Math.max(1, rates(at(d)).up);
+    function bt(s) {
+      const J = at(arcAt(s)).pt;
+      const t = (zEnd - J[1]) / ub[1];
+      const len = t > 0 ? t : Math.max(1, span) * 0.05;
+      return [J.slice(), [J[0] + ub[0] * len, J[1] + ub[1] * len]];
+    }
+    const j0 = at(d), r0 = rates(j0);
+    const S = +p.slip || 0;
+    const thJ = Math.atan2(j0.dir[1], Math.abs(j0.dir[0])) / D2R;
+    const info = ["backthrust slip " + (S * r0.bt).toFixed(0) + " m (" +
+                    r0.bt.toFixed(2) + " × slip)",
+                  "roof uplift " + (S * r0.up).toFixed(0) + " m",
+                  "roof forelimb dip " + (Math.atan(r0.up / Math.max(Math.abs(j0.dir[0]), EPS)) / D2R).toFixed(0) + "°"];
+    if (thJ < -1) info.push("the main fault descends at the branch point");
+    if (S < 0) info.unshift("restoring: the tip and the backthrust retreat");
+    return { ok: true, info: info, move: move, fault: fault, bt: bt,
+             tip: s => at(arcAt(s)).pt, rates: r0,
+             vel: vel, ub: ub, v: v };
+  }
+  /* Trazas iniciales [principal hasta J, retro] (null si no son válidas). */
+  function wedgeFaults(p, spec, slip) {
+    const box = Math.max(1, Math.abs((p.x1 - p.x0) || 1));
+    const W = wedge(p, spec, box);
+    if (!W.ok) return null;
+    return [W.fault(slip || 0), W.bt(slip || 0)];
+  }
+
   /* -- depositación sintectónica ------------------------------------------
    * Capa horizontal a la cota `level` entre s0 y s1 que sólo existe donde
    * queda por encima de la superficie actual (envolvente superior de
@@ -12093,8 +12425,27 @@ SW.forward = (function () {
    * frames[i] el estado tras el paso from+i. Cada cuadro: {k, slip, sets,
    * growth (claves nuevas), faults, axActive, axInactive}. */
   function simulate(cfg) {
-    const mm = prepare(cfg.main);
-    if (!mm.ok) return { ok: false, error: mm.error };
+    const m0 = prepare(cfg.main);
+    if (!m0.ok) return { ok: false, error: m0.error };
+    // con retrocorrimiento en cuña, el modelo de la principal es el de la cuña
+    let W = null, mm = m0;
+    if (cfg.wedge) {
+      if ((cfg.splays || []).length)
+        return { ok: false, error: "Splays and the backthrust wedge can't be combined: turn one of them off." };
+      const sp = Math.max(1, Math.abs((cfg.main.x1 - cfg.main.x0) || 1));
+      W = wedge(cfg.main, cfg.wedge, sp);
+      if (!W.ok) return { ok: false, error: W.error };
+      mm = Object.assign({}, m0, {
+        info: m0.info.concat(W.info), move: W.move, fault: W.fault,
+        axialActive: function (slip) {
+          const J = W.tip(slip);
+          // quiebres de la principal detrás de la punta + flanco del techo
+          const out = m0.axialActive(slip).filter(a => W.v * (a.pts[0][0] - J[0]) < 0);
+          if (J[1] < cfg.main.top) out.push({ kind: "roof", pts: [J.slice(), [J[0], cfg.main.top]] });
+          return out;
+        },
+      });
+    }
     const sps = [];
     for (const sp of cfg.splays || []) {
       const m = prepare(sp.p);
@@ -12149,6 +12500,7 @@ SW.forward = (function () {
     function snapshot(k) {
       const slip = k * S / n;
       const faults = [mm.fault(sgn * slipOf(0, slip))]
+        .concat(W ? [W.bt(sgn * slipOf(0, slip))] : [])
         .concat(sps.map((sp, i) => sp.m.p.drawFault ? sp.m.p.drawFault.map(q => q.slice())
                                                      : sp.m.fault(sgn * slipOf(i + 1, slip))));
       const axA = mm.axialActive(sgn * slipOf(0, slip));
@@ -12196,7 +12548,7 @@ SW.forward = (function () {
       fr_.growth = newKeys;
       frames.push(fr_);
     }
-    return { ok: true, frames: frames, info: mm.info, main: mm, splays: sps };
+    return { ok: true, frames: frames, info: mm.info, main: mm, splays: sps, wedge: W };
   }
 
   function usesLine(p) {
@@ -12330,6 +12682,7 @@ SW.forward = (function () {
   }
 
   return { METHODS, run, prepare, simulate, splayParams, growthBed, nudgeRoot, setup, faultTrace, suppeGamma, strainGrid, ellipseOf,
+           wedge, wedgeFaults,
            splitAtFault, cutAtFault, sampleLine, extendEnds,
            _v: VFIELD, _integrate: integrate };
 })();
@@ -12400,6 +12753,8 @@ window.SW = window.SW || {};
   }
   const isVelocity = () => st.method === "fbf" || st.method === "fpfold" ||
                            st.method === "trishear";
+  // retrocorrimiento en cuña: sólo con Parallel flow
+  const hasWedge = () => st.method === "fpf" && checked("fwd-bt");
   // ¿el método admite slip negativo (falla normal)?
   const allowsNormal = () => st.method !== "fbf" && st.method !== "fpfold";
 
@@ -12464,7 +12819,8 @@ window.SW = window.SW || {};
    * límites dependen del tamaño del modelo (se recalculan al activar). */
   const SLIDERS = ["fwd-slip", "fwd-theta", "fwd-h", "fwd-l0", "fwd-phi",
                    "fwd-psi", "fwd-alpha", "fwd-sp-theta", "fwd-sp-d",
-                   "fwd-sp-len", "fwd-sp-frac", "fwd-g-rise", "fwd-nsteps"];
+                   "fwd-sp-len", "fwd-sp-frac", "fwd-g-rise", "fwd-nsteps",
+                   "fwd-bt-d", "fwd-bt-beta"];
   function rangeFor(el) { return el && el._range; }
   function syncRange(el) {
     const r = rangeFor(el);
@@ -12518,6 +12874,8 @@ window.SW = window.SW || {};
     setBounds("fwd-sp-frac", 0, 100, 1);
     setBounds("fwd-g-rise", 0, round(h * 0.25), nice(h) / 10);
     setBounds("fwd-nsteps", 1, 50, 1);
+    setBounds("fwd-bt-d", 0, round(span * 1.2), nice(span));
+    setBounds("fwd-bt-beta", 5, 80, 1);
   }
 
   function dipLabels() {
@@ -12541,6 +12899,8 @@ window.SW = window.SW || {};
     fill("fwd-g-rise", Math.max(h * 0.03, 1));
     fill("fwd-sp-d", Math.max(w * 0.05, 1));
     fill("fwd-sp-len", Math.max(w * 0.12, 1));
+    // sin falla dibujada: raíz del retro a media rampa
+    fill("fwd-bt-d", Math.max(h * 0.25, 1) / Math.sin(Math.max(5, num("fwd-theta", 25)) * D2R));
   }
 
   /* -- la falla seleccionada manda ---------------------------------------- */
@@ -12575,6 +12935,12 @@ window.SW = window.SW || {};
     setVal("fwd-theta", Math.round(Math.atan2(dz, Math.abs(ds)) / D2R));
     setVal("fwd-h", round(dz));
     setVal("fwd-l0", round(Math.hypot(top[0] - lo[0], top[1] - lo[1])));
+    // raíz del retro en la punta dibujada: con la falla misma, su largo
+    // desde el extremo bajo; con la rampa ajustada, desde su base
+    let arc = 0;
+    for (let i = usesLine() ? 1 : i0 + 1; i < vs.length; i++)
+      arc += Math.hypot(vs[i][0] - vs[i - 1][0], vs[i][1] - vs[i - 1][1]);
+    setVal("fwd-bt-d", Math.round(arc * 10) / 10);
     st.fittedId = fl.id;
     if (!quiet) SW.view.status("Ramp taken from " + (fl.name || "the fault") +
                                ": base, angle, height and initial tip.");
@@ -12626,12 +12992,13 @@ window.SW = window.SW || {};
       len: num("fwd-sp-len", 0), frac: num("fwd-sp-frac", 30) / 100,
       mode: ($("fwd-sp-mode") || {}).value || "sequence",
     } : null;
-    return { p, lines, box, span, n, growth, splays };
+    const bt = hasWedge() ? { d: num("fwd-bt-d", 0), beta: num("fwd-bt-beta", 30) } : null;
+    return { p, lines, box, span, n, growth, splays, bt };
   }
 
   /* Firma barata de todo lo que cambia el resultado. */
   function signature(pp) {
-    const parts = [JSON.stringify([pp.p, pp.n, pp.growth, pp.splays, st.done]),
+    const parts = [JSON.stringify([pp.p, pp.n, pp.growth, pp.splays, pp.bt, st.done]),
                    checked("fwd-axial"), checked("fwd-strain"),
                    num("fwd-mspace", 0), st.fast];
     for (const l of pp.lines) {
@@ -12668,11 +13035,25 @@ window.SW = window.SW || {};
     const { p, lines, box, span } = pp;
     const out = { ok: false, pp: pp, p: p, frames: [], views: [], lines: lines };
     const sp = span / 400;
-    const f0 = SW.forward.faultTrace(p, 0);
+    // fallas iniciales donde se cortan las líneas: la principal (con cuña,
+    // sólo hasta la raíz del retro) y el retro
+    const cuts = pp.bt ? (SW.forward.wedgeFaults(p, pp.bt, 0) || [])
+                       : [SW.forward.faultTrace(p, 0)].filter(Boolean);
+    const f0 = cuts[0] || null;
+    /* Líneas que terminan sobre la principal (cortes de capas, retros o
+     * splays dibujados): el extremo apoyado se corre un pelo hacia su
+     * propio lado para que viaje con su bloque, y después se vuelve a
+     * apoyar sobre la principal deformada en vez de cortarse contra ella. */
+    const rootTol = SW.view.tolS(8);
     const sets = {};
+    out.rooted = {};
     lines.forEach(function (l, i) {
       let v = SW.geom.resamplePolyline(l.vertices, sp);
-      if (f0) v = SW.forward.cutAtFault(v, f0, sp * 0.05);
+      const rooted = f0 ? SW.restore.rootedEnds(v, f0, rootTol) : null;
+      if (rooted) {
+        out.rooted[i] = true;
+        v = SW.restore.seatEnds(v, rooted, f0, sp * 1e-3);
+      } else for (const f of cuts) v = SW.forward.cutAtFault(v, f, sp * 0.05);
       sets["l" + i] = v;
     });
     let rings = 0;
@@ -12694,6 +13075,7 @@ window.SW = window.SW || {};
         S: p.slip, n: pp.n, from: Math.min(st.done, pp.n),
         increments: Math.max(2, Math.round((st.fast ? Math.min(p.steps, 40) : p.steps) / pp.n)),
         splayMode: pp.splays ? pp.splays.mode : "sequence",
+        wedge: pp.bt,
         growth: pp.growth ? { datum: pp.growth.datum, rise: pp.growth.rise,
                               s0: box.s0 - 0.05 * span, s1: box.s1 + 0.05 * span,
                               spacing: sp } : null,
@@ -12705,6 +13087,7 @@ window.SW = window.SW || {};
     out.frames = res.frames;
     out.rings = rings;
     out.sp = sp;
+    out.wedge = res.wedge || null;
     st.cache = out;
     if (st.frame !== null && st.frame >= res.frames.length) st.frame = null;
     syncFrameSlider(out);
@@ -12729,9 +13112,19 @@ window.SW = window.SW || {};
     const view = { lines: [], growth: [], markers: [], faults: fr.faults,
                    axActive: [], axInactive: [], slip: fr.slip, k: fr.k };
     res.lines.forEach(function (l, i2) {
-      const pts = fr.sets["l" + i2];
-      const pieces = pts ? cut(pts).map(pc => SW.geom.simplifyDP(pc, tol))
-                                   .filter(pc => pc.length >= 2) : [];
+      let pts = fr.sets["l" + i2];
+      let pcs;
+      if (pts && res.rooted[i2]) {
+        // apoyada en la principal: no se corta con ella, se vuelve a apoyar
+        pts = SW.restore.snapEndsToFault(pts, fr.faults[0], res.sp * 2).vertices;
+        pcs = [pts];
+        for (const f of fr.faults.slice(1)) {
+          const nx = [];
+          for (const pc of pcs) for (const q of SW.forward.splitAtFault(pc, f)) nx.push(q);
+          pcs = nx;
+        }
+      } else pcs = pts ? cut(pts) : [];
+      const pieces = pcs.map(pc => SW.geom.simplifyDP(pc, tol)).filter(pc => pc.length >= 2);
       view.lines.push({ line: l, pieces: pieces });
     });
     for (const key of Object.keys(fr.sets)) {
@@ -12817,11 +13210,13 @@ window.SW = window.SW || {};
     tog("[data-strain]", checked("fwd-strain"));
     tog("[data-growth]", checked("fwd-growth"));
     tog("[data-splay]", checked("fwd-splay"));
+    tog("[data-bt]", hasWedge());
     const sense = $("fwd-sense");
     if (sense) {
       const sl = num("fwd-slip", 0);
       sense.className = "fwd-sense" + (sl > 0 ? " up" : sl < 0 ? " down" : "");
       sense.textContent = sl > 0 ? "\u25B2 Reverse: hanging wall up"
+        : sl < 0 && hasWedge() ? "\u25BC Wedge restoration: the tip and the backthrust retreat"
         : sl < 0 ? (allowsNormal() ? "\u25BC Normal: hanging wall down"
                                    : "\u25BC Normal slip is not available for this model")
         : "";
@@ -12948,6 +13343,16 @@ window.SW = window.SW || {};
                 at: [B[0] + R.v * pp.splays.len * Math.cos(ts), B[1] + pp.splays.len * Math.sin(ts)],
                 from: B, label: "splay θ " + pp.splays.theta + "° · " + Math.round(pp.splays.len) + " m" });
     }
+    if (pp.bt) {
+      const wf = SW.forward.wedgeFaults(pp.p, pp.bt, 0);
+      if (wf) {
+        const J = wf[1][0], b = pp.bt.beta * D2R;
+        const L = Math.max(minLen * 2, pp.span * 0.15);
+        hs.push({ id: "btroot", at: J, label: "backthrust root at " + Math.round(pp.bt.d) + " m" });
+        hs.push({ id: "btdip", at: [J[0] - R.v * L * Math.cos(b), J[1] + L * Math.sin(b)],
+                  from: J, label: "backthrust \u03B2 " + pp.bt.beta + "\u00B0" });
+      }
+    }
     if (pp.growth) {
       const r = V.plotRect();
       const sMid = V.xs ? V.xs(r.x + r.w - 40) : pp.box.s1;
@@ -13033,6 +13438,18 @@ window.SW = window.SW || {};
       case "datum":
         setVal("fwd-g-datum", Math.round(q[1]));
         break;
+      case "btroot": {
+        const path = mainPath(pp);
+        if (path) setVal("fwd-bt-d", Math.max(0, Math.round(arcOf(path, q))));
+        break;
+      }
+      case "btdip": {
+        // el retro sube hacia el traspaís (−v)
+        const dx = (q[0] - h.from[0]) * -R.v, dz = q[1] - h.from[1];
+        if (dz > 0 && dx > 0)
+          setVal("fwd-bt-beta", Math.max(5, Math.min(80, snapA(Math.atan2(dz, dx) / D2R))));
+        break;
+      }
     }
   }
 
@@ -13067,7 +13484,7 @@ window.SW = window.SW || {};
         ctx.beginPath(); ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); ctx.stroke();
         ctx.setLineDash([]);
       }
-      if (h.from && (h.id === "slip" || h.id === "splaytip")) {
+      if (h.from && (h.id === "slip" || h.id === "splaytip" || h.id === "btdip")) {
         // flecha: el slip se dibuja SOBRE la falla, el splay como segmento
         ctx.strokeStyle = h.id === "slip" ? "rgba(37,99,235,.55)" : fc;
         ctx.lineWidth = h.id === "slip" ? 5 : 2;
@@ -13102,7 +13519,7 @@ window.SW = window.SW || {};
       } else {
         ctx.arc(x, y, hot ? 8 : 6, 0, 7);
         ctx.fillStyle = "#fff"; ctx.fill();
-        ctx.strokeStyle = h.id === "branch" || h.id === "splaytip" ? "#b91c1c" : fc;
+        ctx.strokeStyle = /^(branch|splaytip|btroot|btdip)$/.test(h.id) ? "#b91c1c" : fc;
         ctx.lineWidth = 2.2; ctx.stroke();
         if (h.id === "base") {
           ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fillStyle = fc; ctx.fill();
@@ -13279,9 +13696,25 @@ window.SW = window.SW || {};
     let nFault = 0, nAx = 0, nMk = 0;
     if (final && checked("fwd-add-fault")) {
       view.faults.forEach(function (f, j) {
-        if (j === 0 && usesLine()) return;          // la falla ya existe
+        if (j === 0 && usesLine()) {                // la falla ya existe
+          // con cuña, su punta se propagó hasta la raíz actual del retro
+          const ml = faultLine();
+          if (pp.bt && ml) {
+            redo.push({ op: "replace_vertices", id: ml.id, vertices: orientLike(f, ml.vertices) });
+            undo.push({ op: "replace_vertices", id: ml.id, vertices: ml.vertices });
+          }
+          return;
+        }
+        // con cuña, el retro ya dibujado (apoyado en la raíz) se actualiza
+        const old = pp.bt && j === 1 ? wedgeLine(pp) : null;
+        if (old) {
+          redo.push({ op: "replace_vertices", id: old.id, vertices: orientLike(f, old.vertices) });
+          undo.push({ op: "replace_vertices", id: old.id, vertices: old.vertices });
+          return;
+        }
         const fl = SW.model.newLine("fault", f, "forward");
-        fl.name = j === 0 ? "Fault (" + tag + ")" : "Splay " + j + " (" + tag + ")";
+        fl.name = j === 0 ? "Fault (" + tag + ")"
+                : pp.bt ? "Backthrust (" + tag + ")" : "Splay " + j + " (" + tag + ")";
         fl.fault_style = Object.assign({}, fl.fault_style,
           { sense: pp.p.slip < 0 ? "normal" : "reverse" });
         added.push(fl); nFault++;
@@ -13335,6 +13768,26 @@ window.SW = window.SW || {};
     return { moved, split, nG, nFault, nAx, nMk, tag };
   }
 
+  /* La línea de falla que ya representa al retro de la etapa: una falla
+   * (no la principal) con un extremo en su raíz actual. */
+  function wedgeLine(pp) {
+    const wf = SW.forward.wedgeFaults(pp.p, pp.bt, 0);
+    if (!wf) return null;
+    const J = wf[1][0], tol = SW.view.tolS(8);
+    return (SW.model.state.sec.lines || []).find(l => l.kind === "fault" &&
+      l.id !== st.faultId && (l.vertices || []).length >= 2 &&
+      [l.vertices[0], l.vertices[l.vertices.length - 1]]
+        .some(v => Math.hypot(v[0] - J[0], v[1] - J[1]) <= tol)) || null;
+  }
+
+  // `pts` en el mismo sentido de digitalización que `ref`
+  function orientLike(pts, ref) {
+    const a = ref[0], b = pts[0], c = pts[pts.length - 1];
+    const q = Math.hypot(b[0] - a[0], b[1] - a[1]) <= Math.hypot(c[0] - a[0], c[1] - a[1])
+      ? pts : pts.slice().reverse();
+    return q.map(v => v.slice());
+  }
+
   function report(r, what) {
     if (!r) { SW.view.status("Nothing to write."); return; }
     const extra = [];
@@ -13348,6 +13801,8 @@ window.SW = window.SW || {};
   }
 
   function finishStage() {
+    // la punta de la principal (raíz del retro) avanzó el slip de la etapa
+    if (hasWedge()) setVal("fwd-bt-d", Math.max(0, Math.round((num("fwd-bt-d", 0) + num("fwd-slip", 0)) * 10) / 10));
     st.done = 0; st.frame = null;
     setVal("fwd-slip", 0);
   }
@@ -13493,12 +13948,15 @@ window.SW = window.SW || {};
                "fwd-preview", "fwd-axial", "fwd-strain", "fwd-nsteps",
                "fwd-growth", "fwd-g-datum", "fwd-g-rise", "fwd-splay",
                "fwd-sp-n", "fwd-sp-d", "fwd-sp-theta", "fwd-sp-len",
-               "fwd-sp-frac", "fwd-sp-mode"];
+               "fwd-sp-frac", "fwd-sp-mode", "fwd-bt", "fwd-bt-d", "fwd-bt-beta"];
   for (const id of ids) {
     const el = $(id);
     if (!el) continue;
     el.addEventListener("input", function () { syncRange(el); st.frame = null; refreshSoon(); });
-    el.addEventListener("change", function () { syncRange(el); st.frame = null; refresh(); });
+    el.addEventListener("change", function () {
+      syncRange(el); st.frame = null;
+      refresh();
+    });
   }
   const bind = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
   bind("fwd-place-btn", function () {
@@ -13519,6 +13977,14 @@ window.SW = window.SW || {};
     refresh();
   });
   bind("fwd-apply-btn", apply);
+  bind("fwd-bt-join", function () {
+    const pp = params();
+    const wf = pp.bt ? SW.forward.wedgeFaults(pp.p, pp.bt, 0) : null;
+    if (!wf) { SW.view.status("Turn on the backthrust and set a valid main fault first."); return; }
+    SW.actions.restoreJoinCutoffs(0, wf, "the main fault and the backthrust");
+    st.cache = null; st.key = "";
+    refresh();
+  });
   bind("fwd-step-btn", step);
   bind("fwd-anim-btn", toggleAnim);
   bind("fwd-reset-btn", function () {
@@ -16934,6 +17400,10 @@ SW.view = (function () {
     const restoreSlip = $("restore-slip");
     if (restoreApplyBtn) restoreApplyBtn.addEventListener("click", function () {
       SW.actions.restoreFaultApply(restoreSlip ? +restoreSlip.value || 0 : 0);
+    });
+    const restoreJoinBtn = $("restore-join-btn"), restoreJoinTol = $("restore-join-tol");
+    if (restoreJoinBtn) restoreJoinBtn.addEventListener("click", function () {
+      SW.actions.restoreJoinCutoffs(restoreJoinTol ? +restoreJoinTol.value || 0 : 0);
     });
 
     const unfoldDatumBtn = $("unfold-datum-btn");
