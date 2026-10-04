@@ -141,3 +141,17 @@ trace involved:
 Every push to `main` runs `.github/workflows/deploy.yml`, which checks the
 inline script's syntax and publishes `index.html` to GitHub Pages — no
 build step involved.
+
+## Info / version log
+
+Settings → **About** shows the logo, author, contact, disclaimer and the
+**last two versions** only. On each release bump `SW.APP.version` and prepend
+an entry to `SW.APP.changelog` in `index.html`; older entries can stay in the
+array, the view only lists the first two.
+
+## Tablet gestures
+
+- Hold 1 s on empty space with finger or pencil, then drag: lasso selection
+  (the context menu opens on release if you do not drag).
+- Lifting the pencil/finger, or tapping outside, always closes the current
+  move/transform/vertex edit.
