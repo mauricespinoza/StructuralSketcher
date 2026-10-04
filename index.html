@@ -968,13 +968,19 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <label class="rail-field" data-m="trishear" title="Share of the trishear angle on the hanging-wall side: 0.5 = symmetric about the fault; higher = wider on the hanging wall (the concentration factor applies to the symmetric case)">Symmetry (hw share)
             <input id="fwd-sym" type="number" min="0.05" max="0.95" step="0.05" value="0.5">
           </label>
-          <label class="rail-field" data-m="trishear" title="Backlimb trishear angle at the fault bend (0 = sharp kink on the bisector)">Backlimb &#968; (&#176;)
+          <label class="rail-field" data-m="trishear" title="How the hanging wall moves outside the trishear zone, behind the tip: fault-parallel flow (axial surfaces on the bisectors of every fault bend, optional backlimb fan) or inclined simple shear (axial surfaces along the shear direction)">Hanging wall
+            <select id="fwd-tri-hw">
+              <option value="fpf" selected>Fault-parallel flow</option>
+              <option value="shear">Inclined simple shear</option>
+            </select>
+          </label>
+          <label class="rail-field" id="fwd-psi-label" data-m="trishear" title="Backlimb trishear angle at the fault bend (0 = sharp kink on the bisector)">Backlimb &#968; (&#176;)
             <input id="fwd-psi" type="number" min="0" max="170" step="5" value="30">
           </label>
           <label class="rail-field" id="fwd-blpos-label" data-m="trishear" title="Bend of the drawn fault that carries the backlimb fan, measured along the fault from its lower end (0 = the base, where the flat detachment meets the fault; empty = the most concave bend) — or drag the backlimb handle">Backlimb at (m)
             <input id="fwd-blpos" type="number" min="0" step="any" placeholder="auto">
           </label>
-          <label class="rail-field" data-m="shear" title="Angle of the shear direction from the vertical; positive leans toward the transport direction (antithetic to a fault that dips that way), negative leans back (synthetic)">Shear angle (&#176; from vertical)
+          <label class="rail-field" id="fwd-alpha-label" data-m="shear trishear" title="Angle of the shear direction from the vertical; positive leans toward the transport direction (antithetic to a fault that dips that way), negative leans back (synthetic)">Shear angle (&#176; from vertical)
             <input id="fwd-alpha" type="number" min="-89" max="89" step="5" value="0">
           </label>
           <label class="rail-field" id="fwd-slip-label" title="Total slip along the fault. Positive: the hanging wall goes up (reverse); negative: it goes down (normal). Or drag the arrow along the fault">Slip (m)
@@ -1004,9 +1010,9 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
             <input id="fwd-g-rise" type="number" min="0" step="any">
           </label>
 
-          <label class="rail-check fwd-sec-check" title="Splay faults branching from the main fault"><input id="fwd-splay" type="checkbox"> Splay faults</label>
+          <label class="rail-check fwd-sec-check" title="Splay faults: exact copies of the main fault repeated at a given spacing on the same detachment (imbrication)"><input id="fwd-splay" type="checkbox"> Splay faults</label>
           <div class="rail-row" data-splay>
-            <label class="rail-field" title="Number of splays, one every 'distance' along the main fault from the base of the ramp">Count
+            <label class="rail-field" title="Number of copies of the main fault, one every 'spacing'">Count
               <input id="fwd-sp-n" type="number" min="1" max="8" step="1" value="1">
             </label>
             <label class="rail-field" title="Order: the main fault first and then each splay (in sequence), or all at the same time">Timing
@@ -1016,14 +1022,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
               </select>
             </label>
           </div>
-          <label class="rail-field" data-splay title="Distance along the main fault, from the base of the ramp, of the first branch point (and spacing of the next ones) — or drag the branch handle">Distance / spacing (m)
-            <input id="fwd-sp-d" type="number" min="0" step="any">
-          </label>
-          <label class="rail-field" data-splay title="Dip of the splays against the horizontal (steeper than the main ramp) — or drag the splay tip handle">Splay &#952; (&#176;)
-            <input id="fwd-sp-theta" type="number" min="1" max="89" step="1" value="45">
-          </label>
-          <label class="rail-field" data-splay title="Length of each splay from its branch point">Splay length (m)
-            <input id="fwd-sp-len" type="number" min="0" step="any">
+          <label class="rail-field" data-splay title="Horizontal distance between the main fault and the first copy, and between copies. Each splay is an exact copy of the main fault (same trace or ramp, same parameters) moved this far toward the foreland (negative: toward the hinterland), rooted on the same detachment — or drag the red handle on the detachment">Spacing (m)
+            <input id="fwd-sp-d" type="number" step="any">
           </label>
           <label class="rail-field" data-splay title="Share of the total slip taken by each splay (the rest stays on the main fault)">Slip per splay (%)
             <input id="fwd-sp-frac" type="number" min="0" max="100" step="5" value="30">
@@ -1128,7 +1128,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.13.0",
+  version: "0.14.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1140,6 +1140,19 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.14.0", date: "2026-10-04", highlights: [
+      "Trishear: choose how the hanging wall moves outside the triangle — " +
+        "fault-parallel flow (bisector axial surfaces, optional backlimb " +
+        "fan) or inclined simple shear (axial surfaces along the shear " +
+        "direction).",
+      "Fault-parallel flow: where two bisectors meet they now merge into " +
+        "one axial surface, exactly as the flow moves the rock.",
+      "Splay faults are exact copies of the main fault repeated at a given " +
+        "spacing on the same detachment; in sequence, each new fault " +
+        "carries the earlier ones.",
+      "Fault lines: Follow line continues a fault along the line it " +
+        "crosses (or reaches) up to that line's end.",
+    ] },
     { version: "0.13.0", date: "2026-10-04", highlights: [
       "Forward modeling (Parallel flow): backthrust wedge / triangle zone — " +
         "the backthrust is rooted at the propagating tip of the main fault, " +
@@ -7178,6 +7191,97 @@ window.SW = window.SW || {};
     SW.view.requestDraw();
   };
 
+  /* Follow line: una falla que corta (o, prolongada, alcanza) otra línea
+   * se continúa SOBRE esa línea desde la intersección hasta su terminación
+   * — típicamente una falla que se horizontaliza en un despegue. El tramo
+   * de la falla más allá del corte se descarta. La otra línea es la segunda
+   * línea seleccionada o, si no hay, la más cercana que la falla corta (o
+   * que alcanza prolongando su extremo). Por la otra línea se sigue hacia
+   * el extremo que continúa el sentido de la falla. */
+  SW.actions.followLine = function () {
+    const sel = SW.view.selectedLines();
+    const fault = sel.find(l => l.kind === "fault" && !l.locked) ||
+                  sel.find(l => !l.locked);
+    if (!fault || fault.vertices.length < 2) {
+      SW.view.status("Follow line: select a fault line first.");
+      return;
+    }
+    const others = sel.filter(l => l.id !== fault.id);
+    const pool = (others.length ? others : (SW.model.state.sec.lines || []))
+      .filter(l => l.id !== fault.id && l.visible !== false &&
+                   (l.vertices || []).length >= 2);
+    const fv = fault.vertices;
+    const segLen = i => Math.hypot(fv[i + 1][0] - fv[i][0], fv[i + 1][1] - fv[i][1]);
+    const cum = [0];
+    for (let i = 0; i < fv.length - 1; i++) cum.push(cum[i] + segLen(i));
+    const total = cum[cum.length - 1];
+    let best = null;          // {d, end, fi, ft, X, line, ti, tt}
+    const consider = function (c) { if (!best || c.d < best.d) best = c; };
+    for (const L of pool) {
+      const tv = L.vertices;
+      // cortes reales a lo largo de la falla
+      for (let i = 0; i < fv.length - 1; i++)
+        for (let k = 0; k < tv.length - 1; k++) {
+          const h = SW.geom.segmentIntersection(fv[i], fv[i + 1], tv[k], tv[k + 1]);
+          if (!h) continue;
+          const arc = cum[i] + h[0] * segLen(i);
+          // un extremo que ya toca la línea no cuenta como corte
+          if (arc < 1e-6 || arc > total - 1e-6) {
+            consider({ d: 0, end: arc < 1e-6 ? "start" : "end", fi: i, ft: h[0],
+                       X: h[2], line: L, ti: k, tt: h[1] });
+            continue;
+          }
+          consider({ d: Math.min(arc, total - arc), end: arc < total - arc ? "start" : "end",
+                     fi: i, ft: h[0], X: h[2], line: L, ti: k, tt: h[1] });
+        }
+      // prolongando cada extremo en recta
+      for (const end of ["start", "end"]) {
+        const a = end === "start" ? fv[1] : fv[fv.length - 2];
+        const b = end === "start" ? fv[0] : fv[fv.length - 1];
+        const dx = b[0] - a[0], dz = b[1] - a[1], Ld = Math.hypot(dx, dz) || 1;
+        const ux = dx / Ld, uz = dz / Ld;
+        for (let k = 0; k < tv.length - 1; k++) {
+          const c = tv[k], e = tv[k + 1];
+          const ex = e[0] - c[0], ez = e[1] - c[1];
+          const den = ux * ez - uz * ex;
+          if (Math.abs(den) < 1e-12) continue;
+          const wx = c[0] - b[0], wz = c[1] - b[1];
+          const t = (wx * ez - wz * ex) / den;       // a lo largo del rayo
+          const u = (wx * uz - wz * ux) / den;       // a lo largo del tramo
+          if (t <= 1e-9 || u < -1e-9 || u > 1 + 1e-9) continue;
+          consider({ d: t, end: end, ext: true, X: [b[0] + ux * t, b[1] + uz * t],
+                     line: L, ti: k, tt: Math.max(0, Math.min(1, u)) });
+        }
+      }
+    }
+    if (!best) {
+      SW.view.status("Follow line: the fault doesn't cross or reach any other line.");
+      return;
+    }
+    // falla hasta X, recorrida hacia el extremo elegido
+    let head;
+    if (best.ext) head = best.end === "end" ? fv.map(q => q.slice()) : fv.slice().reverse().map(q => q.slice());
+    else if (best.end === "end") head = fv.slice(0, best.fi + 1).map(q => q.slice());
+    else head = fv.slice(best.fi + 1).reverse().map(q => q.slice());
+    const last = head[head.length - 1];
+    if (Math.hypot(last[0] - best.X[0], last[1] - best.X[1]) > 1e-9) head.push(best.X.slice());
+    // sentido de llegada y hacia qué extremo de la otra línea seguir
+    const prev = head.length >= 2 ? head[head.length - 2] : head[0];
+    const inx = best.X[0] - prev[0], inz = best.X[1] - prev[1];
+    const tv = best.line.vertices;
+    const tx = tv[best.ti + 1][0] - tv[best.ti][0], tz = tv[best.ti + 1][1] - tv[best.ti][1];
+    const forward = inx * tx + inz * tz >= 0;
+    const tail = forward ? tv.slice(best.ti + 1) : tv.slice(0, best.ti + 1).reverse();
+    const verts = head.concat(tail.map(q => q.slice()))
+      .filter((q, i, arr) => i === 0 || Math.hypot(q[0] - arr[i - 1][0], q[1] - arr[i - 1][1]) > 1e-9);
+    // se guarda en el sentido original de la falla
+    const after = best.end === "end" ? verts : verts.reverse();
+    SW.undo.push(SW.undo.replaceVertices(fault.id, fault.vertices, after, "Follow line"));
+    SW.view.status((fault.name || "Fault") + " now follows " +
+                   (best.line.name || "the line") + " to its end.");
+    SW.view.requestDraw();
+  };
+
   SW.actions.bezierSelected = function (tol) {
     const lines = SW.view.selectedLines()
       .filter(l => !l.locked && l.vertices.length >= 3);
@@ -7482,6 +7586,9 @@ window.SW = window.SW || {};
         disabled: !anyEditable, action: () => SW.actions.simplifySelected() },
       { label: "Tidy (snap/dedupe)" + n,
         disabled: !anyEditable, action: () => SW.actions.tidySelected() });
+    if (group.some(l => l.kind === "fault"))
+      items.push({ label: "Follow line", disabled: !anyEditable,
+                   action: () => SW.actions.followLine() });
     if (multi)
       items.push({ label: "Join" + n, disabled: !anyEditable,
                    action: () => SW.actions.joinSelected() });
@@ -11851,13 +11958,24 @@ SW.forward = (function () {
         g.ck = Math.cos(g.k * g.psi / 2);
         g.ex = th / (g.psi * g.k);
       }
+      // fuera del triángulo, detrás de la punta: flujo paralelo a la falla
+      // (superficies axiales en las bisectrices) o cizalla simple inclinada
+      g.hw = p.triHW === "shear" ? "shear" : "fpf";
+      if (g.hw === "shear") {
+        const a = (+p.alpha || 0) * D2R;
+        if (Math.abs(a) >= 89 * D2R)
+          return { error: "The shear angle must be within ±89° of vertical." };
+        g.sh = [-Math.sin(a), Math.cos(a)];
+        g.farP = Math.max(1, Math.abs((p.x1 - p.x0) || 1)) * 2;
+      }
       if (usesLine(p)) {
         const err = setupTriLine(p, g);
         if (err) return { error: err };
       }
       g.info.push("tip advances " + (g.ps * Math.abs(slip)).toFixed(0) + " m",
-                  g.psi > 0 ? "backlimb fan " + (+p.psi) + "°"
-                            : "sharp backlimb kink");
+                  g.hw === "shear" ? "hanging wall: inclined shear " + (+p.alpha || 0) + "°"
+                  : g.psi > 0 ? "backlimb fan " + (+p.psi) + "°"
+                              : "sharp backlimb kink");
       if (!g.symm)
         g.info.push("asymmetric: " + (g.phiU / D2R).toFixed(0) + "° hanging wall / " +
                     (g.phiD / D2R).toFixed(0) + "° footwall");
@@ -11934,6 +12052,38 @@ SW.forward = (function () {
     return [f, xi * f - W * Math.pow(t, p + 1) / (p + 1)];
   }
 
+  /* Cizalla simple inclinada fuera del triángulo: el punto conserva su
+   * distancia a la falla medida sobre la dirección de cizalla `sh` mientras
+   * el bloque avanza con rechazo horizontal constante. Con e = tramo de la
+   * falla bajo el punto (sobre −sh), v = eₓ − λ·sh con λ = (eₓ×e)/(sh×e):
+   * queda paralela a e y el salto entre tramos es paralelo a sh (el campo
+   * conserva área). Se escala para que sobre el tramo de la punta valga d
+   * (unitaria), como el borde superior del triángulo. */
+  function shearHW(g, f, x, z, d) {
+    const sh = g.sh;
+    let e = null, bt = -Infinity;
+    for (let i = 0; i < f.length - 1; i++) {
+      const ex = f[i + 1][0] - f[i][0], ez = f[i + 1][1] - f[i][1];
+      const den = cross(sh[0], sh[1], ex, ez);
+      if (Math.abs(den) < EPS) continue;
+      const wx = f[i][0] - x, wz = f[i][1] - z;
+      const t = cross(wx, wz, ex, ez) / den;
+      const u = cross(wx, wz, sh[0], sh[1]) / den;
+      if (u >= -1e-9 && u <= 1 + 1e-9 && t <= 1e-9 && t > bt) {
+        bt = t;
+        const L = Math.hypot(ex, ez) || 1;
+        e = [ex / L, ez / L];
+      }
+    }
+    const vel = function (u) {
+      const lam = u[1] / cross(sh[0], sh[1], u[0], u[1]);
+      return [1 - lam * sh[0], -lam * sh[1]];
+    };
+    const vd = vel(d), k = vd[0] * d[0] + vd[1] * d[1];
+    const v = e ? vel(e) : [1, 0];
+    return Math.abs(k) > EPS ? [v[0] / k, v[1] / k] : v;
+  }
+
   function vTrishear(g, x, z, s) {
     if (g.tl) return vTriLine(g, x, z, s);
     const th = g.th, r = g.r;
@@ -11953,6 +12103,8 @@ SW.forward = (function () {
       // detrás de la punta: yaciente bajo el despegue o la rampa
       if (z <= 0) return [0, 0];
     } else if (yt <= 0) return [0, 0];
+    if (g.hw === "shear")
+      return shearHW(g, [[-g.farP, 0], [0, 0], [tx, tz]], x, z, r);
     // flanco trasero: kink bisector o abanico de Cristallini & Allmendinger
     const al = Math.atan2(z, x);
     const tau = al - g.am;
@@ -12064,6 +12216,72 @@ SW.forward = (function () {
     return { f: f, nrm: nrm, dirs: dirs, bis: bis, locate: locate };
   }
 
+  /* Superficies axiales activas del flujo paralelo a una polilínea (h > 0 a
+   * la izquierda). En cada quiebre nace la bisectriz; cuando dos bisectrices
+   * vecinas se cortan, el tramo de falla entre ellas desaparece de las
+   * láminas que están más arriba y ambas se funden en UNA, la bisectriz de
+   * los tramos que quedan a los lados (esqueleto recto de la polilínea).
+   * Es exactamente lo que hace el campo de velocidades (cada punto toma el
+   * tramo más cercano), así que lo dibujado coincide con lo que se mueve.
+   * `skip(i)`: quiebres que no entran (p. ej., el del abanico del
+   * backlimb). Devuelve [{o, e|null, u, i}]: segmento o→e o rayo desde o. */
+  function fpfSkeleton(f, skip) {
+    const n = f.length;
+    if (n < 3) return [];
+    const nrm = [];
+    for (let j = 0; j < n - 1; j++) {
+      const dx = f[j + 1][0] - f[j][0], dz = f[j + 1][1] - f[j][1];
+      const L = Math.hypot(dx, dz) || 1;
+      nrm.push([-dz / L, dx / L]);
+    }
+    const mitre = function (a, b) {               // a, b: índices de tramo
+      const bx = nrm[a][0] + nrm[b][0], bz = nrm[a][1] + nrm[b][1];
+      const L = Math.hypot(bx, bz);
+      if (L < EPS) return null;
+      const u = [bx / L, bz / L];
+      const c = u[0] * nrm[a][0] + u[1] * nrm[a][1];
+      if (c < 0.05) return null;
+      return { u: u, m: [u[0] / c, u[1] / c] };
+    };
+    // rayos activos: {o (punto a altura h0), h0, L (tramo izq.), R (tramo der.)}
+    let rays = [];
+    for (let i = 1; i < n - 1; i++) {
+      if (skip && skip(i)) continue;
+      if (Math.abs(cross(nrm[i - 1][0], nrm[i - 1][1], nrm[i][0], nrm[i][1])) < 2e-3) continue;
+      const mt = mitre(i - 1, i);
+      if (!mt) continue;
+      rays.push({ o: f[i].slice(), h0: 0, L: i - 1, R: i, mt: mt, i: i });
+    }
+    const out = [];
+    for (let guard = 0; guard < 4 * n; guard++) {
+      // el par vecino que choca primero (comparten el tramo R = L')
+      let best = null;
+      for (let k = 0; k < rays.length - 1; k++) {
+        const A = rays[k], B = rays[k + 1];
+        if (A.R !== B.L) continue;
+        const j = A.R;
+        const e = [nrm[j][1], -nrm[j][0]];
+        const ca = [A.o[0] - A.h0 * A.mt.m[0], A.o[1] - A.h0 * A.mt.m[1]];
+        const cb = [B.o[0] - B.h0 * B.mt.m[0], B.o[1] - B.h0 * B.mt.m[1]];
+        const den = (A.mt.m[0] - B.mt.m[0]) * e[0] + (A.mt.m[1] - B.mt.m[1]) * e[1];
+        if (Math.abs(den) < EPS) continue;
+        const h = ((cb[0] - ca[0]) * e[0] + (cb[1] - ca[1]) * e[1]) / den;
+        if (!(h > Math.max(A.h0, B.h0) + 1e-9)) continue;
+        if (!best || h < best.h) best = { k: k, h: h };
+      }
+      if (!best) break;
+      const A = rays[best.k], B = rays[best.k + 1];
+      const X = [A.o[0] + (best.h - A.h0) * A.mt.m[0], A.o[1] + (best.h - A.h0) * A.mt.m[1]];
+      out.push({ o: A.o, e: X, u: A.mt.u, i: A.i });
+      out.push({ o: B.o, e: X, u: B.mt.u, i: B.i });
+      const mt = mitre(A.L, B.R);
+      const merged = mt ? [{ o: X, h0: best.h, L: A.L, R: B.R, mt: mt, i: -1 }] : [];
+      rays = rays.slice(0, best.k).concat(merged, rays.slice(best.k + 2));
+    }
+    for (const r of rays) out.push({ o: r.o, e: null, u: r.mt.u, i: r.i });
+    return out;
+  }
+
   /* Estado de la falla con la punta a slip |s| (se cachea: integrate llama
    * al campo miles de veces con el mismo s). */
   function triState(g, sAbs) {
@@ -12093,7 +12311,7 @@ SW.forward = (function () {
     const tip = f[f.length - 1], d = S.dirs[S.dirs.length - 1];
     let fan = null;
     // el abanico sólo existe si su quiebre ya está detrás de la punta
-    if (g.psi > 0 && T.bi > 0 && T.bi < f.length - 1) {
+    if (g.hw !== "shear" && g.psi > 0 && T.bi > 0 && T.bi < f.length - 1) {
       const din = S.dirs[T.bi - 1], dout = S.dirs[T.bi];
       let D = Math.atan2(dout[1], dout[0]) - Math.atan2(din[1], din[0]);
       while (D > Math.PI) D -= 2 * Math.PI;
@@ -12125,6 +12343,7 @@ SW.forward = (function () {
     }
     const loc = c.S.locate([x, z]);
     if (!loc || loc.h <= 0) return [0, 0];
+    if (g.hw === "shear") return shearHW(g, c.f, x, z, d);
     const fan = c.fan;
     if (fan) {
       const qx = (x - fan.B[0]) * fan.din[0] + (z - fan.B[1]) * fan.din[1];
@@ -12218,21 +12437,32 @@ SW.forward = (function () {
       const ad = Math.atan2(c.d[1], c.d[0]);
       ray(c.tip, dirv(ad + g.phiU), "trishear");
       ray(c.tip, dirv(ad - g.phiD), "trishear");
-      for (let i = 1; i < c.f.length - 1; i++) {
-        const a0 = c.S.dirs[i - 1], a1 = c.S.dirs[i];
-        if (Math.abs(cross(a0[0], a0[1], a1[0], a1[1])) < 1e-4) continue;
-        if (c.fan && i === g.tl.bi) {
+      if (g.hw === "shear") {
+        for (let i = 1; i < c.f.length - 1; i++) {
+          const a0 = c.S.dirs[i - 1], a1 = c.S.dirs[i];
+          if (Math.abs(cross(a0[0], a0[1], a1[0], a1[1])) < 1e-4) continue;
+          ray(c.f[i], g.sh, "bend");
+        }
+      } else {
+        const fanAt = c.fan ? g.tl.bi : -1;
+        if (c.fan) {
           const ain = Math.atan2(c.fan.din[1], c.fan.din[0]);
-          ray(c.f[i], dirv(ain + c.fan.am - g.psi / 2), "backlimb");
-          ray(c.f[i], dirv(ain + c.fan.am + g.psi / 2), "backlimb");
-        } else ray(c.f[i], c.S.bis[i], i === g.tl.bi ? "A" : "bend");
+          ray(c.f[fanAt], dirv(ain + c.fan.am - g.psi / 2), "backlimb");
+          ray(c.f[fanAt], dirv(ain + c.fan.am + g.psi / 2), "backlimb");
+        }
+        for (const r of fpfSkeleton(c.f, i => i === fanAt)) {
+          const kind = r.i === g.tl.bi ? "A" : "bend";
+          if (r.e) out.push({ o: r.o, e: r.e, u: r.u, kind: kind });
+          else ray(r.o, r.u, kind);
+        }
       }
     } else if (p.method === "trishear") {
       const Lt = g.L0 + g.ps * Math.abs(slip);
       const T = [Lt * g.r[0], Lt * g.r[1]];
       ray(T, dirv(g.th + g.phiU), "trishear");
       ray(T, dirv(g.th - g.phiD), "trishear");
-      if (g.psi > 0) {
+      if (g.hw === "shear") ray([0, 0], g.sh, "A");
+      else if (g.psi > 0) {
         ray([0, 0], dirv(g.am - g.psi / 2), "backlimb");
         ray([0, 0], dirv(g.am + g.psi / 2), "backlimb");
       } else ray([0, 0], dirv(g.am), "A");
@@ -12242,6 +12472,15 @@ SW.forward = (function () {
   function axialRays(p, g, F, slip, top, reach) {
     const out = [];
     for (const r of raysLocal(p, g, slip)) {
+      if (r.e) {                          // tramo finito (bisectrices que se funden)
+        const a = F.toSec(r.o), b = F.toSec(r.e);
+        if (a[1] >= top) continue;
+        if (b[1] > top && Math.abs(b[1] - a[1]) > EPS) {
+          const t = (top - a[1]) / (b[1] - a[1]);
+          out.push({ kind: r.kind, pts: [a, [a[0] + t * (b[0] - a[0]), top]] });
+        } else out.push({ kind: r.kind, pts: [a, b] });
+        continue;
+      }
       const o = F.toSec(r.o);
       const e = F.toSec([r.o[0] + r.u[0], r.o[1] + r.u[1]]);
       const ux = e[0] - o[0], uz = e[1] - o[1];
@@ -12431,6 +12670,24 @@ SW.forward = (function () {
       // quiebres de la falla: bisectriz (FPF) o dirección de cizalla
       const lr = SW.restore.orientLR(m.fault(0));
       const sh = p.method === "shear" ? shearDir(p, F.v) : null;
+      if (!sh) {
+        // flujo paralelo: bisectrices que se funden donde se cortan
+        for (const r of fpfSkeleton(lr)) {
+          let a = r.o, b = r.e;
+          if (!b) {
+            if (r.u[1] <= EPS) continue;
+            const t = (p.top - a[1]) / r.u[1];
+            if (!(t > 0)) continue;
+            b = [a[0] + r.u[0] * t, a[1] + r.u[1] * t];
+          } else if (b[1] > p.top && a[1] < p.top) {
+            const t = (p.top - a[1]) / (b[1] - a[1]);
+            b = [a[0] + t * (b[0] - a[0]), p.top];
+          }
+          if (a[1] >= p.top) continue;
+          bendAx.push({ kind: "bend", pts: [a.slice(), b.slice()] });
+        }
+        return bendAx;
+      }
       for (let i = 1; i < lr.length - 1; i++) {
         let u;
         if (sh) u = sh;
@@ -12521,68 +12778,25 @@ SW.forward = (function () {
     return q;
   }
 
-  /* -- splays ---------------------------------------------------------------
-   * Parámetros de un splay que nace de la falla principal a `d` metros de
-   * la base de la rampa (medidos sobre la falla), sube con `theta` grados
-   * sobre la horizontal y mide `len` metros. Con los métodos de campo de
-   * velocidades el splay es el mismo modelo en un marco girado a la
-   * dirección de la rampa principal (su "despegue" es esa rampa); con FPF y
-   * cizalla simple es una polilínea: la falla principal hasta la rama y el
-   * splay desde ahí. El splay queda fijo en el espacio (aproximación
-   * cinemática habitual de los modelos de avance por pasos). */
+  /* -- splays: copias de la falla principal --------------------------------
+   * Cada splay es la MISMA falla (misma traza dibujada o misma rampa
+   * paramétrica, mismo método y parámetros) trasladada `d` metros en la
+   * horizontal, hacia donde sube la falla (antepaís; d < 0: hacia el
+   * traspaís). Comparte el despegue con la principal, así que en secuencia
+   * forma imbricaciones: cada nueva falla lleva a cuestas a las anteriores
+   * (ver `simulate`). */
   function splayParams(main, spec) {
     const gm = setup(main);
     if (!gm.ok) return { error: gm.error };
-    const d = Math.max(0, +spec.d || 0);
-    const ts = (+spec.theta || 0);
-    const len = Math.max(1, +spec.len || 1);
-    const base = Object.assign({}, main, { slip: 0 });
-    delete base.faultLine;
-    if (VFIELD[main.method] && main.method !== "fbf" && !usesLine(main)) {
-      const Fm = frame(main);
-      const th = +main.theta || 0;
-      const rel = ts - th;
-      if (!(rel > 1)) return { error: "Splays must be steeper than the main ramp." };
-      const B = Fm.toSec([d * gm.r[0], d * gm.r[1]]);
-      return Object.assign(base, {
-        s0: B[0], zd: B[1], omega: (+main.omega || 0) + th, theta: rel,
-        H: len * Math.sin(rel * D2R), L0: len, faultSrc: "param",
-        branch: B, isSplay: true, mainD: d, mainTheta: th,
-      });
-    }
-    // FPF / cizalla: polilínea principal hasta la rama + el splay
-    const mf = usesLine(main) ? (main.faultLine || []).map(q => q.slice())
-                              : faultLocal(main, gm, 0, main.x0, main.x1).map(frame(main).toSec);
-    if (mf.length < 2) return { error: "The main fault is missing." };
-    // desde la base: el vértice de la rampa (paramétrica) o el extremo más bajo
-    let path = mf;
-    if (usesLine(main)) {
-      if (mf[0][1] > mf[mf.length - 1][1]) path = mf.slice().reverse();
-    } else path = mf.slice(1);                       // arranca en la base
-    let acc = 0, B = path[path.length - 1], k = path.length - 1;
-    for (let i = 1; i < path.length; i++) {
-      const L = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
-      if (acc + L >= d) {
-        const t = L > 0 ? (d - acc) / L : 0;
-        B = [path[i - 1][0] + t * (path[i][0] - path[i - 1][0]),
-             path[i - 1][1] + t * (path[i][1] - path[i - 1][1])];
-        k = i;
-        break;
-      }
-      acc += L;
-    }
+    const d = +spec.d || 0;
     const v = main.verg < 0 ? -1 : 1;
-    const tip = [B[0] + v * len * Math.cos(ts * D2R), B[1] + len * Math.sin(ts * D2R)];
-    // la parte de la principal "detrás" de la rama (hacia el despegue)
-    let behind = path.slice(0, k).concat([B]);
-    if (!usesLine(main)) behind = [mf[0]].concat(behind);
-    // con un FBF principal el splay se mueve por flujo paralelo a la
-    // polilínea (kinks en las bisectrices), coherente con el pliegue por
-    // bandas de kink
-    return Object.assign(base, { method: main.method === "fbf" ||
-                                         main.method === "trishear" ? "fpf" : main.method,
-                                 faultSrc: "line", faultLine: behind.concat([tip]),
-                                 branch: B, drawFault: [B, tip] });
+    const out = Object.assign({}, main, {
+      slip: 0, s0: (+main.s0 || 0) + v * d,
+      x0: main.x0 - d, x1: main.x1 - d, isCopy: true, copyD: d,
+    });
+    if (usesLine(main))
+      out.faultLine = (main.faultLine || []).map(q => [q[0] + v * d, q[1]]);
+    return out;
   }
 
   /* -- retrocorrimiento desde la punta: cuña tectónica / zona triangular ---
@@ -12848,14 +13062,35 @@ SW.forward = (function () {
 
     const sets = {};
     for (const k of Object.keys(cfg.sets)) sets[k] = cfg.sets[k].map(q => q.slice());
+    const carried = {};       // falla j (0 = principal) ya pasiva → su traza, arrastrada
+    // traza densificada y corrida un pelo al yaciente de su propia falla:
+    // así su campo no la mueve y las siguientes la llevan con su bloque
+    function footwallSide(tr, mj) {
+      const pts = sampleLine(tr, Math.max(24, tr.length * 12));
+      const lr = SW.restore.orientLR(tr);
+      const isHW = fpfMapper(lr, span * 3).isHW;
+      const eps = span * 1e-5;
+      return pts.map(function (q, i) {
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+        const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        const nx = -(b[1] - a[1]) / L * eps, nz = (b[0] - a[0]) / L * eps;
+        const q1 = [q[0] + nx, q[1] + nz], q2 = [q[0] - nx, q[1] - nz];
+        return isHW(q1) ? q2 : q1;
+      });
+    }
     function snapshot(k) {
       const slip = k * S / n;
-      const faults = [mm.fault(sgn * slipOf(0, slip))]
+      const live = (j, m) => carried[j] ? carried[j].map(q => q.slice())
+                                        : m.fault(sgn * slipOf(j, slip));
+      const faults = [live(0, mm)]
         .concat(W ? [W.bt(sgn * slipOf(0, slip))] : [])
         .concat(sps.map((sp, i) => sp.m.p.drawFault ? sp.m.p.drawFault.map(q => q.slice())
-                                                     : sp.m.fault(sgn * slipOf(i + 1, slip))));
-      const axA = mm.axialActive(sgn * slipOf(0, slip));
-      sps.forEach((sp, i) => { for (const a of sp.m.axialActive(sgn * slipOf(i + 1, slip))) axA.push(a); });
+                                                     : live(i + 1, sp.m)));
+      const axA = carried[0] ? [] : mm.axialActive(sgn * slipOf(0, slip));
+      sps.forEach((sp, i) => {
+        if (carried[i + 1]) return;
+        for (const a of sp.m.axialActive(sgn * slipOf(i + 1, slip))) axA.push(a);
+      });
       const cp = {};
       for (const key of Object.keys(sets)) cp[key] = sets[key].map(q => q.slice());
       return { k: k, slip: sgn * slip, sets: cp, faults: faults, axActive: axA,
@@ -12869,13 +13104,17 @@ SW.forward = (function () {
       const flat = [];
       for (const key of keys) for (const q of sets[key]) flat.push(q);
       for (const a of ax) for (const q of a) flat.push(q);
+      const carKeys = Object.keys(carried);
+      for (const ck of carKeys) for (const q of carried[ck]) flat.push(q);
       const a0 = slipOf(0, sA), a1 = slipOf(0, sB);
       let moved = a1 > a0 ? mm.move(flat, sgn * a0, sgn * a1, Math.max(1, Math.round(incr * (a1 - a0) / (sB - sA || 1))))
                           : flat.map(q => q.slice());
       sps.forEach(function (sp, si) {
         const b0 = slipOf(si + 1, sA), b1 = slipOf(si + 1, sB);
         if (!(b1 > b0)) return;
-        const hw = hwTest(sgn * slipOf(0, sB));
+        // una copia limita sola su bloque colgante (su campo es nulo en su
+        // yaciente): mueve también a la principal y a las copias anteriores
+        const hw = sp.m.p.isCopy ? null : hwTest(sgn * slipOf(0, sB));
         const idx = [], sub = [];
         moved.forEach((q, i) => { if (!hw || hw(q)) { idx.push(i); sub.push(q); } });
         const res = sp.m.move(sub, sgn * b0, sgn * b1, Math.max(1, Math.round(incr * (b1 - b0) / (sB - sA || 1))));
@@ -12884,6 +13123,22 @@ SW.forward = (function () {
       let i = 0;
       for (const key of keys) { sets[key] = moved.slice(i, i + sets[key].length); i += sets[key].length; }
       ax = ax.map(a => { const r = moved.slice(i, i + a.length); i += a.length; return r; });
+      for (const ck of carKeys) { carried[ck] = moved.slice(i, i + carried[ck].length); i += carried[ck].length; }
+      // en secuencia, la falla que terminó su slip queda pasiva: su traza y
+      // sus superficies axiales activas pasan a viajar con las siguientes
+      if (seq && sps.length) {
+        for (let j = 0; j < fracs.length - 1; j++) {
+          if (carried[j] || !(fracs[j] > 0) || slipOf(j, sB) < fracs[j] * S - 1e-9) continue;
+          if (!(slipOf(j + 1, sB) < fracs[j + 1] * S + 1e-9)) continue;
+          const mj = j === 0 ? mm : sps[j - 1].m;
+          const sl = sgn * slipOf(j, sB);
+          carried[j] = footwallSide(mj.fault(sl), mj);
+          for (const a of mj.axialActive(sl)) {
+            ax.push(sampleLine(nudgeRoot(a.pts, p), AXN));
+            axKinds.push((j ? "splay" + j + ":" : "") + a.kind);
+          }
+        }
+      }
       const newKeys = [];
       if (cfg.growth) {
         const G = cfg.growth;
@@ -13171,8 +13426,8 @@ window.SW = window.SW || {};
    * Cada campo numérico listado tiene un <input type=range> gemelo; sus
    * límites dependen del tamaño del modelo (se recalculan al activar). */
   const SLIDERS = ["fwd-slip", "fwd-theta", "fwd-h", "fwd-l0", "fwd-phi",
-                   "fwd-psi", "fwd-alpha", "fwd-sp-theta", "fwd-sp-d",
-                   "fwd-sp-len", "fwd-sp-frac", "fwd-g-rise", "fwd-nsteps",
+                   "fwd-psi", "fwd-alpha", "fwd-sp-d",
+                   "fwd-sp-frac", "fwd-g-rise", "fwd-nsteps",
                    "fwd-bt-d", "fwd-bt-beta", "fwd-sym", "fwd-blpos"];
   function rangeFor(el) { return el && el._range; }
   function syncRange(el) {
@@ -13221,9 +13476,7 @@ window.SW = window.SW || {};
     setBounds("fwd-phi", 5, 150, 1);
     setBounds("fwd-psi", 0, 120, 1);
     setBounds("fwd-alpha", -80, 80, 1);
-    setBounds("fwd-sp-theta", 1, 89, 1);
-    setBounds("fwd-sp-d", 0, round(span * 0.6), nice(span));
-    setBounds("fwd-sp-len", 0, round(span * 0.6), nice(span));
+    setBounds("fwd-sp-d", -round(span * 0.6), round(span * 0.6), nice(span));
     setBounds("fwd-sp-frac", 0, 100, 1);
     setBounds("fwd-g-rise", 0, round(h * 0.25), nice(h) / 10);
     setBounds("fwd-nsteps", 1, 50, 1);
@@ -13257,7 +13510,6 @@ window.SW = window.SW || {};
     fill("fwd-g-datum", b.z1);
     fill("fwd-g-rise", Math.max(h * 0.03, 1));
     fill("fwd-sp-d", Math.max(w * 0.05, 1));
-    fill("fwd-sp-len", Math.max(w * 0.12, 1));
     // sin falla dibujada: raíz del retro a media rampa
     fill("fwd-bt-d", Math.max(h * 0.25, 1) / Math.sin(Math.max(5, num("fwd-theta", 25)) * D2R));
   }
@@ -13340,6 +13592,7 @@ window.SW = window.SW || {};
       psi: num("fwd-psi", 0), conc: num("fwd-conc", 1),
       alpha: num("fwd-alpha", 0), slip: num("fwd-slip", 0),
       sym: num("fwd-sym", 0.5), blPos: num("fwd-blpos", null),
+      triHW: ($("fwd-tri-hw") || {}).value || "fpf",
       steps: Math.max(10, Math.min(2000, num("fwd-steps", 100))),
     };
     // Simple shear se mueve con el rechazo horizontal: el slip que se pide
@@ -13360,8 +13613,7 @@ window.SW = window.SW || {};
     } : null;
     const splays = checked("fwd-splay") ? {
       count: Math.max(1, Math.min(8, Math.round(num("fwd-sp-n", 1)))),
-      d: num("fwd-sp-d", 0), theta: num("fwd-sp-theta", 45),
-      len: num("fwd-sp-len", 0), frac: num("fwd-sp-frac", 30) / 100,
+      d: num("fwd-sp-d", 0), frac: num("fwd-sp-frac", 30) / 100,
       mode: ($("fwd-sp-mode") || {}).value || "sequence",
     } : null;
     const bt = hasWedge() ? { d: num("fwd-bt-d", 0), beta: num("fwd-bt-beta", 30) } : null;
@@ -13390,8 +13642,7 @@ window.SW = window.SW || {};
     if (!pp.splays) return [];
     const out = [];
     for (let i = 1; i <= pp.splays.count; i++) {
-      const sp = SW.forward.splayParams(pp.p, { d: pp.splays.d * i,
-        theta: pp.splays.theta, len: pp.splays.len });
+      const sp = SW.forward.splayParams(pp.p, { d: pp.splays.d * i });
       if (sp.error) return { error: sp.error };
       out.push({ p: sp, frac: pp.splays.frac });
     }
@@ -13411,6 +13662,15 @@ window.SW = window.SW || {};
     // sólo hasta la raíz del retro) y el retro
     const cuts = pp.bt ? (SW.forward.wedgeFaults(p, pp.bt, 0) || [])
                        : [SW.forward.faultTrace(p, 0)].filter(Boolean);
+    // las copias (splays) también cortan las capas desde el inicio
+    if (!pp.bt && pp.splays) {
+      const specs = splaySpecs(pp);
+      if (Array.isArray(specs))
+        for (const sp_ of specs) {
+          const t = SW.forward.faultTrace(sp_.p, 0);
+          if (t) cuts.push(t);
+        }
+    }
     const f0 = cuts[0] || null;
     /* Líneas que terminan sobre la principal (cortes de capas, retros o
      * splays dibujados): el extremo apoyado se corre un pelo hacia su
@@ -13583,8 +13843,14 @@ window.SW = window.SW || {};
     const triLine = st.method === "trishear" && !geom;
     const l0l = $("fwd-l0-label");
     if (l0l && triLine) l0l.classList.remove("fwd-hide");
+    const triShear = st.method === "trishear" &&
+                     (($("fwd-tri-hw") || {}).value === "shear");
     const blp = $("fwd-blpos-label");
-    if (blp) blp.classList.toggle("fwd-hide", !triLine);
+    if (blp) blp.classList.toggle("fwd-hide", !triLine || triShear);
+    const psl = $("fwd-psi-label");
+    if (psl && st.method === "trishear") psl.classList.toggle("fwd-hide", triShear);
+    const all = $("fwd-alpha-label");
+    if (all && st.method === "trishear") all.classList.toggle("fwd-hide", !triShear);
     const tog = (sel, on) => document.querySelectorAll("#toolrail " + sel)
       .forEach(el => el.classList.toggle("fwd-hide", !on));
     tog("[data-strain]", checked("fwd-strain"));
@@ -13748,12 +14014,11 @@ window.SW = window.SW || {};
       }
     }
     if (pp.splays && path) {
-      const B = along(path, pp.splays.d);
-      const ts = pp.splays.theta * D2R;
-      hs.push({ id: "branch", at: B, label: "splay at " + Math.round(pp.splays.d) + " m" });
-      hs.push({ id: "splaytip",
-                at: [B[0] + R.v * pp.splays.len * Math.cos(ts), B[1] + pp.splays.len * Math.sin(ts)],
-                from: B, label: "splay θ " + pp.splays.theta + "° · " + Math.round(pp.splays.len) + " m" });
+      // base de la primera copia, sobre el despegue
+      const v0 = usesLine() ? (path[path.length - 1][0] >= path[0][0] ? 1 : -1) : R.v;
+      const B0 = usesLine() ? path[0] : R.base;
+      hs.push({ id: "branch", at: [B0[0] + v0 * pp.splays.d, B0[1]], base: B0, v: v0,
+                label: "splay spacing " + Math.round(pp.splays.d) + " m" });
     }
     if (pp.bt) {
       const wf = SW.forward.wedgeFaults(pp.p, pp.bt, 0);
@@ -13841,20 +14106,9 @@ window.SW = window.SW || {};
         if (v !== undefined) setVal("fwd-slip", allowsNormal() ? v : Math.max(0, v));
         break;
       }
-      case "branch": {
-        const path = mainPath(pp);
-        if (path) setVal("fwd-sp-d", Math.max(0, Math.round(arcOf(path, q))));
+      case "branch":
+        setVal("fwd-sp-d", Math.round((q[0] - h.base[0]) * h.v));
         break;
-      }
-      case "splaytip": {
-        const B = h.from;
-        const dx = (q[0] - B[0]) * R.v, dz = q[1] - B[1];
-        if (dz > 0) {
-          setVal("fwd-sp-theta", clampA(snapA(Math.atan2(dz, dx) / D2R)));
-          setVal("fwd-sp-len", Math.round(Math.hypot(dx, dz)));
-        }
-        break;
-      }
       case "datum":
         setVal("fwd-g-datum", Math.round(q[1]));
         break;
@@ -14372,7 +14626,7 @@ window.SW = window.SW || {};
                "fwd-slip", "fwd-steps", "fwd-mspace", "fwd-fault-src",
                "fwd-preview", "fwd-axial", "fwd-strain", "fwd-nsteps",
                "fwd-growth", "fwd-g-datum", "fwd-g-rise", "fwd-splay",
-               "fwd-sp-n", "fwd-sp-d", "fwd-sp-theta", "fwd-sp-len",
+               "fwd-sp-n", "fwd-sp-d", "fwd-tri-hw",
                "fwd-sp-frac", "fwd-sp-mode", "fwd-sym", "fwd-blpos",
                "fwd-g-color", "fwd-bt", "fwd-bt-d", "fwd-bt-beta"];
   for (const id of ids) {
@@ -15535,6 +15789,11 @@ SW.panels.properties = (function () {
           () => SW.actions.bezierSelected());
     mkBtn("Tidy", "Collapse duplicate vertices and snap endpoints",
           () => SW.actions.tidySelected());
+    if (SW.view.selectedLines().some(l => l.kind === "fault"))
+      mkBtn("Follow line", "Where the fault crosses (or, extended, reaches) " +
+            "another line, continue it along that line to its end — select " +
+            "the other line too to choose it",
+            () => SW.actions.followLine());
     mkBtn("Delete", "Delete (Del)", () => SW.actions.deleteSelected());
     body.appendChild(btns);
   }

@@ -196,3 +196,15 @@ array, the view only lists the first two.
 Select a fault and pick Trishear: the hanging wall moves over the exact
 drawn trace. Only P/S, trishear angle, symmetry (hanging-wall share), initial
 tip, backlimb angle and backlimb bend position are adjusted.
+Outside the trishear triangle the hanging wall moves either by
+fault-parallel flow (axial surfaces on the bisectors of the fault bends;
+where two bisectors meet they merge into one) or by inclined simple shear
+(axial surfaces along the shear direction).
+
+Splay faults are exact copies of the main fault repeated at a given
+horizontal spacing on the same detachment; in sequence each new fault
+carries the earlier ones.
+
+**Follow line** (fault lines, Properties panel or context menu): where the
+fault crosses — or, extended, reaches — another line, it continues along
+that line up to its end.
