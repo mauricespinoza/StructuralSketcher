@@ -76,7 +76,14 @@ trace involved:
 - **Fault Parallel Flow restoration** — moves the hanging-wall side of a
   fault by a given slip, carrying points along flow lines parallel to the
   fault (an unclamped offset of the fault trace), the standard 2D
-  restoration technique for removing displacement across a fault.
+  restoration technique for removing displacement across a fault. Lines
+  that end on the fault (horizon cutoffs, a backthrust or splay rooted on
+  it) slide along it with their block and stay on it instead of being left
+  behind. **Join cutoffs** then welds each layer back across the restored
+  fault (pieces of the same unit, or of the same base name — "Top K" and
+  "Top K (2)" — whose cutoffs meet within the tolerance); larger gaps are
+  not bridged but reported as the restoration's misfit, so the slip can be
+  corrected.
 - **Flexural-slip unfolding** — flattens a folded "template" bed onto a
   horizontal datum through a pin point of zero slip, carrying every other
   selected line with it at the same perpendicular distance from the
@@ -123,6 +130,25 @@ trace involved:
   - **Splay faults** — one or more splays branching from the main fault at
     a given distance/spacing, dip and length, each taking a share of the
     slip, in sequence after the main fault or synchronously.
+  - **Backthrust (wedge)** — Parallel flow only: tectonic wedge / triangle
+    zone. The main fault ends at a root point (distance along it, or drag
+    the handle) and a backthrust with dip β rises from there toward the
+    hinterland. The wedge under the backthrust advances along the main
+    fault; the root and the backthrust are material lines of the wedge, so
+    the tip propagates along the fault (P/S = 1) and the backthrust never
+    cuts it. The passive roof above the backthrust does not move
+    horizontally: it rises by sin θ + cos θ·tan β per unit slip (θ = main
+    fault dip at the root) while the backthrust takes cos θ / cos β, and
+    the rock crossing the vertical through the tip forms the roof's
+    forelimb monocline. The field conserves area exactly and the
+    backthrust offsets the layers. A **negative slip restores** the wedge
+    (the same field run backward: the tip and the backthrust retreat), and
+    **Join cutoffs** welds the layers back across the main fault and the
+    backthrust. Each stage updates the drawn main fault (its new tip) and
+    the backthrust line, and moves the root for the next stage. Rooting a
+    rigid backthrust at a bend of the main fault instead does not offset
+    the beds — material flows through it like an active axial surface —
+    which is why the model roots it at the tip.
 
   Checkboxes show the **axial surfaces** (active, fixed to the fault, and
   inactive, carried by the hanging wall) and **strain markers** — a grid of
@@ -131,6 +157,9 @@ trace involved:
   propagation, trishear) conserve area to a fraction of a percent. Apply
   writes the result in one undo step, cutting lines where the fault offsets
   them, and can also add the fault, the axial surfaces and the markers.
+  Lines that end on the main fault (cutoffs, or a backthrust or splay drawn
+  rooted on it) travel with their block and stay on the fault instead of
+  being cut against it.
 - **Resample / Join** — Resample densifies a line's vertices without
   changing its trace (segments longer than the given spacing are split into
   equal parts); Join chains the selected lines end to end, welding endpoints
