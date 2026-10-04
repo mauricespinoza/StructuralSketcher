@@ -184,3 +184,15 @@ array, the view only lists the first two.
   (the context menu opens on release if you do not drag).
 - Lifting the pencil/finger, or tapping outside, always closes the current
   move/transform/vertex edit.
+- With a pencil connected, a finger tap anywhere finishes the current shape
+  (like Done). With finger only, use the green tick (Done).
+- Hold one finger on the screen and tap items with another finger to
+  multi-select (like Ctrl+click); a lasso also works.
+- When a tool finishes a shape it hands control back to Select.
+- Extend, Transform, etc. act on the whole selection.
+
+## Trishear on the selected fault
+
+Select a fault and pick Trishear: the hanging wall moves over the exact
+drawn trace. Only P/S, trishear angle, symmetry (hanging-wall share), initial
+tip, backlimb angle and backlimb bend position are adjusted.
