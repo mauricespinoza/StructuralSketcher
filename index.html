@@ -390,6 +390,24 @@ canvas.pointer { cursor: default; }
 }
 .sw-toast.show { opacity: .96; transform: translate(-50%, 0);
                  pointer-events: auto; }
+.eye-btn { display: inline-flex; align-items: center; gap: 4px; }
+.eye-btn .ic { width: 14px; height: 14px; }
+.eye-btn.off { opacity: .55; }
+.about { text-align: center; }
+.about-logo { width: 72px; height: 72px; margin: 4px auto 6px; display: block; }
+.about-logo path { fill: none; stroke-width: 3.2; stroke-linecap: round;
+  stroke-linejoin: round; }
+.about-name { margin: 0; font-size: 16px; font-weight: 600; }
+.about-version { margin: 2px 0 8px; font-size: 11px; color: var(--ink-3); }
+.about .modal-note { text-align: left; }
+.about-mail { color: #d9730d; font-weight: 600; }
+.about-release { margin: 10px 0 2px; font-size: 12px; font-weight: 600;
+  text-align: left; }
+.about-list { margin: 0 0 4px; padding-left: 18px; text-align: left;
+  font-size: 11px; color: var(--ink-3); line-height: 1.45; }
+.about-label { display: block; margin: 12px 0 2px; text-align: left;
+  font-size: 10px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
 .modal-note {
   margin: 0 0 10px; font-size: 11px; color: var(--ink-3); line-height: 1.4;
 }
@@ -601,6 +619,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-throw" viewBox="0 0 24 24"><path d="M4 8h7M13 16h7"/><path d="M12 3v18m-3-15l3-3 3 3m-6 12l3 3 3-3"/></symbol>
   <symbol id="i-dip" viewBox="0 0 24 24"><circle cx="7" cy="8" r="3"/><path d="M9.5 9.8L20 17"/><path d="M3 20h18"/></symbol>
   <symbol id="i-scale" viewBox="0 0 24 24"><path d="M2 12h20"/><path d="M2 8v8M22 8v8"/><path d="M8 10v4M16 10v4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.6A10.6 10.6 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a17 17 0 0 1-3.2 3.9M6.5 7.2A17 17 0 0 0 2 12s3.6 6.5 10 6.5c1.6 0 3-.4 4.3-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
   <symbol id="i-polygons" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v8l9 5 9-5V8"/></symbol>
   <symbol id="i-well" viewBox="0 0 24 24"><path d="M3 6h18"/><rect x="9" y="6" width="6" height="15"/><path d="M9 11h6M9 16h6"/></symbol>
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l8 4.5-8 4.5-8-4.5z"/><path d="M4 12.5l8 4.5 8-4.5M4 17.5l8 4.5 8-4.5"/></symbol>
@@ -1075,6 +1095,43 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
      que index.html funcione abierto con file:// (doble click) además de
      servido por HTTP. No hay ninguna referencia externa. -->
 <script>
+/* ==== js/version.js ====
+ * Versión y ficha de la app. `changelog` va de la más nueva a la más vieja;
+ * la pestaña About muestra SÓLO las dos primeras. Al publicar: subir
+ * `version`, anteponer una entrada (resumida, en inglés) y no borrar nada —
+ * el tope de dos lo pone la vista. */
+"use strict";
+window.SW = window.SW || {};
+SW.APP = {
+  name: "StructuralSketcher",
+  version: "0.11.0",
+  stage: "beta",
+  author: "Mauricio Espinoza",
+  org: "Universidad de Concepción",
+  year: 2026,
+  contact: "mauricespinoza@udec.cl",
+  disclaimer: "Beta — free for academic and teaching use, not commercial. " +
+    "Built with AI assistance. Provided as is, without warranty of any " +
+    "kind: sections, measurements and restorations are interpretive aids " +
+    "and must be checked by a qualified geologist before being relied " +
+    "upon.",
+  changelog: [
+    { version: "0.11.0", date: "2026-10-04", highlights: [
+      "Tablet: lifting the pencil or finger (or tapping outside) now always " +
+        "closes a move/transform/vertex edit instead of leaving it open.",
+      "Tablet: hold 1 s on empty space, then drag, to lasso-select " +
+        "(the context menu now opens on release).",
+      "Unit polygons panel: Show all / Hide all and an eye toggle per polygon.",
+      "About: logo, author, contact, disclaimer and the last two versions.",
+    ] },
+    { version: "0.10.0", date: "2026-10-03", highlights: [
+      "Interactive forward modeling and Shift snapping to 0/45/90°.",
+      "Transform handles; forward-modeling methods: parallel flow, bend " +
+        "fold, propagation folds, trishear and inclined simple shear.",
+    ] },
+  ],
+};
+
 /* ==== js/settings.js ==== */
 "use strict";
 /* StructuralSketcher — preferencias de la aplicación: símbolos y atajos.
@@ -1319,22 +1376,72 @@ SW.settings = (function () {
     }
   }
 
+  /* Info de la app: misma ficha que FieldDraw (logo, autoría, contacto,
+   * descargo) más el registro de las DOS últimas versiones. Al publicar una
+   * versión nueva se antepone una entrada a SW.APP.changelog; sólo se
+   * muestran las dos primeras, así que la lista no crece sin control. */
   function buildAbout(body) {
-    const p = document.createElement("div");
-    p.className = "modal-note";
-    p.innerHTML =
-      "<b>StructuralSketcher</b> is a standalone, offline cross-section " +
-      "sketching tool for teaching structural geology. It descends from the " +
-      "section editor of the <i>GeoUdeC Structural Profiler</i> QGIS plugin, " +
-      "with everything that needed QGIS removed (DEM sampling, data " +
-      "projection, thickness from 3-D attitudes, 3-D view, GeoPackage/" +
-      "shapefile export).<br><br>" +
+    const APP = SW.APP;
+    const box = document.createElement("div");
+    box.className = "about";
+    box.innerHTML =
+      '<svg class="about-logo" viewBox="0 0 32 32" aria-hidden="true">' +
+      '<rect width="32" height="32" rx="8" fill="#243447"/>' +
+      '<path d="M5 12.5h6.5l7-6.5H27" stroke="#ffd166"/>' +
+      '<path d="M5 18.5h8.5l7-6.5H27" stroke="#ff8c42"/>' +
+      '<path d="M5 24.5h10.5l7-6.5H27" stroke="#ef476f"/></svg>';
+    const line = function (tag, cls, text) {
+      const el = document.createElement(tag);
+      if (cls) el.className = cls;
+      el.textContent = text;
+      box.appendChild(el);
+      return el;
+    };
+    line("p", "about-name", APP.name);
+    line("p", "about-version", "v" + APP.version + " " + APP.stage);
+    line("p", "modal-note", APP.author + " · " + APP.org + " · " + APP.year);
+
+    const contact = document.createElement("p");
+    contact.className = "modal-note";
+    contact.appendChild(document.createTextNode("Bugs & feedback: "));
+    const mail = document.createElement("a");
+    mail.className = "about-mail";
+    mail.href = "mailto:" + APP.contact + "?subject=" +
+      encodeURIComponent(APP.name + " v" + APP.version + " — report");
+    mail.textContent = APP.contact;
+    contact.appendChild(mail);
+    box.appendChild(contact);
+
+    const about = document.createElement("p");
+    about.className = "modal-note";
+    about.innerHTML =
+      "<b>" + APP.name + "</b> is a standalone, offline cross-section " +
+      "sketching tool for teaching structural geology. It descends from " +
+      "the section editor of the <i>GeoUdeC Structural Profiler</i> QGIS " +
+      "plugin, without anything that needed QGIS.<br><br>" +
       "Nothing leaves your computer: there is no network access at all. " +
       "The project is stored in your browser and can be saved to, and " +
-      "reopened from, a <code>.sketch.json</code> file.<br><br>" +
-      "Coordinates are always metres internally; the unit selector only " +
-      "changes how rulers and readouts are labelled.";
-    body.appendChild(p);
+      "reopened from, a <code>.sketch.json</code> file. Coordinates are " +
+      "always metres internally; the unit selector only changes how " +
+      "rulers and readouts are labelled.";
+    box.appendChild(about);
+
+    line("span", "about-label", "Disclaimer");
+    line("p", "modal-note", APP.disclaimer);
+
+    line("span", "about-label", "What's new");
+    for (const rel of APP.changelog.slice(0, 2)) {
+      line("p", "about-release", "v" + rel.version + " — " + rel.date);
+      const ul = document.createElement("ul");
+      ul.className = "about-list";
+      for (const item of rel.highlights) {
+        const li = document.createElement("li");
+        li.textContent = item;
+        ul.appendChild(li);
+      }
+      box.appendChild(ul);
+    }
+    body.appendChild(box);
   }
 
   function open(tab) {
@@ -13762,11 +13869,39 @@ SW.panels.polygons = (function () {
     SW.view.requestDraw();
   }
 
+  function setAllVisible(visible) {
+    for (const p of SW.model.state.sec.polygons || []) p.visible = visible;
+    SW.view.requestDraw();
+  }
+
   function render() {
     const body = document.getElementById("panel-polygons-body");
     if (!body) return;
     body.innerHTML = "";
     const polys = SW.model.state.sec.polygons || [];
+
+    if (polys.length) {
+      const allRow = document.createElement("div");
+      allRow.className = "row";
+      allRow.style.marginBottom = "6px";
+      const mk = function (label, icon, title, visible) {
+        const b = document.createElement("button");
+        b.className = "mini eye-btn";
+        b.innerHTML = '<svg class="ic"><use href="#' + icon + '"/></svg> ' +
+                      label;
+        b.title = title;
+        b.addEventListener("click", function () {
+          setAllVisible(visible);
+          render();
+        });
+        return b;
+      };
+      allRow.appendChild(mk("Show all", "i-eye", "Show every unit polygon",
+                            true));
+      allRow.appendChild(mk("Hide all", "i-eye-off",
+                            "Hide every unit polygon", false));
+      body.appendChild(allRow);
+    }
 
     for (const p of polys) {
       const row = document.createElement("div");
@@ -13783,9 +13918,11 @@ SW.panels.polygons = (function () {
       row.appendChild(name);
 
       const vis = document.createElement("button");
-      vis.className = "mini";
-      vis.textContent = p.visible === false ? "Show" : "Hide";
-      vis.title = "Show/hide this polygon";
+      vis.className = "mini eye-btn" + (p.visible === false ? " off" : "");
+      vis.innerHTML = '<svg class="ic"><use href="#' +
+        (p.visible === false ? "i-eye-off" : "i-eye") + '"/></svg>';
+      vis.title = p.visible === false ? "Show this polygon"
+                                      : "Hide this polygon";
       vis.addEventListener("click", () => { toggleVisible(p.id); render(); });
       row.appendChild(vis);
 
@@ -15791,6 +15928,7 @@ SW.view = (function () {
   let drawQueued = false;
   let pendingClick = null;
   let capturing = false;
+  let capturePointer = null;      // pointerId que sostiene la captura
   let pendingFit = false;   // encuadre pedido mientras el canvas medía 0 px
 
   const $ = id => document.getElementById(id);
@@ -15995,7 +16133,24 @@ SW.view = (function () {
   function resetInteraction() {
     pendingClick = null;
     capturing = false;
+    capturePointer = null;
     if (state.panning) endPan();
+  }
+
+  /* Cierra una captura cuyo `pointerup` se perdió (lápiz levantado fuera de
+   * la ventana, dedo que toca afuera, pérdida de captura…). Antes sólo se
+   * apagaba la bandera y la herramienta se quedaba con su arrastre abierto
+   * para siempre; ahora se le entrega el onUp, que confirma lo hecho. */
+  function finishCapture(e) {
+    if (!capturing) return false;
+    capturing = false;
+    capturePointer = null;
+    cancelLongPress();
+    const pos = lastPos || { x: 0, y: 0 };
+    SW.tools.dispatch("onUp", e || fakeEvent(0, 0, 0), pos);
+    restoreLassoTool();
+    requestDraw();
+    return true;
   }
 
   /* Botones de tool (riel y botonera de medición) y opciones contextuales
@@ -16085,10 +16240,14 @@ SW.view = (function () {
   let gesture = null;             // pinch/pan de dos dedos en curso
   let longPressTimer = null;
   let longPressFired = false;
+  let menuHeld = false;           // ≥500 ms quieto en vacío: menú al soltar
+  let lassoTimer = null;          // 1 s quieto en vacío → modo lazo
+  let lassoPrevTool = null;       // herramienta a restaurar tras el lazo
   let lastTap = null;             // {x, y, t} para el doble toque
   let lastPos = { x: 0, y: 0 };   // último punto, para los botones flotantes
 
   const LONG_PRESS_MS = 500;
+  const LASSO_HOLD_MS = 1000;     // quieto en vacío: arma el lazo
   const DOUBLE_TAP_MS = 320;
   const DOUBLE_TAP_PX = 24;
   const PEN_PALM_MS = 900;
@@ -16129,6 +16288,51 @@ SW.view = (function () {
 
   function cancelLongPress() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (lassoTimer) { clearTimeout(lassoTimer); lassoTimer = null; }
+    menuHeld = false;
+  }
+
+  /* Tras un lazo armado con pulsación larga se vuelve a la herramienta de
+   * origen (Pan/Select), como si el lazo hubiera sido un gesto, no un modo. */
+  function restoreLassoTool() {
+    if (!lassoPrevTool) return;
+    const prev = lassoPrevTool;
+    lassoPrevTool = null;
+    SW.tools.activate(prev);
+  }
+
+  /* ¿Hay algún objeto bajo el puntero? Se usa para que la pulsación larga
+   * sobre un dip siga siendo «editar manteo» y sólo el espacio vacío arme
+   * el lazo. */
+  function emptyAt(pos) {
+    return !hitDip(pos, hitPx(10)) && !hitLine(pos, hitPx(8)) &&
+           !hitScalebar(pos, hitPx(8));
+  }
+
+  /* Pulsación larga (1 s) en vacío con dedo o lápiz: se pasa al lazo y se
+   * empieza a dibujar desde el punto apretado; al soltar se vuelve a la
+   * herramienta de origen. */
+  function armLasso(e, pos) {
+    lassoTimer = null;
+    menuHeld = false;
+    const lasso = SW.tools.get("lasso");
+    if (!lasso || !pointers.has(e.pointerId)) return;
+    const prev = SW.tools.activeToolName();
+    pendingClick = null;
+    SW.tools.activate("lasso");
+    lassoPrevTool = prev;
+    const fe = fakeEvent(0, e.clientX, e.clientY);
+    if (lasso.onDown(fe, pos) === "capture") {
+      capturing = true;
+      capturePointer = e.pointerId;
+      longPressFired = false;
+    } else {
+      restoreLassoTool();
+      return;
+    }
+    if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
+    status("Lasso: drag to surround the elements, lift to select.");
+    requestDraw();
   }
 
   /* La pulsación larga sustituye al click derecho. Si la herramienta ya había
@@ -16143,8 +16347,19 @@ SW.view = (function () {
     // además el click secundario dispararía la acción dos veces.
     if (e.button !== 0) return;
     const clientX = e.clientX, clientY = e.clientY;
+    const tn = SW.tools.activeToolName();
+    const lassoable = (tn === "pan" || tn === "select") &&
+                      SW.tools.get("lasso") && emptyAt(pos);
     longPressTimer = setTimeout(function () {
       longPressTimer = null;
+      if (lassoable) {
+        // en vacío el menú contextual espera a que se suelte, para dejar
+        // sitio al lazo (1 s) sin que el menú aparezca antes
+        menuHeld = true;
+        lassoTimer = setTimeout(function () { armLasso(e, pos); },
+                                LASSO_HOLD_MS - LONG_PRESS_MS);
+        return;
+      }
       longPressFired = true;
       if (capturing) {
         SW.tools.dispatch("onKey", { key: "Escape", preventDefault() {} });
@@ -16212,6 +16427,7 @@ SW.view = (function () {
      * sin moverse, se despacha onClick. El botón central siempre panea. */
     cv.addEventListener("pointerdown", function (e) {
       // rechazo de palma: con el lápiz en uso, la mano apoyada no cuenta
+      if (capturing && !pointers.has(capturePointer)) finishCapture(e);
       if (e.pointerType === "touch" && Date.now() < penUntil) return;
       if (e.pointerType === "pen") penUntil = Date.now() + PEN_PALM_MS;
       lastPointerType = e.pointerType || "mouse";
@@ -16232,7 +16448,8 @@ SW.view = (function () {
       // quedó `capturing`/`pendingClick` en pie es porque se perdió el up
       // (soltar fuera de la ventana). Sin este reset la vista queda "pegada"
       // en modo arrastre y ningún click vuelve a seleccionar nada.
-      if (capturing || pendingClick || state.panning) resetInteraction();
+      if (capturing) finishCapture(e);
+      if (pendingClick || state.panning) resetInteraction();
       if (cv.setPointerCapture) {
         try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
       }
@@ -16249,6 +16466,7 @@ SW.view = (function () {
       const t = SW.tools.active();
       if (t && t.onDown && t.onDown(e, pos) === "capture") {
         capturing = true;
+        capturePointer = e.pointerId;
         return;
       }
       if (e.button === 0 || e.button === 2)
@@ -16276,12 +16494,26 @@ SW.view = (function () {
 
       if (gesture) { updateGesture(); return; }
 
-      if (rec && longPressTimer &&
+      if (rec && (longPressTimer || lassoTimer || menuHeld) &&
           Math.hypot(pos.x - rec.x0, pos.y - rec.y0) > clickTol())
         cancelLongPress();
 
-      if ((capturing || state.panning || pendingClick) && e.buttons === 0)
+      // `buttons` sólo es fiable con mouse: con lápiz/dedo puede llegar 0 en
+      // pleno contacto. Con mouse, buttons=0 significa que se soltó fuera.
+      if (e.pointerType === "mouse" &&
+          (capturing || state.panning || pendingClick) && e.buttons === 0) {
+        if (capturing) finishCapture(e);
         resetInteraction();
+      }
+      // lápiz que reporta hover (buttons=0) sobre su propia captura: ya se
+      // levantó y el up se perdió → confirmar y salir
+      if (capturing && e.pointerType === "pen" && e.buttons === 0 &&
+          e.pointerId === capturePointer) {
+        pointers.delete(e.pointerId);
+        finishCapture(e);
+        return;
+      }
+      if (capturing && e.pointerId !== capturePointer) return;
       if (state.panning) {
         doPan(pos);
       } else if (capturing) {
@@ -16316,14 +16548,23 @@ SW.view = (function () {
         return;
       }
       if (!wasTracked && e.pointerType === "touch") return;
+      const showMenu = menuHeld;
       cancelLongPress();
       if (longPressFired) { longPressFired = false; return; }
       const pos = cv ? mousePos(e) : { x: 0, y: 0 };
+      if (showMenu && pendingClick && !state.panning && !capturing) {
+        pendingClick = null;
+        SW.tools.dispatch("onClick", fakeEvent(2, e.clientX, e.clientY), pos);
+        requestDraw();
+        return;
+      }
       if (state.panning) {
         endPan();
       } else if (capturing) {
         capturing = false;
+        capturePointer = null;
         SW.tools.dispatch("onUp", e, pos);
+        restoreLassoTool();
       } else if (pendingClick) {
         pendingClick = null;
         SW.tools.dispatch("onClick", e, pos);
@@ -16350,6 +16591,22 @@ SW.view = (function () {
     }
 
     window.addEventListener("pointerup", endPointer);
+    // Si el navegador retira la captura (cambio de app, gesto del sistema,
+    // Scribble) sin mandar up, la edición se cierra en vez de quedar abierta.
+    cv.addEventListener("lostpointercapture", function (e) {
+      if (e.pointerId !== capturePointer) return;
+      pointers.delete(e.pointerId);
+      cancelLongPress();
+      if (capturing) finishCapture(e);
+      else if (state.panning) endPan();
+    });
+    window.addEventListener("blur", function () {
+      pointers.clear();
+      cancelLongPress();
+      if (capturing) finishCapture();
+      if (state.panning) endPan();
+      pendingClick = null;
+    });
     window.addEventListener("pointercancel", function (e) {
       cancelLongPress();
       longPressFired = false;
@@ -16358,7 +16615,9 @@ SW.view = (function () {
       if (capturing) {
         SW.tools.dispatch("onKey", { key: "Escape", preventDefault() {} });
         capturing = false;
+        capturePointer = null;
       }
+      restoreLassoTool();
       if (state.panning) endPan();
       pendingClick = null;
     });
