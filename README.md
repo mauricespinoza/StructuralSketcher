@@ -144,8 +144,21 @@ trace involved:
     backthrust offsets the layers. A **negative slip restores** the wedge
     (the same field run backward: the tip and the backthrust retreat), and
     **Join cutoffs** welds the layers back across the main fault and the
-    backthrust. Each stage updates the drawn main fault (its new tip) and
-    the backthrust line, and moves the root for the next stage. Rooting a
+    backthrust. Each stage updates the drawn main fault (its new tip; what
+    is drawn beyond it is kept as the tip's future path) and the backthrust
+    line, and moves the root for the next stage.
+  - **Drawn backthrusts and fault roles** — in Properties, a fault's
+    *Forward role* can be set to **Active backthrust** or **Passive
+    (carried)**. An active backthrust drawn from the main fault into its
+    hanging wall turns the wedge on by itself and replaces the root/β
+    numbers: its root is where it touches the main fault and it can have
+    any shape, listric included. The roof then moves over it by Fault
+    Parallel Flow relative to the wedge (a straight backthrust lifts it as
+    a block; a curved one folds it on the bisectors of its bends), the
+    layers it crosses are cut and offset, and it is prolonged straight
+    upward when the roof rises above its drawn end. A passive fault is
+    always carried with the layers, without slip of its own, its root
+    sliding along the main fault. Rooting a
     rigid backthrust at a bend of the main fault instead does not offset
     the beds — material flows through it like an active axial surface —
     which is why the model roots it at the tip.
