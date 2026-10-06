@@ -158,7 +158,21 @@ trace involved:
     layers it crosses are cut and offset, and it is prolonged straight
     upward when the roof rises above its drawn end. A passive fault is
     always carried with the layers, without slip of its own, its root
-    sliding along the main fault. Rooting a
+    sliding along the main fault.
+  - **Roof carried (%)** — how much of the wedge's horizontal motion the
+    roof (the block above the backthrust) takes toward the foreland. At 0 %
+    the roof is fixed and the backthrust slips cos θ / cos β per unit of
+    main-fault slip (θ = main fault dip at the root, β = backthrust dip at
+    its root), the maximum. The backthrust slip falls as (1 − share) and
+    the roof's velocity becomes (share·cos θ, sin θ + (1 − share)·cos θ·tan β);
+    its frontal axial surface (through the tip) leans over the foreland,
+    parallel to that velocity, so area is still conserved. Limited to 95 %
+    (100 % would be plain Parallel flow, with no backthrust). Limits: when
+    the tip passes a bend of the main fault with a high share, a small
+    sector of the roof front is not exactly reversible.
+  - **Labels** — the canvas names the **Active fault** (the main fault the
+    wedge moves along), the **Backthrust** (drawn in its own colour) and
+    any **Passive** fault carried with the layers. Rooting a
     rigid backthrust at a bend of the main fault instead does not offset
     the beds — material flows through it like an active axial surface —
     which is why the model roots it at the tip.

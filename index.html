@@ -1037,6 +1037,9 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <label class="rail-field" data-bt data-bt-param title="Dip of the backthrust, toward the foreland (it rises toward the hinterland) — or drag its handle (Shift = 5° steps)">Backthrust dip &#946; (&#176;)
             <input id="fwd-bt-beta" type="number" min="5" max="80" step="1" value="30">
           </label>
+          <label class="rail-field" data-bt title="Roof parameter. Share of the horizontal motion of the wedge that the roof (the block above the backthrust) carries toward the foreland. 0 = fixed roof: all the horizontal shortening goes into the backthrust, which slips cos θ / cos β per unit of main-fault slip. The backthrust slip falls as (1 − share), approaching 0 as it nears 100 % (the roof travels with the wedge: plain Parallel flow; limited to 95 %). The roof's frontal axial surface leans over the foreland as the share grows">Roof carried (%)
+            <input id="fwd-bt-roof" type="number" min="0" max="95" step="5" value="0">
+          </label>
           <button id="fwd-bt-join" class="mini" data-bt title="After a restoration (negative slip): weld each layer back across the main fault and the backthrust where its cutoffs meet; larger gaps are reported as misfit, not bridged"><svg class="ic"><use href="#i-join"/></svg>Join cutoffs</button>
 
           <div class="fwd-sec">Display</div>
@@ -1129,7 +1132,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.15.0",
+  version: "0.16.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1141,6 +1144,14 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.16.0", date: "2026-10-06", highlights: [
+      "Backthrust wedge: new Roof carried (%) parameter — the share of the " +
+        "wedge's horizontal motion the roof takes toward the foreland; it " +
+        "sets how much of the slip goes into the backthrust (cos θ / cos β " +
+        "× (1 − share) per unit of main slip).",
+      "Canvas labels in Forward modeling: Active fault, Backthrust " +
+        "(in its own colour) and Passive faults.",
+    ] },
     { version: "0.15.0", date: "2026-10-05", highlights: [
       "Fault role in Properties: Active backthrust or Passive (carried).",
       "Forward modeling (Parallel flow): a drawn backthrust marked active " +
@@ -12901,9 +12912,19 @@ SW.forward = (function () {
     const ub = [-v * Math.cos(beta), Math.sin(beta)];      // retro en la raíz, hacia arriba
     const tanB = Math.tan(beta);
     const fpf = fpfMapper(SW.restore.orientLR(tr), Math.max(1, span) * 3);
+    /* Techo desplazable: el techo lleva hacia el antepaís la fracción `f`
+     * del movimiento horizontal de la cuña (0 = techo fijo). Con la
+     * velocidad relativa techo−cuña paralela al retro:
+     *   slip del retro  = (1 − f)·cos θ / cos β
+     *   velocidad techo = (f·cos θ, sin θ + (1 − f)·cos θ·tan β)
+     * y la superficie axial frontal del techo (por la punta) debe ser
+     * paralela a esa velocidad para conservar el área: vertical con f = 0.
+     * f se limita a 95 %: con 100 % no hay retro (es Parallel flow común). */
+    const f = Math.max(0, Math.min(0.95, +spec.roof || 0));
     const rates = j => {
       const c = Math.abs(j.dir[0]), sn = j.dir[1];
-      return { bt: c / Math.cos(beta), up: sn + c * tanB };
+      return { bt: (1 - f) * c / Math.cos(beta), up: sn + (1 - f) * c * tanB,
+               hz: f * c };
     };
     // el retro llega por encima del techo levantado (que puede pasar el
     // tope), así corta todas las capas que desplaza
@@ -12928,14 +12949,19 @@ SW.forward = (function () {
     const btMap = fpfMapper(SW.restore.orientLR(bt0), Math.max(1, span) * 3);
     function vel(q, s) {
       const j = at(d + s), J = j.pt;
-      if (v * (q[0] - J[0]) >= 0) return [0, 0];          // delante de J
+      const xp = v * (q[0] - J[0]), zp = q[1] - J[1];
       const u = fpf.dir(q);
       if (!u) return [0, 0];                               // yaciente
       const q0 = [q[0] - (J[0] - J0[0]), q[1] - (J[1] - J0[1])];
       if (btMap.isHW(q0)) {                                // techo
-        const t = btMap.dir(q0), r = Math.abs(j.dir[0]) / Math.cos(beta);
+        // delante de su superficie axial frontal (por J, paralela a la
+        // velocidad del techo): antepaís fijo
+        const rt = rates(j);
+        if (xp - (rt.hz / rt.up) * zp >= 0) return [0, 0];
+        const t = btMap.dir(q0), r = (1 - f) * Math.abs(j.dir[0]) / Math.cos(beta);
         return [j.dir[0] - r * v * t[0], j.dir[1] - r * v * t[1]];
       }
+      if (xp >= 0) return [0, 0];                          // delante de J
       return [u[0] * v, u[1] * v];                         // cuña
     }
     // subpaso máximo: la roca que cruza la vertical por J (o el retro) se
@@ -12968,17 +12994,30 @@ SW.forward = (function () {
       const J = at(arcAt(s)).pt, dx = J[0] - J0[0], dz = J[1] - J0[1];
       return bt0.map(q => [q[0] + dx, q[1] + dz]);
     }
+    // superficie axial frontal del techo desde la punta hasta la cota `top`
+    function front(s, top) {
+      const j = at(arcAt(s)), rt = rates(j);
+      if (!(rt.up > EPS) || !(top > j.pt[1])) return null;
+      const t = (top - j.pt[1]) / rt.up;
+      return [j.pt.slice(), [j.pt[0] + v * rt.hz * t, top]];
+    }
     const j0 = at(d), r0 = rates(j0);
     const S = +p.slip || 0;
     const thJ = Math.atan2(j0.dir[1], Math.abs(j0.dir[0])) / D2R;
+    // buzamiento del flanco frontal: lugar de los puntos de una capa horizontal
+    // que cruzan la superficie axial (U = velocidad de la punta)
+    const Ux = Math.abs(j0.dir[0]), Uz = j0.dir[1];
+    const fdx = Math.abs(Ux - r0.hz * (r0.up + Uz) / r0.up);
     const info = [(drawn ? "drawn backthrust, " + (beta / D2R).toFixed(0) + "° at the root · " : "") +
                   "backthrust slip " + (S * r0.bt).toFixed(0) + " m (" +
-                    r0.bt.toFixed(2) + " × slip)",
+                    r0.bt.toFixed(2) + " × slip)" +
+                  (f > 0 ? " · roof carries " + Math.round(f * 100) + " %" : ""),
                   "roof uplift " + (S * r0.up).toFixed(0) + " m",
-                  "roof forelimb dip " + (Math.atan(r0.up / Math.max(Math.abs(j0.dir[0]), EPS)) / D2R).toFixed(0) + "°"];
+                  "roof forelimb dip " + (Math.atan2(r0.up, fdx) / D2R).toFixed(0) + "°"];
     if (thJ < -1) info.push("the main fault descends at the branch point");
     if (S < 0) info.unshift("restoring: the tip and the backthrust retreat");
     return { ok: true, info: info, move: move, fault: fault, bt: bt, d: d, beta: beta / D2R,
+             front: front, roof: f,
              tip: s => at(arcAt(s)).pt, rates: r0,
              vel: vel, ub: ub, v: v };
   }
@@ -13063,7 +13102,8 @@ SW.forward = (function () {
           const J = W.tip(slip);
           // quiebres de la principal detrás de la punta + flanco del techo
           const out = m0.axialActive(slip).filter(a => W.v * (a.pts[0][0] - J[0]) < 0);
-          if (J[1] < cfg.main.top) out.push({ kind: "roof", pts: [J.slice(), [J[0], cfg.main.top]] });
+          const fr = W.front(slip, cfg.main.top);
+          if (fr) out.push({ kind: "roof", pts: fr });
           return out;
         },
       });
@@ -13514,7 +13554,7 @@ window.SW = window.SW || {};
   const SLIDERS = ["fwd-slip", "fwd-theta", "fwd-h", "fwd-l0", "fwd-phi",
                    "fwd-psi", "fwd-alpha", "fwd-sp-d",
                    "fwd-sp-frac", "fwd-g-rise", "fwd-nsteps",
-                   "fwd-bt-d", "fwd-bt-beta", "fwd-sym", "fwd-blpos"];
+                   "fwd-bt-d", "fwd-bt-beta", "fwd-bt-roof", "fwd-sym", "fwd-blpos"];
   function rangeFor(el) { return el && el._range; }
   function syncRange(el) {
     const r = rangeFor(el);
@@ -13568,6 +13608,7 @@ window.SW = window.SW || {};
     setBounds("fwd-nsteps", 1, 50, 1);
     setBounds("fwd-bt-d", 0, round(span * 1.2), nice(span));
     setBounds("fwd-bt-beta", 5, 80, 1);
+    setBounds("fwd-bt-roof", 0, 95, 5);
     setBounds("fwd-sym", 0.05, 0.95, 0.05);
     const fl = faultLine();
     const fl_len = fl ? SW.geom.polylineLength(fl.vertices) : span;
@@ -13704,8 +13745,10 @@ window.SW = window.SW || {};
     } : null;
     const dbt = drawnBt();
     const bt = !hasWedge() ? null
-      : dbt ? { line: dbt.vertices.map(v => v.slice()), lineId: dbt.id }
-            : { d: num("fwd-bt-d", 0), beta: num("fwd-bt-beta", 30) };
+      : dbt ? { line: dbt.vertices.map(v => v.slice()), lineId: dbt.id,
+                roof: Math.max(0, Math.min(95, num("fwd-bt-roof", 0))) / 100 }
+            : { d: num("fwd-bt-d", 0), beta: num("fwd-bt-beta", 30),
+                roof: Math.max(0, Math.min(95, num("fwd-bt-roof", 0))) / 100 };
     return { p, lines, box, span, n, growth, splays, bt };
   }
 
@@ -13970,7 +14013,7 @@ window.SW = window.SW || {};
     }
     const fl = faultLine();
     const fe = $("fwd-fault-name");
-    if (fe) fe.textContent = fl ? "Fault: " + (fl.name || "fault") : "No fault selected — parametric ramp";
+    if (fe) fe.textContent = fl ? "Active fault: " + (fl.name || "fault") : "Active fault: parametric ramp (no fault selected)";
   }
 
   function refresh() {
@@ -14311,6 +14354,47 @@ window.SW = window.SW || {};
     ctx.restore();
   }
 
+  /* Etiqueta con fondo sobre una polilínea (en el punto a la fracción `at`
+   * de su largo, desplazada hacia arriba en pantalla). */
+  function labelLine(ctx, pts, text, color, at) {
+    if (!pts || pts.length < 2) return;
+    const V = SW.view;
+    const sp = pts.map(q => [V.sx(q[0]), V.zy(q[1])]);
+    let tot = 0;
+    for (let i = 1; i < sp.length; i++) tot += Math.hypot(sp[i][0] - sp[i - 1][0], sp[i][1] - sp[i - 1][1]);
+    if (!(tot > 8)) return;
+    let acc = 0, x = sp[0][0], y = sp[0][1], nx = 0, ny = -1;
+    const target = tot * (at === undefined ? 0.5 : at);
+    for (let i = 1; i < sp.length; i++) {
+      const dx = sp[i][0] - sp[i - 1][0], dy = sp[i][1] - sp[i - 1][1];
+      const L = Math.hypot(dx, dy);
+      if (acc + L >= target || i === sp.length - 1) {
+        const t = L > 0 ? Math.max(0, Math.min(1, (target - acc) / L)) : 0;
+        x = sp[i - 1][0] + t * dx; y = sp[i - 1][1] + t * dy;
+        if (L > 0) { nx = dy / L; ny = -dx / L; if (ny > 0) { nx = -nx; ny = -ny; } }   // normal hacia arriba
+        break;
+      }
+      acc += L;
+    }
+    ctx.save();
+    ctx.font = "600 11px 'Segoe UI', sans-serif";
+    ctx.textBaseline = "middle"; ctx.textAlign = "center";
+    const w = ctx.measureText(text).width + 12, h = 17;
+    const cx = x + nx * (h / 2 + 7), cy = y + ny * (h / 2 + 7);
+    ctx.fillStyle = "rgba(255,255,255,.93)";
+    ctx.strokeStyle = color; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(cx - w / 2, cy - h / 2, w, h, 8);
+    else ctx.rect(cx - w / 2, cy - h / 2, w, h);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cx - nx * h / 2 * 0.2, cy - ny * h / 2 * 0.2);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(text, cx, cy + 0.5);
+    ctx.restore();
+  }
+  const BT_COLOR = "#c2410c", PASSIVE_COLOR = "#64748b";
+
   function drawOverlay(ctx) {
     const V = SW.view;
     const preview = checked("fwd-preview");
@@ -14324,7 +14408,14 @@ window.SW = window.SW || {};
       strokePath(ctx, fl.vertices); ctx.stroke();
       ctx.restore();
     }
-    if (!res.ok) { drawHandles(ctx, params()); return; }
+    if (!res.ok) {
+      // sin resultado: rotular lo dibujado
+      const pp0 = params(), dbt = pp0.bt && pp0.bt.lineId ? SW.model.getLine(pp0.bt.lineId) : null;
+      if (fl) labelLine(ctx, fl.vertices, "Active fault", SW.render.COLORS.kinds.fault || "#d92d3a", 0.35);
+      if (dbt) labelLine(ctx, dbt.vertices, "Backthrust", BT_COLOR, 0.5);
+      drawHandles(ctx, pp0);
+      return;
+    }
     const pp = res.pp;
     const i = shownIndex(res);
     const view = frameView(res, i);
@@ -14350,7 +14441,11 @@ window.SW = window.SW || {};
     ctx.strokeStyle = SW.render.COLORS.kinds.fault || "#d92d3a";
     ctx.lineWidth = 2.2;
     ctx.setLineDash(preview ? [] : [7, 4]);
-    for (const f of view.faults) { strokePath(ctx, f); ctx.stroke(); }
+    const fcol = SW.render.COLORS.kinds.fault || "#d92d3a";
+    view.faults.forEach(function (f, j) {
+      ctx.strokeStyle = pp.bt && j === 1 ? BT_COLOR : fcol;     // el retro, en otro color
+      strokePath(ctx, f); ctx.stroke();
+    });
     ctx.setLineDash([]);
     if (preview) {
       const axc = SW.settings.sym("axialColor") || "#6a6ac8";
@@ -14384,6 +14479,18 @@ window.SW = window.SW || {};
       }
     }
     ctx.restore();
+    // rótulos: falla activa, retro, splays y fallas pasivas
+    view.faults.forEach(function (f, j) {
+      if (j === 0) labelLine(ctx, f, "Active fault", fcol, 0.45);
+      else if (pp.bt && j === 1) labelLine(ctx, f, "Backthrust", BT_COLOR, 0.35);
+      else labelLine(ctx, f, "Splay " + (j - (pp.bt ? 1 : 0)), fcol, 0.5);
+    });
+    for (const e of view.lines) {
+      if (e.line.kind !== "fault" || roleOf(e.line) !== "passive" || !e.pieces.length) continue;
+      let best = e.pieces[0];
+      for (const pc of e.pieces) if (SW.geom.polylineLength(pc) > SW.geom.polylineLength(best)) best = pc;
+      labelLine(ctx, best, "Passive", PASSIVE_COLOR, 0.5);
+    }
     drawHandles(ctx, pp);
   }
 
@@ -14761,7 +14868,7 @@ window.SW = window.SW || {};
                "fwd-growth", "fwd-g-datum", "fwd-g-rise", "fwd-splay",
                "fwd-sp-n", "fwd-sp-d", "fwd-tri-hw",
                "fwd-sp-frac", "fwd-sp-mode", "fwd-sym", "fwd-blpos",
-               "fwd-g-color", "fwd-bt", "fwd-bt-d", "fwd-bt-beta"];
+               "fwd-g-color", "fwd-bt", "fwd-bt-d", "fwd-bt-beta", "fwd-bt-roof"];
   for (const id of ids) {
     const el = $(id);
     if (!el) continue;
