@@ -1031,11 +1031,14 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 
           <label class="rail-check fwd-sec-check" data-m="fpf" title="Tectonic wedge / triangle zone: the main fault ends at a branch point and a backthrust rises from there toward the hinterland. The wedge below the backthrust advances along the main fault; the passive roof above it does not move horizontally and is uplifted, so the backthrust offsets the layers and never cuts the main fault"><input id="fwd-bt" type="checkbox"> Backthrust (wedge)</label>
           <div class="fwd-note" data-bt id="fwd-bt-note"></div>
-          <label class="rail-field" data-bt data-bt-param title="Where the main fault ends and the backthrust is rooted: distance along the main fault from the base of the ramp (a drawn fault: from its lower end) — or drag the root handle">Root at (m along the fault)
+          <label class="rail-field" data-bt data-bt-param title="Where the backthrust is rooted (the wedge tip): distance along the main fault from the base of the ramp (a drawn fault: from its lower end) — or drag the root handle">Root at (m along the fault) and the backthrust is rooted: distance along the main fault from the base of the ramp (a drawn fault: from its lower end) — or drag the root handle">Root at (m along the fault)
             <input id="fwd-bt-d" type="number" min="0" step="any">
           </label>
           <label class="rail-field" data-bt data-bt-param title="Dip of the backthrust, toward the foreland (it rises toward the hinterland) — or drag its handle (Shift = 5° steps)">Backthrust dip &#946; (&#176;)
             <input id="fwd-bt-beta" type="number" min="5" max="80" step="1" value="30">
+          </label>
+          <label class="rail-field" data-bt title="Share of the main-fault slip S that goes on past the wedge tip along the main fault (the block ahead of the tip slides a·S on it). The rest, (1 − a)·S, is taken by the wedge under a passive roof: the backthrust slips (1 − a)·cos θ / cos β per unit of S (θ = main fault dip at the tip, β = backthrust dip at its root). 0 = the main fault ends at the tip; 100 = no backthrust slip (plain Parallel flow)">Slip past the tip (%)
+            <input id="fwd-bt-beyond" type="number" min="0" max="100" step="5" value="0">
           </label>
           <button id="fwd-bt-join" class="mini" data-bt title="After a restoration (negative slip): weld each layer back across the main fault and the backthrust where its cutoffs meet; larger gaps are reported as misfit, not bridged"><svg class="ic"><use href="#i-join"/></svg>Join cutoffs</button>
 
@@ -1129,7 +1132,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.15.0",
+  version: "0.16.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1141,6 +1144,15 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.16.0", date: "2026-10-06", highlights: [
+      "Backthrust wedge: Slip past the tip (%) — part of the main-fault " +
+        "slip goes on beyond the wedge tip; the backthrust takes " +
+        "(1 − a)·cos θ / cos β of the slip. Listric backthrusts keep their " +
+        "shape (the roof front bends with them, conserving area).",
+      "Canvas labels in Forward modeling: Active fault, Backthrust " +
+        "(in its own colour) and Passive faults.",
+      "Join cutoffs recognises pieces cut more than once (\"Top (2) (2)\").",
+    ] },
     { version: "0.15.0", date: "2026-10-05", highlights: [
       "Fault role in Properties: Active backthrust or Passive (carried).",
       "Forward modeling (Parallel flow): a drawn backthrust marked active " +
@@ -11614,7 +11626,7 @@ window.SW = window.SW || {};
       lines = (SW.model.state.sec.lines || []).filter(l => okLine(l) &&
         (l.kind === "horizon" || l.kind === "contact"));
     const tol = tolIn > 0 ? tolIn : SW.view.tolS(10);
-    const stem = n => String(n || "").replace(/\s*\(\d+\)\s*$/, "").trim();
+    const stem = n => String(n || "").replace(/(\s*\(\d+\))+\s*$/, "").trim();
     const same = (i, j) => {
       const a = lines[i], b = lines[j];
       if (a.kind !== b.kind) return false;
@@ -12809,29 +12821,32 @@ SW.forward = (function () {
     return out;
   }
 
-  /* -- retrocorrimiento desde la punta: cuña tectónica / zona triangular ---
-   * La falla principal (FPF) termina en J, a `d` metros de la base de la
-   * rampa medidos sobre ella (con una falla dibujada, desde su extremo más
-   * bajo); desde J el retrocorrimiento sube hacia el traspaís con manteo β
-   * hasta el tope del modelo. Tres bloques:
-   *  - cuña C: bloque colgante de la principal bajo el retro; avanza por
-   *    flujo paralelo a la principal (velocidad = dirección de su lámina).
-   *    La punta J y el retro son líneas materiales de C: J se propaga por la
-   *    falla (P/S = 1) y el retro se traslada con ella, sin cortarla nunca.
-   *  - techo pasivo B: sobre el retro y detrás de la vertical por J. No se
-   *    mueve en la horizontal; para que su deslizamiento relativo a C sea
-   *    paralelo al retro sube con v = sin θ + cos θ · tan β (θ = manteo de
-   *    la principal en J), y el retro acumula s = cos θ / cos β por unidad
-   *    de slip.
-   *  - antepaís (delante de la vertical por J) y yaciente: fijos.
-   * La vertical por J es la superficie axial activa del flanco frontal del
-   * techo: la roca que la cruza se levanta y forma el monoclinal (las capas
-   * del techo quedan paralelas al retro si la principal es plana en J).
-   * Todas las discontinuidades conservan el flujo normal, así que el campo
-   * conserva área; el retro corta y desplaza las capas, la principal no
-   * queda cortada por él. Slip negativo = restauración: el mismo campo
-   * recorrido hacia atrás (la punta y el retro retroceden), inversa exacta
-   * del modelo directo salvo la discretización. */
+  /* -- retrocorrimiento: cuña estructural con techo pasivo -------------------
+   * Cuña estructural (structural wedge / triangle zone; Banks y Warburton,
+   * 1986; Medwedeff, 1992; Shaw et al., 2005). El retro nace en la punta J
+   * de la cuña, a `d` metros sobre la falla madre (o donde la toca un retro
+   * dibujado), sube hacia el traspaís y puede tener cualquier forma.
+   * Bloques: yaciente (fijo); cuña W, sobre la madre detrás de J y bajo el
+   * retro; techo R, sobre el retro; bloque delantero F, delante de la
+   * vertical por J.
+   * Una fracción `a` del slip S pasa la punta y sigue por la madre: F desliza
+   * a·S sobre ella (flujo paralelo). El resto, (1 − a)·S, lo absorbe la cuña
+   * bajo el techo, que no se mueve en la horizontal respecto de F (techo
+   * pasivo). En el marco de F es el modelo de techo pasivo con slip
+   * (1 − a)·S, así que el campo de velocidades es la suma
+   *     v = a·v_FPF(madre) + (1 − a)·v_techo pasivo.
+   * En cada borde la componente normal de la velocidad es continua
+   * (conservación de área) y la tangencial es el slip:
+   *   retro (W|R): velocidad relativa paralela al retro → slip del retro
+   *       k = (1 − a)·cos θ / cos β por unidad de S;
+   *   vertical por J (R|F): igual velocidad horizontal → superficie axial
+   *       vertical; el techo sube (1 − a)·(sin θ + cos θ·tan β) respecto de F
+   * (θ: manteo de la madre en J; β: manteo del retro en su raíz). La punta y
+   * el retro son líneas materiales de la cuña: J avanza S por la madre y el
+   * retro nunca la corta. El techo fluye paralelo al retro (Egan et al.,
+   * 1997), así que un retro lístrico se respeta entero. a = 0: la madre
+   * termina en J; a = 1: no hay retro (Parallel flow). Slip negativo =
+   * restauración: el mismo campo recorrido hacia atrás. */
   function wedge(p, spec, span) {
     const g = setup(p);
     if (!g.ok) return { error: g.error };
@@ -12901,14 +12916,17 @@ SW.forward = (function () {
     const ub = [-v * Math.cos(beta), Math.sin(beta)];      // retro en la raíz, hacia arriba
     const tanB = Math.tan(beta);
     const fpf = fpfMapper(SW.restore.orientLR(tr), Math.max(1, span) * 3);
+    const a = Math.max(0, Math.min(1, +spec.beyond || 0));   // slip que pasa la punta
+    // por unidad de S: slip del retro y ascenso del techo respecto de F
     const rates = j => {
       const c = Math.abs(j.dir[0]), sn = j.dir[1];
-      return { bt: c / Math.cos(beta), up: sn + c * tanB };
+      return { bt: (1 - a) * c / Math.cos(beta), up: (1 - a) * (sn + c * tanB) };
     };
     // el retro llega por encima del techo levantado (que puede pasar el
     // tope), así corta todas las capas que desplaza
     const J0 = at(d).pt;
-    const zEnd = p.top + Math.max(0, +p.slip || 0) * Math.max(1, rates(at(d)).up);
+    const c0 = at(d).dir;
+    const zEnd = p.top + Math.max(0, +p.slip || 0) * Math.max(1, c0[1] + Math.abs(c0[0]) * tanB);
     let bt0;
     if (drawn) {
       bt0 = drawn;
@@ -12920,26 +12938,59 @@ SW.forward = (function () {
       const t = (zEnd - J0[1]) / ub[1];
       bt0 = [J0.slice(), [J0[0] + ub[0] * Math.max(t, 1), J0[1] + ub[1] * Math.max(t, 1)]];
     }
-    /* Techo: fluye paralelo al retro respecto de la cuña (Fault Parallel
-     * Flow sobre el retro, que viaja con la punta). Con un retro recto es
-     * un bloque que sólo sube; con uno lístrico se pliega en las
-     * bisectrices de sus quiebres. La tasa r hace nula la velocidad
-     * horizontal del techo junto a la raíz. */
+    // el techo fluye paralelo al retro en el marco de la cuña
     const btMap = fpfMapper(SW.restore.orientLR(bt0), Math.max(1, span) * 3);
+    // velocidad del techo respecto del bloque delantero, por unidad de (1 − a)·S
+    const rel = (j, q0) => {
+      const t = btMap.dir(q0) || btMap.dir([q0[0], q0[1] + 1e-6 * span]);
+      const r = Math.abs(j.dir[0]) / Math.cos(beta);
+      return t ? [j.dir[0] - r * v * t[0], j.dir[1] - r * v * t[1]] : [0, 0];
+    };
+    /* Superficie axial frontal del techo, en el marco del retro inicial:
+     * nace en J y sube paralela a la velocidad del techo respecto del bloque
+     * delantero (así la componente normal es continua). Con un retro recto
+     * es la vertical por J; con uno lístrico se quiebra donde cruza las
+     * bisectrices del retro. Depende del tramo de la madre en que está la
+     * punta (θ), por eso se guarda por tramo. */
+    const fronts = {};
+    function frontLine(j) {
+      if (fronts[j.k]) return fronts[j.k];
+      const step = Math.max(1, span) / 2000, pts = [J0.slice()];
+      let P = J0.slice();
+      for (let i = 0; i < 4000 && P[1] < zEnd; i++) {
+        const e = rel(j, [P[0], P[1] + 1e-6 * span]);
+        const L = Math.hypot(e[0], e[1]);
+        if (!(e[1] > EPS)) break;
+        P = [P[0] + e[0] / L * step, P[1] + e[1] / L * step];
+        pts.push(P.slice());
+      }
+      return (fronts[j.k] = pts);
+    }
+    // ¿q0 (marco del retro inicial) está delante de la superficie frontal?
+    function ahead(fr, q0) {
+      let x = fr[0][0];
+      if (q0[1] > fr[0][1]) {
+        let i = 1;
+        while (i < fr.length - 1 && fr[i][1] < q0[1]) i++;
+        const A = fr[i - 1], B = fr[i], dz = B[1] - A[1];
+        x = dz > EPS ? A[0] + (B[0] - A[0]) * Math.min(1, (q0[1] - A[1]) / dz) : B[0];
+      }
+      return v * (q0[0] - x) >= 0;
+    }
     function vel(q, s) {
-      const j = at(d + s), J = j.pt;
-      if (v * (q[0] - J[0]) >= 0) return [0, 0];          // delante de J
       const u = fpf.dir(q);
       if (!u) return [0, 0];                               // yaciente
+      const j = at(d + s), J = j.pt;
+      const F = [a * v * u[0], a * v * u[1]];              // lo que sigue por la madre
       const q0 = [q[0] - (J[0] - J0[0]), q[1] - (J[1] - J0[1])];
-      if (btMap.isHW(q0)) {                                // techo
-        const t = btMap.dir(q0), r = Math.abs(j.dir[0]) / Math.cos(beta);
-        return [j.dir[0] - r * v * t[0], j.dir[1] - r * v * t[1]];
-      }
-      return [u[0] * v, u[1] * v];                         // cuña
+      if (!btMap.isHW(q0))                                 // cuña, o delante de J
+        return v * (q[0] - J[0]) >= 0 ? F : [v * u[0], v * u[1]];
+      if (ahead(frontLine(j), q0)) return F;               // bloque delantero
+      const w = rel(j, q0);                                // techo
+      return [F[0] + (1 - a) * w[0], F[1] + (1 - a) * w[1]];
     }
-    // subpaso máximo: la roca que cruza la vertical por J (o el retro) se
-    // clasifica una vez por subpaso, así el error queda acotado por él
+    // subpaso máximo: la roca que cruza la vertical por J se clasifica una
+    // vez por subpaso, así el error queda acotado por él
     const dsMax = Math.max(1, span) / 4000;
     function move(pts, sA, sB, increments) {
       const out = pts.map(q => [q[0], q[1]]);
@@ -12959,7 +13010,9 @@ SW.forward = (function () {
       return out;
     }
     const arcAt = s => Math.max(0, d + (s || 0));
+    // traza activa de la madre: hasta la punta, o entera si sigue deslizando
     function fault(s) {
+      if (a > 0) return tr.map(q => q.slice());
       const j = at(arcAt(s));
       return behind.map(q => q.slice()).concat(path.slice(0, j.k).map(q => q.slice()), [j.pt]);
     }
@@ -12968,19 +13021,34 @@ SW.forward = (function () {
       const J = at(arcAt(s)).pt, dx = J[0] - J0[0], dz = J[1] - J0[1];
       return bt0.map(q => [q[0] + dx, q[1] + dz]);
     }
+    // superficie axial frontal del techo, con la punta, hasta la cota `top`
+    function front(s, top) {
+      const j = at(arcAt(s)), J = j.pt;
+      if (!(a < 1) || !(top > J[1])) return null;
+      const dx = J[0] - J0[0], dz = J[1] - J0[1];
+      const out = [];
+      for (const q of frontLine(j)) {
+        const z = q[1] + dz;
+        if (z <= top) { out.push([q[0] + dx, z]); continue; }
+        const A = out[out.length - 1];
+        if (A) out.push([A[0] + (q[0] + dx - A[0]) * (top - A[1]) / (z - A[1]), top]);
+        break;
+      }
+      return out.length >= 2 ? out : null;
+    }
     const j0 = at(d), r0 = rates(j0);
     const S = +p.slip || 0;
     const thJ = Math.atan2(j0.dir[1], Math.abs(j0.dir[0])) / D2R;
     const info = [(drawn ? "drawn backthrust, " + (beta / D2R).toFixed(0) + "° at the root · " : "") +
-                  "backthrust slip " + (S * r0.bt).toFixed(0) + " m (" +
-                    r0.bt.toFixed(2) + " × slip)",
-                  "roof uplift " + (S * r0.up).toFixed(0) + " m",
-                  "roof forelimb dip " + (Math.atan(r0.up / Math.max(Math.abs(j0.dir[0]), EPS)) / D2R).toFixed(0) + "°"];
+                  "backthrust slip " + (S * r0.bt).toFixed(0) + " m (" + r0.bt.toFixed(2) + " × slip)",
+                  a > 0 ? "main fault past the tip " + (S * a).toFixed(0) + " m (" + Math.round(a * 100) + " %)"
+                        : "main fault ends at the tip"];
+    if (a < 1) info.push("roof uplift over the wedge " + (S * r0.up).toFixed(0) + " m",
+                         "roof forelimb dip " + (Math.atan(Math.tan(Math.max(thJ, 0) * D2R) + tanB) / D2R).toFixed(0) + "°");
     if (thJ < -1) info.push("the main fault descends at the branch point");
     if (S < 0) info.unshift("restoring: the tip and the backthrust retreat");
-    return { ok: true, info: info, move: move, fault: fault, bt: bt, d: d, beta: beta / D2R,
-             tip: s => at(arcAt(s)).pt, rates: r0,
-             vel: vel, ub: ub, v: v };
+    return { ok: true, info: info, move: move, fault: fault, bt: bt, front: front,
+             tip: s => at(arcAt(s)).pt, rates: r0, v: v };
   }
   /* Trazas iniciales [principal hasta J, retro] (null si no son válidas). */
   function wedgeFaults(p, spec, slip) {
@@ -13063,7 +13131,8 @@ SW.forward = (function () {
           const J = W.tip(slip);
           // quiebres de la principal detrás de la punta + flanco del techo
           const out = m0.axialActive(slip).filter(a => W.v * (a.pts[0][0] - J[0]) < 0);
-          if (J[1] < cfg.main.top) out.push({ kind: "roof", pts: [J.slice(), [J[0], cfg.main.top]] });
+          const fr = W.front(slip, cfg.main.top);
+          if (fr) out.push({ kind: "roof", pts: fr });
           return out;
         },
       });
@@ -13514,7 +13583,7 @@ window.SW = window.SW || {};
   const SLIDERS = ["fwd-slip", "fwd-theta", "fwd-h", "fwd-l0", "fwd-phi",
                    "fwd-psi", "fwd-alpha", "fwd-sp-d",
                    "fwd-sp-frac", "fwd-g-rise", "fwd-nsteps",
-                   "fwd-bt-d", "fwd-bt-beta", "fwd-sym", "fwd-blpos"];
+                   "fwd-bt-d", "fwd-bt-beta", "fwd-bt-beyond", "fwd-sym", "fwd-blpos"];
   function rangeFor(el) { return el && el._range; }
   function syncRange(el) {
     const r = rangeFor(el);
@@ -13568,6 +13637,7 @@ window.SW = window.SW || {};
     setBounds("fwd-nsteps", 1, 50, 1);
     setBounds("fwd-bt-d", 0, round(span * 1.2), nice(span));
     setBounds("fwd-bt-beta", 5, 80, 1);
+    setBounds("fwd-bt-beyond", 0, 100, 5);
     setBounds("fwd-sym", 0.05, 0.95, 0.05);
     const fl = faultLine();
     const fl_len = fl ? SW.geom.polylineLength(fl.vertices) : span;
@@ -13703,9 +13773,10 @@ window.SW = window.SW || {};
       mode: ($("fwd-sp-mode") || {}).value || "sequence",
     } : null;
     const dbt = drawnBt();
+    const beyond = Math.max(0, Math.min(100, num("fwd-bt-beyond", 0))) / 100;
     const bt = !hasWedge() ? null
-      : dbt ? { line: dbt.vertices.map(v => v.slice()), lineId: dbt.id }
-            : { d: num("fwd-bt-d", 0), beta: num("fwd-bt-beta", 30) };
+      : dbt ? { line: dbt.vertices.map(v => v.slice()), lineId: dbt.id, beyond: beyond }
+            : { d: num("fwd-bt-d", 0), beta: num("fwd-bt-beta", 30), beyond: beyond };
     return { p, lines, box, span, n, growth, splays, bt };
   }
 
@@ -13970,7 +14041,7 @@ window.SW = window.SW || {};
     }
     const fl = faultLine();
     const fe = $("fwd-fault-name");
-    if (fe) fe.textContent = fl ? "Fault: " + (fl.name || "fault") : "No fault selected — parametric ramp";
+    if (fe) fe.textContent = fl ? "Active fault: " + (fl.name || "fault") : "Active fault: parametric ramp (no fault selected)";
   }
 
   function refresh() {
@@ -14311,6 +14382,47 @@ window.SW = window.SW || {};
     ctx.restore();
   }
 
+  /* Etiqueta con fondo sobre una polilínea (en el punto a la fracción `at`
+   * de su largo, desplazada hacia arriba en pantalla). */
+  function labelLine(ctx, pts, text, color, at) {
+    if (!pts || pts.length < 2) return;
+    const V = SW.view;
+    const sp = pts.map(q => [V.sx(q[0]), V.zy(q[1])]);
+    let tot = 0;
+    for (let i = 1; i < sp.length; i++) tot += Math.hypot(sp[i][0] - sp[i - 1][0], sp[i][1] - sp[i - 1][1]);
+    if (!(tot > 8)) return;
+    let acc = 0, x = sp[0][0], y = sp[0][1], nx = 0, ny = -1;
+    const target = tot * (at === undefined ? 0.5 : at);
+    for (let i = 1; i < sp.length; i++) {
+      const dx = sp[i][0] - sp[i - 1][0], dy = sp[i][1] - sp[i - 1][1];
+      const L = Math.hypot(dx, dy);
+      if (acc + L >= target || i === sp.length - 1) {
+        const t = L > 0 ? Math.max(0, Math.min(1, (target - acc) / L)) : 0;
+        x = sp[i - 1][0] + t * dx; y = sp[i - 1][1] + t * dy;
+        if (L > 0) { nx = dy / L; ny = -dx / L; if (ny > 0) { nx = -nx; ny = -ny; } }   // normal hacia arriba
+        break;
+      }
+      acc += L;
+    }
+    ctx.save();
+    ctx.font = "600 11px 'Segoe UI', sans-serif";
+    ctx.textBaseline = "middle"; ctx.textAlign = "center";
+    const w = ctx.measureText(text).width + 12, h = 17;
+    const cx = x + nx * (h / 2 + 7), cy = y + ny * (h / 2 + 7);
+    ctx.fillStyle = "rgba(255,255,255,.93)";
+    ctx.strokeStyle = color; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(cx - w / 2, cy - h / 2, w, h, 8);
+    else ctx.rect(cx - w / 2, cy - h / 2, w, h);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cx - nx * h / 2 * 0.2, cy - ny * h / 2 * 0.2);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(text, cx, cy + 0.5);
+    ctx.restore();
+  }
+  const BT_COLOR = "#c2410c", PASSIVE_COLOR = "#64748b";
+
   function drawOverlay(ctx) {
     const V = SW.view;
     const preview = checked("fwd-preview");
@@ -14324,7 +14436,14 @@ window.SW = window.SW || {};
       strokePath(ctx, fl.vertices); ctx.stroke();
       ctx.restore();
     }
-    if (!res.ok) { drawHandles(ctx, params()); return; }
+    if (!res.ok) {
+      // sin resultado: rotular lo dibujado
+      const pp0 = params(), dbt = pp0.bt && pp0.bt.lineId ? SW.model.getLine(pp0.bt.lineId) : null;
+      if (fl) labelLine(ctx, fl.vertices, "Active fault", SW.render.COLORS.kinds.fault || "#d92d3a", 0.35);
+      if (dbt) labelLine(ctx, dbt.vertices, "Backthrust", BT_COLOR, 0.5);
+      drawHandles(ctx, pp0);
+      return;
+    }
     const pp = res.pp;
     const i = shownIndex(res);
     const view = frameView(res, i);
@@ -14350,7 +14469,11 @@ window.SW = window.SW || {};
     ctx.strokeStyle = SW.render.COLORS.kinds.fault || "#d92d3a";
     ctx.lineWidth = 2.2;
     ctx.setLineDash(preview ? [] : [7, 4]);
-    for (const f of view.faults) { strokePath(ctx, f); ctx.stroke(); }
+    const fcol = SW.render.COLORS.kinds.fault || "#d92d3a";
+    view.faults.forEach(function (f, j) {
+      ctx.strokeStyle = pp.bt && j === 1 ? BT_COLOR : fcol;     // el retro, en otro color
+      strokePath(ctx, f); ctx.stroke();
+    });
     ctx.setLineDash([]);
     if (preview) {
       const axc = SW.settings.sym("axialColor") || "#6a6ac8";
@@ -14384,6 +14507,18 @@ window.SW = window.SW || {};
       }
     }
     ctx.restore();
+    // rótulos: falla activa, retro, splays y fallas pasivas
+    view.faults.forEach(function (f, j) {
+      if (j === 0) labelLine(ctx, f, "Active fault", fcol, 0.45);
+      else if (pp.bt && j === 1) labelLine(ctx, f, "Backthrust", BT_COLOR, 0.35);
+      else labelLine(ctx, f, "Splay " + (j - (pp.bt ? 1 : 0)), fcol, 0.5);
+    });
+    for (const e of view.lines) {
+      if (e.line.kind !== "fault" || roleOf(e.line) !== "passive" || !e.pieces.length) continue;
+      let best = e.pieces[0];
+      for (const pc of e.pieces) if (SW.geom.polylineLength(pc) > SW.geom.polylineLength(best)) best = pc;
+      labelLine(ctx, best, "Passive", PASSIVE_COLOR, 0.5);
+    }
     drawHandles(ctx, pp);
   }
 
@@ -14450,7 +14585,7 @@ window.SW = window.SW || {};
       e.pieces.forEach(function (pc, j) {
         if (j === main) return;
         const nl = copyProps(l, SW.model.newLine(l.kind, pc, "forward"),
-                             (l.name || "Line") + " (" + (++k) + ")");
+                             String(l.name || "Line").replace(/(\s*\(\d+\))+\s*$/, "") + " (" + (++k) + ")");
         added.push(nl);
         if (nl.unit_id) unitAdds.push([nl.unit_id, nl.id]);
         split++;
@@ -14761,7 +14896,7 @@ window.SW = window.SW || {};
                "fwd-growth", "fwd-g-datum", "fwd-g-rise", "fwd-splay",
                "fwd-sp-n", "fwd-sp-d", "fwd-tri-hw",
                "fwd-sp-frac", "fwd-sp-mode", "fwd-sym", "fwd-blpos",
-               "fwd-g-color", "fwd-bt", "fwd-bt-d", "fwd-bt-beta"];
+               "fwd-g-color", "fwd-bt", "fwd-bt-d", "fwd-bt-beta", "fwd-bt-beyond"];
   for (const id of ids) {
     const el = $(id);
     if (!el) continue;
