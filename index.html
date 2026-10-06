@@ -1031,13 +1031,19 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 
           <label class="rail-check fwd-sec-check" data-m="fpf" title="Tectonic wedge / triangle zone: the main fault ends at a branch point and a backthrust rises from there toward the hinterland. The wedge below the backthrust advances along the main fault; the passive roof above it does not move horizontally and is uplifted, so the backthrust offsets the layers and never cuts the main fault"><input id="fwd-bt" type="checkbox"> Backthrust (wedge)</label>
           <div class="fwd-note" data-bt id="fwd-bt-note"></div>
-          <label class="rail-field" data-bt data-bt-param title="Where the main fault ends and the backthrust is rooted: distance along the main fault from the base of the ramp (a drawn fault: from its lower end) — or drag the root handle">Root at (m along the fault)
+          <label class="rail-field" data-bt title="Tip: the main fault ends where the backthrust is rooted (slip falls to 0 there) and the backthrust is a material line of the wedge that cuts and offsets the layers. Main fault continues: the fault goes on past the root, slipping a·S there, and the backthrust is rooted at a BEND of the main fault (dip increasing, θ₂ > θ₁); rigid blocks fix a = sin(θ₁+β)/sin(θ₂+β) and the backthrust slip k = sin(θ₂−θ₁)/sin(θ₂+β). There the backthrust is an active axial surface: layers fold across it instead of being cut">Backthrust model
+            <select id="fwd-bt-mode">
+              <option value="tip" selected>Tip — cuts layers, main fault ends</option>
+              <option value="bend">Main fault continues — bend, axial surface</option>
+            </select>
+          </label>
+          <label class="rail-field" data-bt data-bt-param title="Where the backthrust is rooted: distance along the main fault from the base of the ramp (a drawn fault: from its lower end) — or drag the root handle. In the 'main fault continues' model the root snaps to the nearest bend of the main fault">Root at (m along the fault) and the backthrust is rooted: distance along the main fault from the base of the ramp (a drawn fault: from its lower end) — or drag the root handle">Root at (m along the fault)
             <input id="fwd-bt-d" type="number" min="0" step="any">
           </label>
           <label class="rail-field" data-bt data-bt-param title="Dip of the backthrust, toward the foreland (it rises toward the hinterland) — or drag its handle (Shift = 5° steps)">Backthrust dip &#946; (&#176;)
             <input id="fwd-bt-beta" type="number" min="5" max="80" step="1" value="30">
           </label>
-          <label class="rail-field" data-bt title="Roof parameter. Share of the horizontal motion of the wedge that the roof (the block above the backthrust) carries toward the foreland. 0 = fixed roof: all the horizontal shortening goes into the backthrust, which slips cos θ / cos β per unit of main-fault slip. The backthrust slip falls as (1 − share), approaching 0 as it nears 100 % (the roof travels with the wedge: plain Parallel flow; limited to 95 %). The roof's frontal axial surface leans over the foreland as the share grows">Roof carried (%)
+          <label class="rail-field" data-bt data-bt-tip title="Roof parameter. Share of the horizontal motion of the wedge that the roof (the block above the backthrust) carries toward the foreland. 0 = fixed roof: all the horizontal shortening goes into the backthrust, which slips cos θ / cos β per unit of main-fault slip. The backthrust slip falls as (1 − share), approaching 0 as it nears 100 % (the roof travels with the wedge: plain Parallel flow; limited to 95 %). The roof's frontal axial surface leans over the foreland as the share grows">Roof carried (%)
             <input id="fwd-bt-roof" type="number" min="0" max="95" step="5" value="0">
           </label>
           <button id="fwd-bt-join" class="mini" data-bt title="After a restoration (negative slip): weld each layer back across the main fault and the backthrust where its cutoffs meet; larger gaps are reported as misfit, not bridged"><svg class="ic"><use href="#i-join"/></svg>Join cutoffs</button>
@@ -1132,7 +1138,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.16.0",
+  version: "0.17.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1144,6 +1150,14 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.17.0", date: "2026-10-06", highlights: [
+      "Backthrust model \"main fault continues\": the main fault keeps " +
+        "slipping past the backthrust, which is rooted at a bend of the " +
+        "fault; rigid blocks give a = sin(θ₁+β)/sin(θ₂+β) of the slip " +
+        "beyond the bend and k = sin(θ₂−θ₁)/sin(θ₂+β) on the backthrust.",
+      "In that model the backthrust is an active axial surface: layers " +
+        "fold across it instead of being cut. Restorable with negative slip.",
+    ] },
     { version: "0.16.0", date: "2026-10-06", highlights: [
       "Backthrust wedge: new Roof carried (%) parameter — the share of the " +
         "wedge's horizontal motion the roof takes toward the foreland; it " +
@@ -12844,6 +12858,7 @@ SW.forward = (function () {
    * recorrido hacia atrás (la punta y el retro retroceden), inversa exacta
    * del modelo directo salvo la discretización. */
   function wedge(p, spec, span) {
+    if (spec && spec.mode === "bend") return wedgeBend(p, spec, span);
     const g = setup(p);
     if (!g.ok) return { error: g.error };
     if (p.method !== "fpf")
@@ -13021,6 +13036,138 @@ SW.forward = (function () {
              tip: s => at(arcAt(s)).pt, rates: r0,
              vel: vel, ub: ub, v: v };
   }
+  /* -- la madre continúa: retro enraizado en un quiebre -----------------------
+   * La falla principal sigue más allá del retro. El retro nace en un quiebre
+   * de la madre (θ₂ > θ₁) y queda FIJO en él; tres bloques rígidos:
+   *   yaciente: fijo;
+   *   B (sobre el tramo de la madre detrás del quiebre, bajo el retro):
+   *     desliza S a lo largo de la madre (θ₁);
+   *   C (sobre el retro, hanging wall del tramo delante del quiebre):
+   *     desliza a·S a lo largo de la madre (θ₂).
+   * El retro es el límite B/C: la velocidad relativa C − B = a·u₂ − u₁ debe
+   * ser paralela a él, lo que fija
+   *   a = sin(θ₁+β) / sin(θ₂+β)        (slip de la madre pasado el quiebre)
+   *   k = sin(θ₂−θ₁) / sin(θ₂+β)       (slip del retro)
+   * Como el retro está quieto y B y C tienen la misma velocidad normal a él,
+   * la roca lo cruza: es una superficie axial activa (las capas se pliegan,
+   * no se cortan), el mismo mecanismo que el plano axial de Suppe (1983).
+   * Con θ₁ = θ₂ no hay solución (k = 0). El campo es estacionario: la
+   * restauración es el mismo campo con slip negativo. El retro es recto
+   * (β en la raíz). */
+  function wedgeBend(p, spec, span) {
+    const g = setup(p);
+    if (!g.ok) return { error: g.error };
+    if (p.method !== "fpf")
+      return { error: "The backthrust model works with Fault Parallel Flow." };
+    if (usesLine(p) && (p.faultLine || []).length < 2)
+      return { error: "Click a fault line on the section first." };
+    const tr = trace(p, g, 0);
+    if (tr.length < 2) return { error: "The main fault is missing." };
+    const v = p.verg < 0 ? -1 : 1;
+    // camino de abajo hacia arriba (con la parte plana de detrás de la rampa)
+    const path = tr[0][1] <= tr[tr.length - 1][1] ? tr : tr.slice().reverse();
+    const cum = [0], th = [];
+    for (let i = 1; i < path.length; i++) {
+      const dx = path[i][0] - path[i - 1][0], dz = path[i][1] - path[i - 1][1];
+      cum.push(cum[i - 1] + Math.hypot(dx, dz));
+      th.push(Math.atan2(dz, v * dx));                    // manteo en el sentido de transporte
+    }
+    // raíz pedida (arco desde el extremo bajo) y β
+    let arc, beta;
+    if (spec.line && spec.line.length >= 2) {
+      const L = spec.line;
+      const a = SW.geom.nearestPointOnPolyline(path, L[0]), b = SW.geom.nearestPointOnPolyline(path, L[L.length - 1]);
+      const r = b[3] < a[3] ? b : a;
+      const first = b[3] < a[3] ? L.slice().reverse() : L;
+      arc = cum[r[0]] + r[1] * (cum[r[0] + 1] - cum[r[0]]);
+      let k = 1;
+      while (k < first.length - 1 && Math.hypot(first[k][0] - first[0][0], first[k][1] - first[0][1]) < EPS) k++;
+      const dx = first[k][0] - first[0][0], dz = first[k][1] - first[0][1];
+      if (!(dz > EPS) || dx * v >= 0)
+        return { error: "The drawn backthrust must rise from the main fault toward the hinterland." };
+      beta = Math.atan2(dz, Math.abs(dx));
+    } else {
+      arc = (usesLine(p) ? 0 : cum[1]) + Math.max(0, +spec.d || 0);
+      beta = (+spec.beta || 0) * D2R;
+    }
+    if (!(beta >= 5 * D2R - EPS && beta <= 80 * D2R + EPS))
+      return { error: "The backthrust dip must be between 5° and 80°" +
+                      (spec.line ? " at its root." : ".") };
+    // quiebre más cercano a la raíz donde el manteo AUMENTA
+    let bi = -1, bd = Infinity;
+    for (let i = 1; i < path.length - 1; i++) {
+      if (!(th[i] - th[i - 1] > 1 * D2R)) continue;
+      const dd = Math.abs(cum[i] - arc);
+      if (dd < bd) { bd = dd; bi = i; }
+    }
+    if (bi < 0)
+      return { error: "The main fault has no bend where its dip increases (θ₂ > θ₁): " +
+                      "a rigid backthrust can only slip at a bend. Use the tip model, " +
+                      "or draw a flat-ramp fault." };
+    const t1 = th[bi - 1], t2 = th[bi];
+    const den = Math.sin(t2 + beta);
+    if (!(den > 0.05) || !(Math.sin(t1 + beta) > 0.05))
+      return { error: "A backthrust dipping " + (beta / D2R).toFixed(0) + "° is not compatible " +
+                      "with this bend (θ₁ " + (t1 / D2R).toFixed(0) + "° → θ₂ " + (t2 / D2R).toFixed(0) +
+                      "°): make it less steep." };
+    const A = Math.sin(t1 + beta) / den, K = Math.sin(t2 - t1) / den;
+    const J = path[bi].slice();
+    const tdir = [-v * Math.cos(beta), Math.sin(beta)];     // retro, hacia arriba
+    const nrm = [v * Math.sin(beta), Math.cos(beta)];       // hacia C
+    const M = Math.max(1, span) * 4;
+    const sx = path[bi + 1][0] - J[0], sz = path[bi + 1][1] - J[1], sl = Math.hypot(sx, sz) || 1;
+    // falla "virtual" de C: la madre desde el quiebre, prolongada hacia atrás
+    // con el manteo de delante (así C se mueve uniforme sobre el retro)
+    const virt = [[J[0] - sx / sl * M, J[1] - sz / sl * M], J.slice()].concat(path.slice(bi + 1).map(q => q.slice()));
+    const fReal = fpfMapper(SW.restore.orientLR(path), Math.max(1, span) * 3);
+    const fVirt = fpfMapper(SW.restore.orientLR(virt), Math.max(1, span) * 3);
+    function vel(q) {
+      const u = fReal.dir(q);
+      if (!u) return [0, 0];                               // yaciente
+      if ((q[0] - J[0]) * nrm[0] + (q[1] - J[1]) * nrm[1] > 0) {   // C
+        const w = fVirt.dir(q) || u;
+        return [A * v * w[0], A * v * w[1]];
+      }
+      return [v * u[0], v * u[1]];                         // B
+    }
+    const dsMax = Math.max(1, span) / 4000;
+    function move(pts, sA, sB, increments) {
+      const out = pts.map(q => [q[0], q[1]]);
+      const n = Math.max(1, Math.round(increments) || 1,
+                         Math.ceil(Math.abs((sB || 0) - (sA || 0)) / dsMax));
+      const ds = ((sB || 0) - (sA || 0)) / n;
+      if (!(Math.abs(ds) > 0)) return out;
+      for (const q of out)
+        for (let k = 0; k < n; k++) {
+          const v1 = vel(q);
+          const m = [q[0] + v1[0] * ds / 2, q[1] + v1[1] * ds / 2];
+          const v2 = vel(m);
+          q[0] += v2[0] * ds; q[1] += v2[1] * ds;
+        }
+      return out;
+    }
+    const zTop = p.top > J[1] ? p.top : J[1] + Math.max(1, span) * 0.2;
+    const tl = (zTop - J[1]) / tdir[1];
+    const btLine = [J.slice(), [J[0] + tdir[0] * tl, zTop]];
+    const S = +p.slip || 0;
+    const moved = Math.abs(cum[bi] - arc);
+    const info = ["bend " + (cum[bi] - (usesLine(p) ? 0 : cum[1])).toFixed(0) + " m along the fault: dip " +
+                    (t1 / D2R).toFixed(0) + "° → " + (t2 / D2R).toFixed(0) + "°" +
+                    (moved > Math.max(1, span) * 1e-3 ? " (root moved " + moved.toFixed(0) + " m to this bend)" : ""),
+                  "main fault beyond the bend " + A.toFixed(2) + " × slip (" + (S * A).toFixed(0) + " m)",
+                  "backthrust " + K.toFixed(2) + " × slip (" + (S * K).toFixed(0) +
+                    " m) — an axial surface: layers fold across it"];
+    return { ok: true, bend: true, info: info, move: move, v: v,
+             fault: () => tr.map(q => q.slice()), bt: () => btLine.map(q => q.slice()),
+             btLine: btLine, tip: () => J.slice(), rates: { bt: K, up: NaN, a: A },
+             root: J, d: cum[bi] - (usesLine(p) ? 0 : cum[1]),
+             axial: function (rays) {
+               const tol = Math.max(1e-6, Math.max(1, span) * 1e-6) * 10;
+               const out = rays.filter(r => Math.hypot(r.pts[0][0] - J[0], r.pts[0][1] - J[1]) > tol);
+               out.push({ kind: "backthrust", pts: btLine.map(q => q.slice()) });
+               return out;
+             } };
+  }
   /* Trazas iniciales [principal hasta J, retro] (null si no son válidas). */
   function wedgeFaults(p, spec, slip) {
     const box = Math.max(1, Math.abs((p.x1 - p.x0) || 1));
@@ -13096,7 +13243,12 @@ SW.forward = (function () {
       const sp = Math.max(1, Math.abs((cfg.main.x1 - cfg.main.x0) || 1));
       W = wedge(cfg.main, cfg.wedge, sp);
       if (!W.ok) return { ok: false, error: W.error };
-      mm = Object.assign({}, m0, {
+      if (W.bend)
+        mm = Object.assign({}, m0, {
+          info: m0.info.concat(W.info), move: W.move,
+          axialActive: slip => W.axial(m0.axialActive(slip)),
+        });
+      else mm = Object.assign({}, m0, {
         info: m0.info.concat(W.info), move: W.move, fault: W.fault,
         axialActive: function (slip) {
           const J = W.tip(slip);
@@ -13180,7 +13332,7 @@ SW.forward = (function () {
       const live = (j, m) => carried[j] ? carried[j].map(q => q.slice())
                                         : m.fault(sgn * slipOf(j, slip));
       const faults = [live(0, mm)]
-        .concat(W ? [W.bt(sgn * slipOf(0, slip))] : [])
+        .concat(W && !W.bend ? [W.bt(sgn * slipOf(0, slip))] : [])
         .concat(sps.map((sp, i) => sp.m.p.drawFault ? sp.m.p.drawFault.map(q => q.slice())
                                                      : live(i + 1, sp.m)));
       const axA = carried[0] ? [] : mm.axialActive(sgn * slipOf(0, slip));
@@ -13191,6 +13343,7 @@ SW.forward = (function () {
       const cp = {};
       for (const key of Object.keys(sets)) cp[key] = sets[key].map(q => q.slice());
       return { k: k, slip: sgn * slip, sets: cp, faults: faults, axActive: axA,
+               bt: W && W.bend ? W.btLine.map(q => q.slice()) : null,
                axInactive: ax.map((a, i) => ({ kind: axKinds[i], pts: a.map(q => q.slice()) })) };
     }
     const frames = [snapshot(from)];
@@ -13746,8 +13899,10 @@ window.SW = window.SW || {};
     const dbt = drawnBt();
     const bt = !hasWedge() ? null
       : dbt ? { line: dbt.vertices.map(v => v.slice()), lineId: dbt.id,
+                mode: ($("fwd-bt-mode") || {}).value || "tip",
                 roof: Math.max(0, Math.min(95, num("fwd-bt-roof", 0))) / 100 }
             : { d: num("fwd-bt-d", 0), beta: num("fwd-bt-beta", 30),
+                mode: ($("fwd-bt-mode") || {}).value || "tip",
                 roof: Math.max(0, Math.min(95, num("fwd-bt-roof", 0))) / 100 };
     return { p, lines, box, span, n, growth, splays, bt };
   }
@@ -13792,8 +13947,10 @@ window.SW = window.SW || {};
     const sp = span / 400;
     // fallas iniciales donde se cortan las líneas: la principal (con cuña,
     // sólo hasta la raíz del retro) y el retro
-    const cuts = pp.bt ? (SW.forward.wedgeFaults(p, pp.bt, 0) || [])
-                       : [SW.forward.faultTrace(p, 0)].filter(Boolean);
+    let cuts = pp.bt ? (SW.forward.wedgeFaults(p, pp.bt, 0) || [])
+                     : [SW.forward.faultTrace(p, 0)].filter(Boolean);
+    // modo "la madre continúa": el retro es una superficie axial, no corta
+    if (pp.bt && pp.bt.mode === "bend") cuts = cuts.slice(0, 1);
     // las copias (splays) también cortan las capas desde el inicio
     if (!pp.bt && pp.splays) {
       const specs = splaySpecs(pp);
@@ -13873,7 +14030,7 @@ window.SW = window.SW || {};
       return pcs;
     };
     const tol = res.sp * 0.02;
-    const view = { lines: [], growth: [], markers: [], faults: fr.faults,
+    const view = { lines: [], growth: [], markers: [], faults: fr.faults, bt: fr.bt || null,
                    axActive: [], axInactive: [], slip: fr.slip, k: fr.k };
     res.lines.forEach(function (l, i2) {
       let pts = fr.sets["l" + i2];
@@ -13991,6 +14148,8 @@ window.SW = window.SW || {};
     tog("[data-bt]", hasWedge());
     const dbt = hasWedge() ? drawnBt() : null;
     tog("[data-bt-param]", hasWedge() && !dbt);
+    const bendMode = (($("fwd-bt-mode") || {}).value) === "bend";
+    tog("[data-bt-tip]", hasWedge() && !bendMode);
     const note = $("fwd-bt-note");
     if (note) note.textContent = dbt ? "Backthrust: " + (dbt.name || "drawn line") +
       " (drawn, active). Set its Forward role to none to switch it off." : "";
@@ -14447,6 +14606,11 @@ window.SW = window.SW || {};
       strokePath(ctx, f); ctx.stroke();
     });
     ctx.setLineDash([]);
+    if (view.bt) {                       // retro = superficie axial activa (modo "madre continúa")
+      ctx.strokeStyle = BT_COLOR; ctx.lineWidth = 2.2; ctx.setLineDash([9, 5]);
+      strokePath(ctx, view.bt); ctx.stroke();
+      ctx.setLineDash([]);
+    }
     if (preview) {
       const axc = SW.settings.sym("axialColor") || "#6a6ac8";
       ctx.strokeStyle = axc;
@@ -14485,6 +14649,7 @@ window.SW = window.SW || {};
       else if (pp.bt && j === 1) labelLine(ctx, f, "Backthrust", BT_COLOR, 0.35);
       else labelLine(ctx, f, "Splay " + (j - (pp.bt ? 1 : 0)), fcol, 0.5);
     });
+    if (view.bt) labelLine(ctx, view.bt, "Backthrust (axial surface)", BT_COLOR, 0.5);
     for (const e of view.lines) {
       if (e.line.kind !== "fault" || roleOf(e.line) !== "passive" || !e.pieces.length) continue;
       let best = e.pieces[0];
@@ -14579,7 +14744,7 @@ window.SW = window.SW || {};
         if (j === 0 && usesLine()) {                // la falla ya existe
           // con cuña, su punta se propagó hasta la raíz actual del retro
           const ml = faultLine();
-          if (pp.bt && ml) {
+          if (pp.bt && pp.bt.mode !== "bend" && ml) {
             // hasta la punta nueva; lo dibujado más allá (el camino futuro
             // de la punta) se conserva
             const path = ml.vertices[0][1] <= ml.vertices[ml.vertices.length - 1][1]
@@ -14618,6 +14783,13 @@ window.SW = window.SW || {};
           { sense: pp.p.slip < 0 ? "normal" : "reverse" });
         added.push(fl); nFault++;
       });
+    }
+    // modo "madre continúa": el retro (fijo) se agrega como falla si no estaba dibujado
+    if (final && checked("fwd-add-fault") && view.bt && !pp.bt.line) {
+      const fl = SW.model.newLine("fault", view.bt, "forward");
+      fl.name = "Backthrust (" + tag + ")";
+      fl.fault_style = Object.assign({}, fl.fault_style, { sense: "reverse", role: "backthrust" });
+      added.push(fl); nFault++;
     }
     if (final && checked("fwd-add-axial")) {
       const mk = (pts, name, width) => {
@@ -14721,7 +14893,7 @@ window.SW = window.SW || {};
 
   function finishStage() {
     // la punta de la principal (raíz del retro) avanzó el slip de la etapa
-    if (hasWedge() && !drawnBt()) setVal("fwd-bt-d", Math.max(0, Math.round((num("fwd-bt-d", 0) + num("fwd-slip", 0)) * 10) / 10));
+    if (hasWedge() && !drawnBt() && ($("fwd-bt-mode") || {}).value !== "bend") setVal("fwd-bt-d", Math.max(0, Math.round((num("fwd-bt-d", 0) + num("fwd-slip", 0)) * 10) / 10));
     st.done = 0; st.frame = null;
     setVal("fwd-slip", 0);
   }
@@ -14868,7 +15040,7 @@ window.SW = window.SW || {};
                "fwd-growth", "fwd-g-datum", "fwd-g-rise", "fwd-splay",
                "fwd-sp-n", "fwd-sp-d", "fwd-tri-hw",
                "fwd-sp-frac", "fwd-sp-mode", "fwd-sym", "fwd-blpos",
-               "fwd-g-color", "fwd-bt", "fwd-bt-d", "fwd-bt-beta", "fwd-bt-roof"];
+               "fwd-g-color", "fwd-bt", "fwd-bt-d", "fwd-bt-beta", "fwd-bt-roof", "fwd-bt-mode"];
   for (const id of ids) {
     const el = $(id);
     if (!el) continue;
@@ -14901,7 +15073,9 @@ window.SW = window.SW || {};
     const pp = params();
     const wf = pp.bt ? SW.forward.wedgeFaults(pp.p, pp.bt, 0) : null;
     if (!wf) { SW.view.status("Turn on the backthrust and set a valid main fault first."); return; }
-    SW.actions.restoreJoinCutoffs(0, wf, "the main fault and the backthrust");
+    if (pp.bt.mode === "bend") {
+      SW.actions.restoreJoinCutoffs(0, wf.slice(0, 1), "the main fault");
+    } else SW.actions.restoreJoinCutoffs(0, wf, "the main fault and the backthrust");
     st.cache = null; st.key = "";
     refresh();
   });

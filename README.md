@@ -159,6 +159,20 @@ trace involved:
     upward when the roof rises above its drawn end. A passive fault is
     always carried with the layers, without slip of its own, its root
     sliding along the main fault.
+  - **Backthrust model: main fault continues** — the alternative to the
+    tip model above. The main fault goes on past the backthrust, which is
+    rooted at a **bend** of the main fault (dip increasing, θ₂ > θ₁; the
+    root snaps to the nearest bend) and is straight with dip β. Rigid
+    blocks fix the slip split: the main fault slips **a = sin(θ₁+β) /
+    sin(θ₂+β)** × S beyond the bend and the backthrust **k = sin(θ₂−θ₁) /
+    sin(θ₂+β)** × S (e.g. flat → 30° ramp, β = 30°: a = k = 0.58). With the
+    same dip on both sides (θ₁ = θ₂) there is no solution — a rigid
+    backthrust cannot slip — and the tool says so. The backthrust is
+    stationary and the rock crosses it, so it is an **active axial
+    surface**: layers fold across it instead of being cut (as in Suppe's
+    fault-bend fold). The drawn main fault and backthrust do not change
+    between stages; area is conserved (also for rock crossing the
+    backthrust) and negative slip restores exactly.
   - **Roof carried (%)** — how much of the wedge's horizontal motion the
     roof (the block above the backthrust) takes toward the foreland. At 0 %
     the roof is fixed and the backthrust slips cos θ / cos β per unit of
@@ -167,9 +181,11 @@ trace involved:
     the roof's velocity becomes (share·cos θ, sin θ + (1 − share)·cos θ·tan β);
     its frontal axial surface (through the tip) leans over the foreland,
     parallel to that velocity, so area is still conserved. Limited to 95 %
-    (100 % would be plain Parallel flow, with no backthrust). Limits: when
-    the tip passes a bend of the main fault with a high share, a small
-    sector of the roof front is not exactly reversible.
+    (100 % would be plain Parallel flow, with no backthrust). Limits: with
+    the root on a ramp the field restores exactly up to 95 %; with the
+    root on a flat the roof front becomes nearly horizontal and above
+    ~60 % a few per cent of the points next to it do not come back
+    exactly (7 % at 95 %).
   - **Labels** — the canvas names the **Active fault** (the main fault the
     wedge moves along), the **Backthrust** (drawn in its own colour) and
     any **Passive** fault carried with the layers. Rooting a
