@@ -670,6 +670,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-csv" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6m-2.5-2.5L12 17l2.5-2.5"/></symbol>
   <symbol id="i-versions" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-snapfault" viewBox="0 0 24 24"><path d="M15 3l-7 18"/><path d="M2 9h9.6M13.2 15H22"/><circle cx="11.6" cy="9" r="1.6"/><circle cx="13.2" cy="15" r="1.6"/></symbol>
   <symbol id="i-tidy" viewBox="0 0 24 24"><path d="M3 17l5-6 4 4 4-6 5 5"/><path d="M15 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/></symbol>
   <symbol id="i-parallel" viewBox="0 0 24 24"><path d="M2 10c4-4 7-4 10-1s6 3 10-1"/><path d="M2 17c4-4 7-4 10-1s6 3 10-1"/></symbol>
 </svg>
@@ -855,6 +856,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <button id="join-btn" title="Join selected lines"><svg class="ic"><use href="#i-join"/></svg>Join</button>
           <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
           <button id="tidy-btn" title="Tidy selected lines: snap ends, remove duplicate vertices"><svg class="ic"><use href="#i-tidy"/></svg>Tidy</button>
+          <button id="snapfault-btn" title="Snap to faults: layer ends near a fault are trimmed or extended to end exactly on it (selected lines, or every visible layer if nothing is selected). Uses Tidy max distance."><svg class="ic"><use href="#i-snapfault"/></svg>To faults</button>
         </div>
         <details class="rail-more">
           <summary>Options</summary>
@@ -1132,7 +1134,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.16.0",
+  version: "0.17.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1144,6 +1146,17 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.17.0", date: "2026-10-06", highlights: [
+      "Unit polygons from a planar arrangement of horizons, faults, " +
+        "topography and the model boundary: the basal unit reaches the " +
+        "boundary floor, short layers reach its sides, crossing or " +
+        "overlapping curved layers and closed lenses are resolved.",
+      "Model boundary: Edit boundary in the Unit polygons panel — drag " +
+        "corners and sides, add/remove corners; fills rebuild on each edit.",
+      "Layer–fault topology: forward-model cuts and every layer end near " +
+        "an active, backthrust, splay or passive fault end exactly on it; " +
+        "new To faults action for drawn lines.",
+    ] },
     { version: "0.16.0", date: "2026-10-06", highlights: [
       "Backthrust wedge: Slip past the tip (%) — part of the main-fault " +
         "slip goes on beyond the wedge tip; the backthrust takes " +
@@ -2755,6 +2768,434 @@ SW.geom = (function () {
   });
 })();
 
+/* ==== js/topology.js ====
+ * StructuralSketcher — topología de la sección: (1) cierre de extremos
+ * sueltos sobre las fallas (recortar el sobrante que cruza, prolongar o
+ * proyectar el que no llega), usado por el forward, Snap to faults y los
+ * polígonos; (2) el ARREGLO PLANAR de todas las líneas más el borde del
+ * modelo: cada cruce es un nodo, cada tramo entre nodos una arista, y las
+ * caras cerradas que resultan son los cuerpos — así dos horizontes curvos
+ * que se cruzan o se traslapan, una unidad que se acuña o un bloque entre
+ * dos fallas quedan resueltos sin suponer quién está "debajo" de quién. */
+"use strict";
+window.SW = window.SW || {};
+
+SW.topology = (function () {
+  const geom = SW.geom;
+  const EPS = 1e-12;
+
+  function bbox(lists) {
+    let s0 = Infinity, s1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const pts of lists)
+      for (const p of pts || []) {
+        if (p[0] < s0) s0 = p[0]; if (p[0] > s1) s1 = p[0];
+        if (p[1] < z0) z0 = p[1]; if (p[1] > z1) z1 = p[1];
+      }
+    return isFinite(s0) ? { s0, s1, z0, z1, diag: Math.hypot(s1 - s0, z1 - z0) } : null;
+  }
+
+  /* Dirección con que la línea llega a su extremo `end` (0 = primero,
+   * 1 = último), medida sobre los últimos `back` metros de traza y no sólo
+   * el último segmento: una punta digitalizada a mano suele quebrarse. */
+  function endRay(verts, end, back) {
+    const n = verts.length;
+    const tip = end === 0 ? verts[0] : verts[n - 1];
+    const step = end === 0 ? 1 : -1;
+    let k = end === 0 ? 1 : n - 2, acc = 0, prev = tip, q = verts[k];
+    while (k >= 0 && k < n) {
+      q = verts[k];
+      acc += Math.hypot(q[0] - prev[0], q[1] - prev[1]);
+      if (acc >= back) break;
+      prev = q; k += step;
+    }
+    const dx = tip[0] - q[0], dz = tip[1] - q[1], L = Math.hypot(dx, dz);
+    return L < EPS ? null : { tip: tip, dir: [dx / L, dz / L] };
+  }
+
+  function nearestOnAny(targets, p) {
+    let best = null;
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      if (!t || t.length < 2) continue;
+      const h = geom.nearestPointOnPolyline(t, p);
+      if (h && (!best || h[3] < best.d)) best = { i: i, pt: h[2], d: h[3] };
+    }
+    return best;
+  }
+
+  /* Primer cruce del rayo tip + dir·[0, reach] con alguna de `targets`. */
+  function rayHit(tip, dir, reach, targets, minD) {
+    const far = [tip[0] + dir[0] * reach, tip[1] + dir[1] * reach];
+    let best = null;
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      if (!t) continue;
+      for (let k = 0; k < t.length - 1; k++) {
+        const h = geom.segmentIntersection(tip, far, t[k], t[k + 1]);
+        if (!h) continue;
+        const d = h[0] * reach;
+        if (d > (minD || 0) && (!best || d < best.d)) best = { i: i, pt: h[2], d: d };
+      }
+    }
+    return best;
+  }
+
+  /* Recorta el sobrante de la línea más allá de la última falla que cruza
+   * cerca de su extremo: sólo si lo que sobra mide menos de `tol` (una cola
+   * que se pasó; una capa que de verdad atraviesa la falla sigue entera). */
+  function trimOvershoot(verts, end, faults, tol) {
+    const v = end === 0 ? verts.slice().reverse() : verts.slice();
+    const total = geom.polylineLength(v);
+    let acc = 0;
+    for (let i = v.length - 1; i > 0; i--) {
+      const a = v[i - 1], b = v[i];
+      let bestT = null;
+      for (const f of faults)
+        for (let k = 0; k < f.length - 1; k++) {
+          const h = geom.segmentIntersection(a, b, f[k], f[k + 1]);
+          if (h && h[0] < 1 - 1e-9 && (bestT === null || h[0] > bestT[0])) bestT = h;
+        }
+      const segL = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (bestT) {
+        const tail = acc + segL * (1 - bestT[0]);
+        if (tail > tol || total - tail < 2 * tail) return null;
+        const out = v.slice(0, i).concat([bestT[2].slice()]);
+        return end === 0 ? out.reverse() : out;
+      }
+      acc += segL;
+      if (acc > tol) return null;
+    }
+    return null;
+  }
+
+  /* Lleva el extremo `end` (0/1) de `verts` hasta las líneas `targets`
+   * (una polilínea o una lista de ellas): por su propia dirección si el
+   * rayo las toca dentro de 1.5·reach, si no a su punto más cercano cuando
+   * está a menos de `reach`. Si el punto queda detrás de la punta, se mueve
+   * la punta en vez de agregar un vértice. Devuelve una copia. */
+  function seatEnd(verts, end, targets, reach) {
+    const v = verts.map(p => [p[0], p[1]]);
+    if (targets && targets.length && typeof targets[0][0] === "number") targets = [targets];
+    const ts = (targets || []).filter(t => t && t.length >= 2);
+    if (v.length < 2 || !ts.length || !(reach > 0)) return v;
+    const tip = end === 0 ? v[0] : v[v.length - 1];
+    const near = nearestOnAny(ts, tip);
+    const tiny = reach * 1e-6;
+    if (!near || near.d <= tiny) return v;
+    const ray = endRay(v, end, Math.min(reach, geom.polylineLength(v) / 4));
+    const hit = ray ? rayHit(tip, ray.dir, reach * 1.5, ts, tiny) : null;
+    const target = hit ? hit.pt : (near.d <= reach ? near.pt : null);
+    if (!target) return v;
+    const ahead = ray ? (target[0] - tip[0]) * ray.dir[0] + (target[1] - tip[1]) * ray.dir[1] : 1;
+    if (ahead > tiny) {
+      if (end === 0) v.unshift(target.slice()); else v.push(target.slice());
+    } else if (end === 0) v[0] = target.slice();
+    else v[v.length - 1] = target.slice();
+    return v;
+  }
+
+  /* Apoya los extremos de `verts` EXACTAMENTE sobre las fallas `faults`
+   * (listas de vértices). Un extremo a menos de `tol`: si la cruza con una
+   * cola corta, se recorta en el cruce; si no llega, se prolonga por su
+   * propia dirección hasta la falla (alcance `reach`, por defecto 3·tol)
+   * y, si el rayo no la toca, se agrega su proyección más cercana.
+   * Devuelve {vertices, changed}. */
+  function seatOnFaults(verts, faults, tol, reach) {
+    let v = verts.map(p => [p[0], p[1]]);
+    const fs = (faults || []).filter(f => f && f.length >= 2);
+    if (v.length < 2 || !fs.length || !(tol > 0)) return { vertices: v, changed: 0 };
+    reach = reach || tol * 3;
+    const tiny = tol * 1e-6;
+    let changed = 0;
+    for (const end of [0, 1]) {
+      const trimmed = trimOvershoot(v, end, fs, tol);
+      if (trimmed && trimmed.length >= 2) { v = trimmed; changed++; continue; }
+      const tip = end === 0 ? v[0] : v[v.length - 1];
+      const near = nearestOnAny(fs, tip);
+      if (!near || near.d > tol || near.d <= tiny) continue;
+      const nv = seatEnd(v, end, fs, Math.max(tol, reach / 1.5));
+      const nt = end === 0 ? nv[0] : nv[nv.length - 1];
+      if (nv.length !== v.length || nt[0] !== tip[0] || nt[1] !== tip[1]) changed++;
+      v = nv;
+    }
+    return { vertices: v, changed: changed };
+  }
+
+  /* -- arreglo planar ------------------------------------------------------ */
+
+  /* Prolonga los extremos sueltos (para el arreglo, no se escribe en la
+   * sección): un extremo que ya toca otra línea se deja; si no, se sigue su
+   * dirección hasta la primera línea o el borde, con `reach` como tope
+   * (Infinity = hasta lo primero que encuentre). Las de `snapOnly` sólo
+   * saltan huecos menores que `snapTol` (una falla puede morir ciega). */
+  function closeEnds(polys, boundary, opts) {
+    const box = bbox(polys.map(p => p.pts).concat([boundary]));
+    const D = box ? box.diag : 1;
+    const snapTol = opts.snapTol || D * 0.01;
+    const touchTol = D * 1e-6;
+    const out = [];
+    for (let i = 0; i < polys.length; i++) {
+      const P = polys[i];
+      let v = P.pts.map(p => [p[0], p[1]]);
+      const others = polys.filter((_, j) => j !== i).map(p => p.pts);
+      if (boundary) others.push(boundary.concat([boundary[0]]));
+      const reach = P.snapOnly ? snapTol : (opts.reach === undefined ? Infinity : opts.reach);
+      // una línea cerrada (lente, cuerpo) no tiene puntas sueltas
+      const closed = v.length > 3 && Math.hypot(v[0][0] - v[v.length - 1][0],
+                                               v[0][1] - v[v.length - 1][1]) <= touchTol * 10;
+      for (const end of closed ? [] : [0, 1]) {
+        const tip = end === 0 ? v[0] : v[v.length - 1];
+        const near = nearestOnAny(others, tip);
+        if (near && near.d <= touchTol) continue;
+        const ray = endRay(v, end, Math.min(D * 0.02, geom.polylineLength(v) / 4));
+        let target = null;
+        if (ray) {
+          const r = isFinite(reach) ? reach : D * 4;
+          const hit = rayHit(tip, ray.dir, r, others, touchTol);
+          if (hit) target = hit.pt;
+        }
+        if (!target && near && near.d <= snapTol) target = near.pt;
+        if (!target) continue;
+        if (end === 0) v.unshift(target.slice()); else v.push(target.slice());
+      }
+      out.push(Object.assign({}, P, { pts: v }));
+    }
+    return out;
+  }
+
+  /* Caras del arreglo de `polys` ([{pts, cls, id}]) más el anillo
+   * `boundary` (cls "boundary"). Devuelve [{ring, holes, area, edges,
+   * inner}] — `edges`: cada tramo del contorno con {cls, id, ds, len}
+   * recorrido con la cara a la IZQUIERDA (así ds < 0 = la cara está DEBAJO
+   * de ese tramo); `inner`: un punto garantizado dentro. Sólo las caras
+   * dentro del borde. */
+  function faces(polys, boundary, opts) {
+    opts = opts || {};
+    const all = polys.slice();
+    if (boundary && boundary.length >= 3)
+      all.push({ pts: boundary.concat([boundary[0]]), cls: "boundary", id: null });
+    const box = bbox(all.map(p => p.pts));
+    if (!box) return [];
+    const D = box.diag || 1;
+    const mergeTol = opts.mergeTol || D * 1e-7;
+    const segs = [];
+    for (const P of all)
+      for (let k = 0; k < P.pts.length - 1; k++) {
+        const a = P.pts[k], b = P.pts[k + 1];
+        if (Math.hypot(b[0] - a[0], b[1] - a[1]) <= mergeTol) continue;
+        segs.push({ a: a, b: b, cls: P.cls, id: P.id, ts: [[0, a], [1, b]] });
+      }
+    const N = segs.length;
+    // grilla para no probar todos contra todos
+    let lenSum = 0;
+    for (const s of segs) lenSum += Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+    const cell = Math.max(lenSum / Math.max(1, N) * 2, D / 400);
+    const grid = new Map();
+    const cellsOf = function (s) {
+      const i0 = Math.floor((Math.min(s.a[0], s.b[0]) - box.s0) / cell) - 0;
+      const i1 = Math.floor((Math.max(s.a[0], s.b[0]) - box.s0) / cell);
+      const j0 = Math.floor((Math.min(s.a[1], s.b[1]) - box.z0) / cell);
+      const j1 = Math.floor((Math.max(s.a[1], s.b[1]) - box.z0) / cell);
+      const out = [];
+      for (let i = i0 - 1; i <= i1 + 1; i++)
+        for (let j = j0 - 1; j <= j1 + 1; j++) out.push(i * 100003 + j);
+      return out;
+    };
+    segs.forEach(function (s, idx) {
+      for (const c of cellsOf(s)) {
+        let l = grid.get(c);
+        if (!l) grid.set(c, l = []);
+        l.push(idx);
+      }
+    });
+    const stamp = new Int32Array(N).fill(-1);
+    const projT = function (s, p) {
+      const dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1];
+      const L2 = dx * dx + dz * dz;
+      const t = L2 < EPS ? 0 : Math.max(0, Math.min(1,
+        ((p[0] - s.a[0]) * dx + (p[1] - s.a[1]) * dz) / L2));
+      const q = [s.a[0] + t * dx, s.a[1] + t * dz];
+      return [t, q, Math.hypot(q[0] - p[0], q[1] - p[1])];
+    };
+    for (let i = 0; i < N; i++) {
+      const A = segs[i];
+      for (const c of cellsOf(A)) {
+        const l = grid.get(c);
+        if (!l) continue;
+        for (const j of l) {
+          if (j <= i || stamp[j] === i) continue;
+          stamp[j] = i;
+          const B = segs[j];
+          const h = geom.segmentIntersection(A.a, A.b, B.a, B.b);
+          if (h) { A.ts.push([h[0], h[2]]); B.ts.push([h[1], h[2]]); }
+          // extremos que tocan el otro tramo (T casi exactas, colineales)
+          for (const [S, T] of [[A, B], [B, A]])
+            for (const p of [S.a, S.b]) {
+              const r = projT(T, p);
+              if (r[2] <= mergeTol) T.ts.push([r[0], p]);
+            }
+        }
+      }
+    }
+    // nodos (soldados a mergeTol)
+    const nodes = [], nodeGrid = new Map();
+    const nodeOf = function (p) {
+      const gi = Math.round(p[0] / mergeTol), gj = Math.round(p[1] / mergeTol);
+      for (let di = -1; di <= 1; di++)
+        for (let dj = -1; dj <= 1; dj++) {
+          const l = nodeGrid.get((gi + di) + "," + (gj + dj));
+          if (!l) continue;
+          for (const id of l)
+            if (Math.hypot(nodes[id][0] - p[0], nodes[id][1] - p[1]) <= mergeTol) return id;
+        }
+      const id = nodes.length;
+      nodes.push([p[0], p[1]]);
+      const key = gi + "," + gj;
+      (nodeGrid.get(key) || nodeGrid.set(key, []).get(key)).push(id);
+      return id;
+    };
+    const PRI = { horizon: 4, topography: 3, fault: 2, boundary: 1 };
+    const edgeMap = new Map(), edges = [];
+    for (const s of segs) {
+      s.ts.sort((x, y) => x[0] - y[0]);
+      let prev = null;
+      for (const [, p] of s.ts) {
+        const n = nodeOf(p);
+        if (prev !== null && n !== prev) {
+          const key = Math.min(prev, n) + "_" + Math.max(prev, n);
+          const ex = edgeMap.get(key);
+          if (ex === undefined) {
+            edgeMap.set(key, edges.length);
+            edges.push({ u: prev, v: n, cls: s.cls, id: s.id, alive: true });
+          } else if ((PRI[s.cls] || 0) > (PRI[edges[ex].cls] || 0)) {
+            edges[ex].cls = s.cls; edges[ex].id = s.id;
+          }
+        }
+        prev = n;
+      }
+    }
+    // podar colgantes (puntas que no cierran nada)
+    const deg = new Int32Array(nodes.length);
+    const inc = nodes.map(() => []);
+    edges.forEach(function (e, k) { deg[e.u]++; deg[e.v]++; inc[e.u].push(k); inc[e.v].push(k); });
+    const queue = [];
+    for (let n = 0; n < nodes.length; n++) if (deg[n] === 1) queue.push(n);
+    while (queue.length) {
+      const n = queue.pop();
+      if (deg[n] !== 1) continue;
+      for (const k of inc[n]) {
+        const e = edges[k];
+        if (!e.alive) continue;
+        e.alive = false;
+        deg[e.u]--; deg[e.v]--;
+        const o = e.u === n ? e.v : e.u;
+        if (deg[o] === 1) queue.push(o);
+        break;
+      }
+    }
+    // semi-aristas: 2k = u→v, 2k+1 = v→u; salientes ordenadas por ángulo
+    const out = nodes.map(() => []);
+    edges.forEach(function (e, k) {
+      if (!e.alive) return;
+      out[e.u].push(2 * k); out[e.v].push(2 * k + 1);
+    });
+    const from = h => h & 1 ? edges[h >> 1].v : edges[h >> 1].u;
+    const to = h => h & 1 ? edges[h >> 1].u : edges[h >> 1].v;
+    const pos = new Map();
+    out.forEach(function (l, n) {
+      const p = nodes[n];
+      l.sort(function (h1, h2) {
+        const q1 = nodes[to(h1)], q2 = nodes[to(h2)];
+        return Math.atan2(q1[1] - p[1], q1[0] - p[0]) - Math.atan2(q2[1] - p[1], q2[0] - p[0]);
+      });
+      l.forEach((h, i) => pos.set(h, i));
+    });
+    const used = new Uint8Array(edges.length * 2);
+    const cycles = [];
+    for (let h0 = 0; h0 < edges.length * 2; h0++) {
+      if (used[h0] || !edges[h0 >> 1].alive) continue;
+      const ring = [], hs = [];
+      let h = h0, guard = 0;
+      while (!used[h] && guard++ < 4 * edges.length + 10) {
+        used[h] = 1;
+        hs.push(h);
+        ring.push(nodes[from(h)]);
+        const v = to(h), l = out[v];
+        const i = pos.get(h ^ 1);
+        h = l[(i - 1 + l.length) % l.length];
+      }
+      if (h !== h0 || ring.length < 3) continue;
+      const area = geom.polygonArea(ring);
+      cycles.push({ ring: ring, hs: hs, area: area, comp: -1 });
+    }
+    // componentes conexas (para colgar agujeros de la cara que los contiene)
+    const parent = nodes.map((_, i) => i);
+    const findp = function (x) { while (parent[x] !== x) x = parent[x] = parent[parent[x]]; return x; };
+    for (const e of edges) if (e.alive) parent[findp(e.u)] = findp(e.v);
+    for (const c of cycles) c.comp = findp(from(c.hs[0]));
+    const minArea = D * D * 1e-10;
+    const pos_ = cycles.filter(c => c.area > minArea);
+    const neg = cycles.filter(c => c.area < 0);
+    for (const f of pos_) f.holes = [];
+    for (const c of neg) {
+      const p = c.ring[0];
+      let best = null;
+      for (const f of pos_)
+        if (f.comp !== c.comp && (!best || f.area < best.area) &&
+            geom.pointInPolygon(p, f.ring)) best = f;
+      if (best) best.holes.push(c);
+    }
+    const result = [];
+    for (const f of pos_) {
+      const rings = [f.ring].concat(f.holes.map(h => h.ring));
+      const inner = interiorPoint(rings);
+      if (!inner) continue;
+      if (boundary && !geom.pointInPolygon(inner, boundary)) continue;
+      const eds = [];
+      for (const c of [f].concat(f.holes))
+        for (const h of c.hs) {
+          const e = edges[h >> 1], a = nodes[from(h)], b = nodes[to(h)];
+          eds.push({ cls: e.cls, id: e.id, ds: b[0] - a[0], dz: b[1] - a[1],
+                     a: a, b: b });
+        }
+      result.push({ ring: f.ring.map(p => p.slice()),
+                    holes: f.holes.map(h => h.ring.map(p => p.slice())),
+                    area: f.holes.reduce((t, h) => t + h.area, f.area),
+                    edges: eds, inner: inner });
+    }
+    return result;
+  }
+
+  /* Punto interior de un polígono con agujeros (regla par-impar): el
+   * centro del tramo vertical más largo entre varias verticales de prueba. */
+  function interiorPoint(rings) {
+    const box = bbox(rings);
+    if (!box) return null;
+    const xs = [];
+    for (let k = 1; k < 16; k++) xs.push(box.s0 + (box.s1 - box.s0) * k / 16);
+    xs.push(geom.polygonCentroid(rings[0])[0]);
+    let best = null;
+    for (const x of xs) {
+      const zs = [];
+      for (const r of rings)
+        for (let i = 0, n = r.length; i < n; i++) {
+          const p = r[i], q = r[(i + 1) % n];
+          if ((p[0] <= x && q[0] > x) || (q[0] <= x && p[0] > x))
+            zs.push(p[1] + (x - p[0]) / (q[0] - p[0]) * (q[1] - p[1]));
+        }
+      zs.sort((a, b) => a - b);
+      for (let i = 0; i + 1 < zs.length; i += 2) {
+        const L = zs[i + 1] - zs[i];
+        if (!best || L > best.L) best = { L: L, pt: [x, (zs[i] + zs[i + 1]) / 2] };
+      }
+    }
+    return best ? best.pt : null;
+  }
+
+  return { bbox, endRay, rayHit, nearestOnAny, trimOvershoot, seatEnd, seatOnFaults,
+           closeEnds, faces, interiorPoint };
+})();
+
 /* ==== js/restore.js ====
  * StructuralSketcher — restauración estructural, portada de
  * sectionworks v0.26.0 (core/restoration.py / js/restoration.js), sin
@@ -3148,24 +3589,27 @@ SW.restore = (function () {
 })();
 
 /* ==== js/unit_polygons.js ====
- * StructuralSketcher — polígonos de unidad, portados de
- * sectionworks v0.26.0 (core/unit_polygons.py). Cada horizonte es el TECHO
- * de una unidad y su BASE es el horizonte inmediato hacia abajo (por orden
- * declarado en el panel Unidades si todos los horizontes están asignados,
- * o si no por elevación media). El anillo reutiliza los vértices propios
- * de las líneas de referencia; la unidad basal cierra a la elevación
- * mínima de su propio techo. Cada cuerpo se recorta contra las fallas
- * visibles, así una unidad atravesada por una falla queda como un
- * polígono por bloque, terminado justo sobre la traza. */
+ * StructuralSketcher — polígonos de unidad. Cada horizonte es el TECHO de
+ * una unidad. Los cuerpos salen del ARREGLO PLANAR (SW.topology.faces) de
+ * horizontes, fallas, topografía y el BORDE DEL MODELO (sec.model_boundary,
+ * editable con la herramienta Boundary; si no hay, la caja de los
+ * horizontes con un margen abajo): cada cara cerrada es un cuerpo, y su
+ * unidad es la del horizonte que la limita POR ARRIBA (el de más largo
+ * horizontal). Una cara sin horizonte encima (cuña bajo una falla) toma la
+ * unidad siguiente hacia arriba de la que la limita por abajo; una con el
+ * borde o la topografía encima y ningún horizonte es aire. Así la unidad
+ * basal se rellena hasta el borde inferior, los laterales cierran contra
+ * el borde, y dos horizontes curvos que se cruzan o se traslapan quedan
+ * resueltos sin suponer un orden por tramos. Los extremos sueltos se
+ * prolongan (sólo para el cálculo) hasta la primera línea que encuentran. */
 "use strict";
 window.SW = window.SW || {};
 
 SW.unitPolygons = (function () {
   const geom = SW.geom;
-  const KIND = "horizon", FAULT_KIND = "fault";
+  const KIND = "horizon", FAULT_KIND = "fault", TOPO_KIND = "topography";
   const DEFAULT_FILL_OPACITY = 0.5, DEFAULT_STROKE_OPACITY = 1.0;
   const DEFAULT_WIDTH = 2.0, DEFAULT_COLOR = [90, 90, 90];
-  const MIN_AREA = 1e-6, FAULT_SNAP_FRACTION = 0.005;
 
   function meanZ(verts) {
     let t = 0;
@@ -3176,20 +3620,6 @@ SW.unitPolygons = (function () {
   function leftToRight(verts) {
     const out = verts.map(v => [+v[0], +v[1]]);
     if (out.length >= 2 && out[out.length - 1][0] < out[0][0]) out.reverse();
-    return out;
-  }
-
-  function dedupe(ring) {
-    const out = [];
-    for (const pt of ring) {
-      const last = out[out.length - 1];
-      if (!last || Math.abs(pt[0] - last[0]) > 1e-9 || Math.abs(pt[1] - last[1]) > 1e-9)
-        out.push(pt);
-    }
-    while (out.length > 1 &&
-           Math.abs(out[0][0] - out[out.length - 1][0]) <= 1e-9 &&
-           Math.abs(out[0][1] - out[out.length - 1][1]) <= 1e-9)
-      out.pop();
     return out;
   }
 
@@ -3206,95 +3636,6 @@ SW.unitPolygons = (function () {
     return ls.sort((a, b) => meanZ(b.vertices) - meanZ(a.vertices));
   }
 
-  function zAt(verts, s) {
-    if (s < verts[0][0] || s > verts[verts.length - 1][0]) return null;
-    for (let i = 0; i < verts.length - 1; i++) {
-      const s0 = verts[i][0], z0 = verts[i][1];
-      const s1 = verts[i + 1][0], z1 = verts[i + 1][1];
-      if (Math.min(s0, s1) <= s && s <= Math.max(s0, s1)) {
-        if (Math.abs(s1 - s0) < 1e-9) return z0;
-        return z0 + (z1 - z0) * (s - s0) / (s1 - s0);
-      }
-    }
-    return null;
-  }
-
-  function overlap(a, b) {
-    const lo = Math.max(a[0][0], b[0][0]);
-    const hi = Math.min(a[a.length - 1][0], b[b.length - 1][0]);
-    return hi > lo ? [lo, hi] : null;
-  }
-
-  function crossesAny(p, q, cutters) {
-    for (const c of cutters)
-      for (let k = 0; k < c.length - 1; k++)
-        if (geom.segmentIntersection(p, q, c[k], c[k + 1])) return true;
-    return false;
-  }
-
-  function bboxDiagonal() {
-    let s0 = Infinity, s1 = -Infinity, z0 = Infinity, z1 = -Infinity, any = 0;
-    for (const verts of arguments) {
-      if (!verts) continue;
-      for (const p of verts) {
-        any = 1;
-        s0 = Math.min(s0, p[0]); s1 = Math.max(s1, p[0]);
-        z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]);
-      }
-    }
-    return any ? Math.hypot(s1 - s0, z1 - z0) : 0;
-  }
-
-  function pickBase(top, topVerts, prepared, cutters) {
-    let best = null;
-    for (const entry of prepared) {
-      const cand = entry[0], candVerts = entry[1];
-      if (cand.id === top.id) continue;
-      if (top.unit_id && cand.unit_id === top.unit_id) continue;
-      const span = overlap(topVerts, candVerts);
-      if (!span) continue;
-      const sMid = (span[0] + span[1]) / 2;
-      const zTop = zAt(topVerts, sMid), zCand = zAt(candVerts, sMid);
-      if (zTop === null || zCand === null || zCand >= zTop) continue;
-      const otherBlock = crossesAny([sMid, zTop], [sMid, zCand], cutters);
-      const key = [otherBlock ? 1 : 0, -zCand];
-      if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && key[1] < best.key[1]))
-        best = { key: key, line: cand, verts: candVerts };
-    }
-    return best ? [best.line, best.verts] : [null, null];
-  }
-
-  function faultSide(pFrom, pTo, cutters, tol) {
-    for (const c of cutters) {
-      const hFrom = geom.nearestPointOnPolyline(c, pFrom);
-      const hTo = geom.nearestPointOnPolyline(c, pTo);
-      if (!hFrom || !hTo || hFrom[3] > tol || hTo[3] > tol) continue;
-      const tFrom = hFrom[0] + hFrom[1], tTo = hTo[0] + hTo[1];
-      const lo = Math.min(tFrom, tTo), hi = Math.max(tFrom, tTo);
-      const pts = [];
-      for (let k = 0; k < c.length; k++) if (lo < k && k < hi) pts.push([c[k][0], c[k][1]]);
-      if (tFrom > tTo) pts.reverse();
-      return pts;
-    }
-    return [];
-  }
-
-  function ringOf(topVerts, baseVerts, cutters, faultSnap) {
-    let ring;
-    if (baseVerts) {
-      const right = faultSide(topVerts[topVerts.length - 1], baseVerts[baseVerts.length - 1],
-                              cutters || [], faultSnap || 0);
-      const left = faultSide(baseVerts[0], topVerts[0], cutters || [], faultSnap || 0);
-      ring = topVerts.concat(right, baseVerts.slice().reverse(), left);
-    } else {
-      let floor = Infinity;
-      for (const v of topVerts) floor = Math.min(floor, v[1]);
-      ring = topVerts.concat([[topVerts[topVerts.length - 1][0], floor],
-                              [topVerts[0][0], floor]]);
-    }
-    return dedupe(ring);
-  }
-
   function colorOf(line, unit) {
     if (unit && unit.color) return unit.color.slice();
     const c = (line.style || {}).color;
@@ -3302,23 +3643,77 @@ SW.unitPolygons = (function () {
   }
 
   function centroidS(ring) {
-    let a = 0, cs = 0;
-    for (let i = 0, n = ring.length; i < n; i++) {
-      const p = ring[i], q = ring[(i + 1) % n];
-      const f = p[0] * q[1] - q[0] * p[1];
-      a += f; cs += (p[0] + q[0]) * f;
-    }
-    if (Math.abs(a) < 1e-12) {
-      let s0 = Infinity, s1 = -Infinity;
-      for (const p of ring) { s0 = Math.min(s0, p[0]); s1 = Math.max(s1, p[0]); }
-      return (s0 + s1) / 2;
-    }
-    return cs / (3 * a);
+    return geom.polygonCentroid(ring)[0];
   }
 
-  /* Cuerpos de unidad de la pila de horizontes, del techo hacia abajo y,
-   * en cada cuerpo, de izquierda a derecha. `faults` son las trazas
-   * contra las que recortar; `opts`: {clip_faults, fill_opacity,
+  /* Borde automático: el ancho de los horizontes (y la topografía) y, en
+   * vertical, su caja con un margen — abajo, para que la unidad basal
+   * tenga piso aunque nadie haya dibujado el borde. */
+  function autoBoundary(lines) {
+    const box = SW.topology.bbox(lines.map(l => l.vertices));
+    if (!box) return null;
+    const h = Math.max(box.z1 - box.z0, (box.s1 - box.s0) * 0.05, 1e-6);
+    const z0 = box.z0 - 0.08 * h, z1 = box.z1 + 0.08 * h;
+    return [[box.s0, z0], [box.s1, z0], [box.s1, z1], [box.s0, z1]];
+  }
+
+  /* Anillo del borde guardado en la sección (o null). Se acepta
+   * {vertices:[...]} o una lista de vértices. */
+  function boundaryRing(b) {
+    const v = b && (Array.isArray(b) ? b : b.vertices);
+    return v && v.length >= 3 ? v.map(p => [+p[0], +p[1]]) : null;
+  }
+
+  /* ¿Qué horizonte define la cara? Peso horizontal NETO de cada horizonte
+   * del contorno: > 0 si está encima de la cara (en un limbo volcado los
+   * tramos opuestos se descuentan). */
+  function classify(face, ctx) {
+    const net = {};
+    let airAbove = false, overTopo = false;
+    const tiny = ctx.D * 1e-9;
+    for (const e of face.edges) {
+      if (e.cls === KIND) net[e.id] = (net[e.id] || 0) - e.ds;
+      else if (e.cls === "boundary" && e.ds < -tiny) airAbove = true;
+      else if (e.cls === TOPO_KIND && e.ds > tiny) overTopo = true;
+    }
+    let top = null, bot = null;
+    for (const id of Object.keys(net)) {
+      const w = net[id];
+      if (w > tiny && (!top || w > top.w)) top = { id: id, w: w };
+      if (w < -tiny && (!bot || -w > bot.w)) bot = { id: id, w: -w };
+    }
+    if (top) return { top: top.id, base: bot ? bot.id : null };
+    if (overTopo || airAbove) return null;
+    if (bot) {
+      // cuña sin techo propio (bajo una falla): la unidad que sigue hacia
+      // arriba de la que la limita por abajo
+      const i = ctx.rank.get(bot.id);
+      const baseLine = ctx.byId[bot.id];
+      for (let k = i - 1; k >= 0; k--) {
+        const cand = ctx.ordered[k];
+        if (baseLine.unit_id && cand.unit_id === baseLine.unit_id) continue;
+        return { top: cand.id, base: bot.id };
+      }
+      return null;
+    }
+    // sólo fallas alrededor: el primer horizonte por encima en la vertical
+    const p = face.inner;
+    let best = null;
+    for (const P of ctx.polys) {
+      if (P.cls !== KIND) continue;
+      const hits = geom.polylineIntersections(P.pts,
+        [[p[0], p[1]], [p[0], p[1] + ctx.D * 4]]);
+      for (const h of hits) {
+        const dz = h[2][1] - p[1];
+        if (dz > 0 && (!best || dz < best.dz)) best = { id: P.id, dz: dz };
+      }
+    }
+    return best ? { top: best.id, base: null } : null;
+  }
+
+  /* Cuerpos de unidad, del techo hacia abajo y, en cada unidad, de
+   * izquierda a derecha. `faults`: trazas de falla; `opts`: {clip_faults,
+   * boundary (anillo o {vertices}), close_ends, max_gap, fill_opacity,
    * stroke_opacity, show_label}. */
   function build(lines, units, faults, opts) {
     opts = opts || {};
@@ -3330,44 +3725,59 @@ SW.unitPolygons = (function () {
     const strokeOp = opts.stroke_opacity === undefined ? DEFAULT_STROKE_OPACITY : +opts.stroke_opacity;
     const showLabel = opts.show_label === undefined ? true : !!opts.show_label;
     const clip = opts.clip_faults === undefined ? true : !!opts.clip_faults;
-    const cutters = [];
+    if (!usable.length) return [];
+    const topo = (lines || []).filter(l => l && l.kind === TOPO_KIND && (l.vertices || []).length >= 2);
+    const boundary = boundaryRing(opts.boundary) || autoBoundary(usable.concat(topo));
+    let polys = usable.map(l => ({ pts: l.vertices.map(v => [+v[0], +v[1]]), cls: KIND, id: l.id }))
+      .concat(topo.map(l => ({ pts: l.vertices.map(v => [+v[0], +v[1]]), cls: TOPO_KIND, id: l.id })));
     if (clip) {
       const seen = new Set();
       for (const f of (lines || []).concat(faults || [])) {
         if (!f || f.kind !== FAULT_KIND || (f.vertices || []).length < 2 || seen.has(f.id)) continue;
         seen.add(f.id);
-        cutters.push(f.vertices.map(v => [+v[0], +v[1]]));
+        polys.push({ pts: f.vertices.map(v => [+v[0], +v[1]]), cls: FAULT_KIND,
+                     id: f.id, snapOnly: true });
       }
     }
-    const prepared = ordered.map(l => [l, leftToRight(l.vertices)]);
+    if (opts.close_ends !== false)
+      polys = SW.topology.closeEnds(polys, boundary,
+        { reach: +opts.max_gap > 0 ? +opts.max_gap : Infinity });
+    const faces = SW.topology.faces(polys, boundary);
+    const box = SW.topology.bbox(polys.map(p => p.pts).concat([boundary]));
+    const ctx = { D: box ? box.diag : 1, polys: polys, ordered: ordered,
+                  rank: new Map(ordered.map((l, i) => [l.id, i])),
+                  byId: Object.fromEntries(usable.map(l => [l.id, l])) };
+    const groups = new Map();
+    for (const f of faces) {
+      const c = classify(f, ctx);
+      if (!c) continue;
+      if (!groups.has(c.top)) groups.set(c.top, []);
+      groups.get(c.top).push({ face: f, base: c.base });
+    }
     const out = [];
-    for (const entry of prepared) {
-      const top = entry[0], topVerts = entry[1];
-      const picked = pickBase(top, topVerts, prepared, cutters);
-      const base = picked[0], baseVerts = picked[1];
-      const snap = bboxDiagonal(topVerts, baseVerts) * FAULT_SNAP_FRACTION;
-      const ring = ringOf(topVerts, baseVerts, cutters, snap);
-      if (ring.length < 3 || Math.abs(geom.polygonArea(ring)) < MIN_AREA) continue;
-      let pieces = cutters.length ? geom.clipPolygonByPolylines(ring, cutters) : [ring];
-      pieces = pieces.filter(p => p.length >= 3 && Math.abs(geom.polygonArea(p)) >= MIN_AREA);
-      pieces.sort((a, b) => centroidS(a) - centroidS(b));
+    for (const top of ordered) {
+      const list = groups.get(top.id);
+      if (!list) continue;
+      list.sort((a, b) => centroidS(a.face.ring) - centroidS(b.face.ring));
       const unit = unitsById[top.unit_id];
-      pieces.forEach(function (piece, part) {
-        out.push({
+      list.forEach(function (it, part) {
+        const poly = {
           id: SW.model.genId(), name: unit ? unit.name : (top.name || "Unit"),
-          vertices: piece, unit_id: top.unit_id || null, color: colorOf(top, unit),
+          vertices: it.face.ring, unit_id: top.unit_id || null, color: colorOf(top, unit),
           fill_opacity: fillOp, stroke_opacity: strokeOp,
           width: +((top.style || {}).width) || DEFAULT_WIDTH,
           visible: true, show_label: showLabel,
-          top_line_id: top.id, base_line_id: base ? base.id : null, part: part,
-        });
+          top_line_id: top.id, base_line_id: it.base || null, part: part,
+        };
+        if (it.face.holes.length) poly.holes = it.face.holes;
+        out.push(poly);
       });
     }
     return out;
   }
 
-  return { build, stratigraphicSort, leftToRight, KIND, FAULT_KIND,
-           DEFAULT_FILL_OPACITY, DEFAULT_STROKE_OPACITY };
+  return { build, stratigraphicSort, leftToRight, autoBoundary, boundaryRing,
+           KIND, FAULT_KIND, DEFAULT_FILL_OPACITY, DEFAULT_STROKE_OPACITY };
 })();
 
 /* ==== js/well_patterns.js ====
@@ -4185,6 +4595,10 @@ SW.model = (function () {
       // a partir de los horizontes; se reconstruyen con el botón "Build" del
       // panel — no se editan a mano, así que no llevan undo por vértice.
       polygons: [],
+      // Borde del modelo para Unit polygons: {vertices:[[s,z],...]} (anillo
+      // cerrado implícito) o null = automático (caja de los horizontes).
+      // Se edita con la herramienta Boundary (js/tools/boundary.js).
+      model_boundary: null,
       // Sondajes: collar (s, z_collar) + columna de intervalos con espesor
       // y patrón litológico. Ver SW.wellPatterns.
       wells: [],
@@ -4250,6 +4664,9 @@ SW.model = (function () {
                              width: 2, visible: true, show_label: true,
                              top_line_id: null, base_line_id: null, part: 0 }, p);
     });
+    const mb = sec.model_boundary;
+    sec.model_boundary = mb && (mb.vertices || []).length >= 3
+      ? { vertices: mb.vertices.map(v => [+v[0], +v[1]]) } : null;
     sec.wells = (sec.wells || []).map(function (w) {
       return Object.assign({ id: genId(), name: "W1", s: 0, z_collar: 0,
                              intervals: [], visible: true, width_px: 18,
@@ -4504,6 +4921,9 @@ SW.model = (function () {
       case "set_polygons":
         sec.polygons = clone(op.polygons || []);
         break;
+      case "set_model_boundary":
+        sec.model_boundary = op.boundary ? clone(op.boundary) : null;
+        break;
 
       /* -- sondajes ---------------------------------------------------- */
       case "add_well":
@@ -4555,8 +4975,12 @@ SW.model = (function () {
       b.p0 = [fs(b.p0[0]), fz(b.p0[1])];
       b.p1 = [fs(b.p1[0]), fz(b.p1[1])];
     }
-    for (const p of sec.polygons || [])
+    for (const p of sec.polygons || []) {
       p.vertices = p.vertices.map(v => [fs(v[0]), fz(v[1])]);
+      if (p.holes) p.holes = p.holes.map(h => h.map(v => [fs(v[0]), fz(v[1])]));
+    }
+    if (sec.model_boundary)
+      sec.model_boundary.vertices = sec.model_boundary.vertices.map(v => [fs(v[0]), fz(v[1])]);
     for (const w of sec.wells || []) { w.s = fs(w.s); w.z_collar = fz(w.z_collar); }
     sec.length = Math.abs(as) * sec.length;
     const z0 = fz(sec.z_min), z1 = fz(sec.z_max);
@@ -5282,6 +5706,7 @@ SW.render = (function () {
     if (st.showFrame) drawSectionFrame(ctx, sec);
     drawImages(ctx, sec);
     if (st.showPolygons) drawPolygons(ctx, sec, st);
+    if (st.showPolygons) drawModelBoundary(ctx, sec);
     drawLines(ctx, sec, st);
     drawDips(ctx, sec, st);
     if (st.showWells) drawWells(ctx, sec, st);
@@ -5344,11 +5769,13 @@ SW.render = (function () {
       if (p.visible === false || (p.vertices || []).length < 3) continue;
       const rgb = (p.color || [90, 90, 90]).join(",");
       ctx.beginPath();
-      p.vertices.forEach((v, i) =>
-        i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
-      ctx.closePath();
+      for (const ring of [p.vertices].concat(p.holes || [])) {
+        ring.forEach((v, i) =>
+          i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+        ctx.closePath();
+      }
       ctx.fillStyle = "rgba(" + rgb + "," + (p.fill_opacity === undefined ? 0.5 : p.fill_opacity) + ")";
-      ctx.fill();
+      ctx.fill("evenodd");
       if (p.stroke_opacity !== 0) {
         ctx.strokeStyle = "rgba(" + rgb + "," + (p.stroke_opacity === undefined ? 1 : p.stroke_opacity) + ")";
         ctx.lineWidth = p.width || 1.5;
@@ -5362,6 +5789,27 @@ SW.render = (function () {
         ctx.fillText(p.name, V.sx(lp[0]), V.zy(lp[1]));
       }
     }
+  }
+
+  /* Borde del modelo (sec.model_boundary): hasta dónde se rellenan los
+   * cuerpos de Unit polygons. Línea de trazos tenue; sólo en pantalla —
+   * la exportación no lo lleva. Con la herramienta Boundary activa, ella
+   * misma lo redibuja con sus tiradores. */
+  function drawModelBoundary(ctx, sec) {
+    const b = sec.model_boundary;
+    if (!b || (b.vertices || []).length < 3) return;
+    if (SW.tools && SW.tools.activeToolName && SW.tools.activeToolName() === "boundary") return;
+    const V = SW.view;
+    ctx.save();
+    ctx.strokeStyle = "rgba(120,90,40,0.75)";
+    ctx.setLineDash([10, 4, 2, 4]);
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    b.vertices.forEach((v, i) =>
+      i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
   }
 
   /* Columnas de sondaje (SW.wellPatterns): un rectángulo de ancho fijo en
@@ -5911,7 +6359,15 @@ SW.exporter = (function () {
       for (const poly of sec.polygons || []) {
         if (poly.visible === false || (poly.vertices || []).length < 3) continue;
         const rgb = (poly.color || [90, 90, 90]).join(",");
-        out.push('<polygon points="' + poly.vertices.map(v =>
+        out.push((poly.holes || []).length
+          ? '<path fill-rule="evenodd" d="' + [poly.vertices].concat(poly.holes).map(r =>
+              "M" + r.map(v => sx(v[0]).toFixed(1) + "," + zy(v[1]).toFixed(1)).join("L") + "Z").join("") +
+            '" fill="rgba(' + rgb + "," +
+            (poly.fill_opacity === undefined ? 0.5 : poly.fill_opacity) +
+            ')" stroke="rgba(' + rgb + "," +
+            (poly.stroke_opacity === undefined ? 1 : poly.stroke_opacity) +
+            ')" stroke-width="' + (poly.width || 1.5) + '"/>'
+          : '<polygon points="' + poly.vertices.map(v =>
           sx(v[0]).toFixed(1) + "," + zy(v[1]).toFixed(1)).join(" ") +
           '" fill="rgba(' + rgb + "," +
           (poly.fill_opacity === undefined ? 0.5 : poly.fill_opacity) +
@@ -6498,6 +6954,7 @@ SW.tools = (function () {
     const t = active();
     if (t && t.activate) t.activate();
     if (SW.panels && SW.panels.restore) SW.panels.restore.render();
+    if (SW.panels && SW.panels.polygons) SW.panels.polygons.render();
     if (SW.view) SW.view.requestDraw();
   }
 
@@ -7184,6 +7641,40 @@ window.SW = window.SW || {};
     }
   };
 
+  /* Topología capa-falla (SW.topology.seatOnFaults): cada extremo de capa a
+   * menos de la distancia de Tidy (vacía: ~24 px) de una falla visible
+   * termina EXACTAMENTE sobre ella — se recorta la cola que la cruzó o se
+   * prolonga por su dirección la que no llegó. Sobre la selección o, sin
+   * selección, sobre todas las capas visibles. Un solo comando de undo. */
+  SW.actions.snapToFaults = function () {
+    const sec = SW.model.state.sec;
+    const sel = SW.view.selectedLines();
+    const lines = (sel.length ? sel : (sec.lines || []).filter(l => l.visible !== false))
+      .filter(l => !l.locked && l.kind !== "fault" && (l.vertices || []).length >= 2);
+    const faults = (sec.lines || []).filter(l => l.kind === "fault" &&
+      l.visible !== false && (l.vertices || []).length >= 2).map(l => l.vertices);
+    if (!lines.length || !faults.length) {
+      SW.view.status(faults.length ? "No layers to snap." : "No visible faults to snap to.");
+      return;
+    }
+    const distEl = document.getElementById("tidy-dist");
+    const user = distEl && String(distEl.value).trim() !== "" ? +distEl.value : NaN;
+    const tol = isFinite(user) && user > 0 ? user : SW.view.tolS(24);
+    const redo = [], undo = [];
+    let ends = 0;
+    for (const l of lines) {
+      const r = SW.topology.seatOnFaults(l.vertices, faults, tol);
+      if (!r.changed) continue;
+      ends += r.changed;
+      redo.push({ op: "replace_vertices", id: l.id, vertices: r.vertices });
+      undo.push({ op: "replace_vertices", id: l.id, vertices: l.vertices });
+    }
+    if (!redo.length) { SW.view.status("Every layer end near a fault already sits on it."); return; }
+    SW.undo.push({ label: "Snap " + ends + " end(s) to faults", redo: redo, undo: undo });
+    SW.view.status("Snapped " + ends + " layer end(s) onto faults (" + redo.length + " line(s)).");
+    SW.view.requestDraw();
+  };
+
   /* minDist>0 cambia a decimación por distancia mínima (descarta vértices a
    * menos de minDist metros del último conservado) en vez de
    * Douglas-Peucker; son excluyentes por llamada, no se combinan. */
@@ -7489,21 +7980,46 @@ window.SW = window.SW || {};
   };
 
   /* Construye los polígonos de unidad (SW.unitPolygons.build) a partir de
-   * los horizontes visibles y las fallas visibles, y reemplaza sec.polygons
-   * entero en un solo comando de undo. */
+   * los horizontes visibles, las fallas visibles y el borde del modelo
+   * (sec.model_boundary, o automático), y reemplaza sec.polygons entero en
+   * un solo comando de undo. Las opciones que no vengan salen de los
+   * ajustes del panel (Clip by faults, Close loose ends, Max gap). */
   SW.actions.buildUnitPolygons = function (opts) {
     const sec = SW.model.state.sec;
+    const set = SW.settings.state;
+    opts = Object.assign({
+      clip_faults: set.polygonClipFaults !== false,
+      close_ends: set.polygonCloseEnds !== false,
+      max_gap: +set.polygonMaxGap > 0 ? +set.polygonMaxGap : 0,
+      boundary: sec.model_boundary,
+    }, opts || {});
     const before = SW.model.clone(sec.polygons || []);
     const lines = (sec.lines || []).filter(l => l.visible !== false);
-    const after = SW.unitPolygons.build(lines, sec.horizons || [], lines, opts || {});
+    let after;
+    try {
+      after = SW.unitPolygons.build(lines, sec.horizons || [], lines, opts);
+    } catch (e) {
+      console.error(e);
+      SW.view.status("Unit polygons failed: " + (e.message || e));
+      return null;
+    }
+    // la visibilidad elegida por cuerpo sobrevive a la reconstrucción
+    const hidden = new Set(before.filter(p => p.visible === false)
+      .map(p => p.top_line_id + ":" + p.part));
+    for (const p of after) if (hidden.has(p.top_line_id + ":" + p.part)) p.visible = false;
+    // `opts.with`: otro comando que va en el MISMO paso de undo (editar el
+    // borde y rehacer los rellenos es una sola acción para el usuario)
+    const w = opts.with || { redo: [], undo: [] };
     SW.undo.push({
-      label: "Build unit polygons",
-      redo: [{ op: "set_polygons", polygons: after }],
-      undo: [{ op: "set_polygons", polygons: before }],
+      label: w.label || "Build unit polygons",
+      redo: w.redo.concat([{ op: "set_polygons", polygons: after }]),
+      undo: [{ op: "set_polygons", polygons: before }].concat(w.undo),
     });
-    SW.view.status(after.length
-      ? "Built " + after.length + " unit polygon piece(s)."
-      : "No unit polygons built: no horizon lines to fill between.");
+    if (!opts.quiet || !after.length)
+      SW.view.status(after.length
+        ? "Built " + after.length + " unit polygon piece(s)" +
+          (sec.model_boundary ? " inside the model boundary." : " (automatic boundary).")
+        : "No unit polygons built: no horizon lines to fill between.");
     SW.view.requestDraw();
     if (SW.panels && SW.panels.polygons) SW.panels.polygons.render();
     return after;
@@ -7607,7 +8123,10 @@ window.SW = window.SW || {};
       { label: "Simplify nodes" + n,
         disabled: !anyEditable, action: () => SW.actions.simplifySelected() },
       { label: "Tidy (snap/dedupe)" + n,
-        disabled: !anyEditable, action: () => SW.actions.tidySelected() });
+        disabled: !anyEditable, action: () => SW.actions.tidySelected() },
+      { label: "Snap ends to faults" + n,
+        disabled: !anyEditable || !group.some(l => l.kind !== "fault"),
+        action: () => SW.actions.snapToFaults() });
     if (group.some(l => l.kind === "fault"))
       items.push({ label: "Follow line", disabled: !anyEditable,
                    action: () => SW.actions.followLine() });
@@ -9287,6 +9806,226 @@ window.SW = window.SW || {};
 
   SW.panels = SW.panels || {};
   SW.panels.imageSelection = selectedImage;
+})();
+
+/* ==== js/tools/boundary.js ====
+ * Herramienta: Borde del modelo (sec.model_boundary) — el área donde Unit
+ * polygons rellena los cuerpos: la unidad basal baja hasta su lado
+ * inferior y las capas que no llegan a los laterales se prolongan hasta
+ * ellos. Arrastrar un vértice lo mueve; arrastrar un lado lo traslada en
+ * perpendicular (así el fondo baja sin torcerse); doble click sobre un
+ * lado agrega un vértice; click derecho o Supr sobre un vértice lo quita.
+ * Sin borde, o con Shift, arrastrar en vacío dibuja un rectángulo nuevo.
+ * Cada edición es un comando de undo y, si ya había polígonos, se
+ * reconstruyen solos. */
+"use strict";
+window.SW = window.SW || {};
+
+(function () {
+  const HANDLE_PX = () => SW.view.hitPx(8);
+  let drag = null;      // {mode, before, i, start, n, base}
+  let hoverV = null;
+
+  function current() {
+    const b = SW.model.state.sec.model_boundary;
+    return b && (b.vertices || []).length >= 3 ? b : null;
+  }
+
+  function hitVertex(b, pos) {
+    const V = SW.view;
+    let best = null, bestD = HANDLE_PX();
+    b.vertices.forEach(function (v, i) {
+      const d = Math.hypot(V.sx(v[0]) - pos.x, V.zy(v[1]) - pos.y);
+      if (d <= bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }
+
+  function hitEdge(b, pos) {
+    const V = SW.view, vs = b.vertices;
+    let best = null, bestD = HANDLE_PX();
+    for (let i = 0; i < vs.length; i++) {
+      const a = vs[i], c = vs[(i + 1) % vs.length];
+      const ax = V.sx(a[0]), ay = V.zy(a[1]), cx = V.sx(c[0]), cy = V.zy(c[1]);
+      const dx = cx - ax, dy = cy - ay, L2 = dx * dx + dy * dy;
+      const t = L2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.y - ay) * dy) / L2));
+      const d = Math.hypot(ax + t * dx - pos.x, ay + t * dy - pos.y);
+      if (d <= bestD) { bestD = d; best = { i: i, t: t }; }
+    }
+    return best;
+  }
+
+  function commit(label, before, after) {
+    if (JSON.stringify(before) === JSON.stringify(after)) { SW.view.requestDraw(); return; }
+    const cmd = { label: label,
+                  redo: [{ op: "set_model_boundary", boundary: after }],
+                  undo: [{ op: "set_model_boundary", boundary: before }] };
+    // con rellenos ya construidos, se rehacen en el mismo paso de undo
+    if ((SW.model.state.sec.polygons || []).length && SW.actions.buildUnitPolygons)
+      SW.actions.buildUnitPolygons({ quiet: true, boundary: after, with: cmd });
+    else SW.undo.push(cmd);
+    if (SW.panels && SW.panels.polygons) SW.panels.polygons.render();
+    SW.view.requestDraw();
+  }
+
+  function snapshot() {
+    const b = current();
+    return b ? SW.model.clone(b) : null;
+  }
+
+  /* Borde automático (lo que usa Build polygons sin borde propio) como
+   * punto de partida editable. */
+  SW.actions = SW.actions || {};
+  SW.actions.boundaryFromAuto = function () {
+    const sec = SW.model.state.sec;
+    const lines = (sec.lines || []).filter(l => l.visible !== false &&
+      (l.kind === "horizon" || l.kind === "topography") && (l.vertices || []).length >= 2);
+    const ring = SW.unitPolygons.autoBoundary(lines);
+    if (!ring) { SW.view.status("Draw some horizons first, or Shift+drag a rectangle."); return null; }
+    commit("Model boundary: fit to lines", snapshot(), { vertices: ring });
+    return ring;
+  };
+  SW.actions.clearBoundary = function () {
+    const b = snapshot();
+    if (!b) return;
+    commit("Model boundary: automatic", b, null);
+    SW.view.status("Model boundary cleared — Build polygons fits one to the horizons.");
+  };
+
+  SW.tools.register("boundary", {
+    cursor: "crosshair",
+    hint: "Model boundary: drag a corner or a side (sides move square to " +
+          "themselves); double click a side adds a corner, right click or " +
+          "Del removes one; Shift+drag (or drag with no boundary) draws a " +
+          "new rectangle. Polygons are rebuilt on every change.",
+    deactivate: function () { drag = null; hoverV = null; },
+    onDown: function (e, pos) {
+      if (e.button !== 0) return;
+      const b = current();
+      const p = SW.view.toSection(pos);
+      if (b && !e.shiftKey) {
+        const vi = hitVertex(b, pos);
+        if (vi !== null) {
+          drag = { mode: "vertex", before: SW.model.clone(b), i: vi };
+          return "capture";
+        }
+        const eh = hitEdge(b, pos);
+        if (eh) {
+          const a = b.vertices[eh.i], c = b.vertices[(eh.i + 1) % b.vertices.length];
+          let nx = -(c[1] - a[1]), nz = c[0] - a[0];
+          const L = Math.hypot(nx, nz) || 1;
+          drag = { mode: "edge", before: SW.model.clone(b), i: eh.i,
+                   start: [p.s, p.z], n: [nx / L, nz / L] };
+          return "capture";
+        }
+        return;
+      }
+      drag = { mode: "rect", before: b ? SW.model.clone(b) : null, start: [p.s, p.z] };
+      return "capture";
+    },
+    onMove: function (e, pos) {
+      const b = current();
+      if (!drag) {
+        const h = b ? hitVertex(b, pos) : null;
+        if (h !== hoverV) { hoverV = h; SW.view.requestDraw(); }
+        return;
+      }
+      const p = SW.view.toSection(pos);
+      const sec = SW.model.state.sec;
+      if (drag.mode === "rect") {
+        const s0 = Math.min(drag.start[0], p.s), s1 = Math.max(drag.start[0], p.s);
+        const z0 = Math.min(drag.start[1], p.z), z1 = Math.max(drag.start[1], p.z);
+        sec.model_boundary = { vertices: [[s0, z0], [s1, z0], [s1, z1], [s0, z1]] };
+      } else if (drag.mode === "vertex") {
+        b.vertices[drag.i] = [p.s, p.z];
+      } else {
+        const ds = p.s - drag.start[0], dz = p.z - drag.start[1];
+        const k = ds * drag.n[0] + dz * drag.n[1];
+        const vs = drag.before.vertices, n = vs.length;
+        for (const j of [drag.i, (drag.i + 1) % n])
+          b.vertices[j] = [vs[j][0] + k * drag.n[0], vs[j][1] + k * drag.n[1]];
+      }
+      SW.view.requestDraw();
+    },
+    onUp: function () {
+      if (!drag) return;
+      const d = drag;
+      drag = null;
+      const sec = SW.model.state.sec;
+      let after = sec.model_boundary ? SW.model.clone(sec.model_boundary) : null;
+      sec.model_boundary = d.before;          // el comando lo reaplica
+      if (d.mode === "rect" && after) {
+        const v = after.vertices;
+        const V = SW.view;
+        if (Math.abs(V.sx(v[1][0]) - V.sx(v[0][0])) < 6 ||
+            Math.abs(V.zy(v[2][1]) - V.zy(v[1][1])) < 6) after = d.before;
+      }
+      commit(d.mode === "rect" ? "Model boundary: draw" :
+             d.mode === "vertex" ? "Model boundary: move corner" : "Model boundary: move side",
+             d.before, after);
+    },
+    onClick: function (e, pos) {
+      const b = current();
+      if (!b || e.button !== 2) return;
+      const vi = hitVertex(b, pos);
+      if (vi === null || b.vertices.length <= 3) return;
+      const after = SW.model.clone(b);
+      after.vertices.splice(vi, 1);
+      commit("Model boundary: remove corner", SW.model.clone(b), after);
+    },
+    onDblClick: function (e, pos) {
+      const b = current();
+      if (!b || hitVertex(b, pos) !== null) return;
+      const eh = hitEdge(b, pos);
+      if (!eh) return;
+      const p = SW.view.toSection(pos);
+      const after = SW.model.clone(b);
+      after.vertices.splice(eh.i + 1, 0, [p.s, p.z]);
+      commit("Model boundary: add corner", SW.model.clone(b), after);
+    },
+    onKey: function (e) {
+      if ((e.key === "Delete" || e.key === "Backspace") && hoverV !== null) {
+        const b = current();
+        if (!b || b.vertices.length <= 3) return false;
+        const after = SW.model.clone(b);
+        after.vertices.splice(hoverV, 1);
+        hoverV = null;
+        commit("Model boundary: remove corner", SW.model.clone(b), after);
+        return true;
+      }
+      if (e.key === "Escape" && drag) {
+        SW.model.state.sec.model_boundary = drag.before;
+        drag = null;
+        SW.view.requestDraw();
+        return true;
+      }
+      return false;
+    },
+    drawOverlay: function (ctx) {
+      const b = current();
+      if (!b) return;
+      const V = SW.view;
+      ctx.save();
+      ctx.strokeStyle = "rgba(160,100,20,0.95)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 4, 2, 4]);
+      ctx.beginPath();
+      b.vertices.forEach((v, i) =>
+        i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const r = Math.max(4, HANDLE_PX() * 0.6);
+      b.vertices.forEach(function (v, i) {
+        ctx.beginPath();
+        ctx.rect(V.sx(v[0]) - r, V.zy(v[1]) - r, 2 * r, 2 * r);
+        ctx.fillStyle = i === hoverV ? "rgba(160,100,20,1)" : "#fff";
+        ctx.fill();
+        ctx.stroke();
+      });
+      ctx.restore();
+    },
+  });
 })();
 
 /* ==== js/tools/layer_cake.js ==== */
@@ -13370,10 +14109,20 @@ SW.forward = (function () {
   }
 
   /* Corta una polilínea deformada donde un segmento cruza la falla (el
-   * tramo que uniría bloque colgante y yaciente). */
+   * tramo que uniría bloque colgante y yaciente) y APOYA cada orilla del
+   * corte sobre la falla: la pieza se prolonga por su propia dirección
+   * hasta tocarla (o, si el rayo no la toca, hasta su punto más cercano),
+   * así el contacto capa-falla queda cerrado y no a un segmento de ella. */
   function splitAtFault(verts, fault) {
     const pieces = [];
-    let cur = [verts[0]];
+    let cur = [verts[0]], openStart = false;
+    const close = function (pc, startCut, endCut, reach) {
+      let v = pc;
+      if (endCut) v = SW.topology.seatEnd(v, 1, fault, reach);
+      if (startCut) v = SW.topology.seatEnd(v, 0, fault, reach);
+      return v;
+    };
+    let lastReach = 0;
     for (let i = 1; i < verts.length; i++) {
       const a = verts[i - 1], b = verts[i];
       let cut = false;
@@ -13382,11 +14131,14 @@ SW.forward = (function () {
         if (h && h[0] > 1e-7 && h[0] < 1 - 1e-7) cut = true;
       }
       if (cut) {
-        if (cur.length >= 2) pieces.push(cur);
+        const reach = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (cur.length >= 2) pieces.push(close(cur, openStart, true, Math.max(reach, lastReach)));
         cur = [b];
+        openStart = true;
+        lastReach = reach;
       } else cur.push(b);
     }
-    if (cur.length >= 2) pieces.push(cur);
+    if (cur.length >= 2) pieces.push(close(cur, openStart, false, lastReach));
     return pieces;
   }
 
@@ -13937,6 +14689,19 @@ window.SW = window.SW || {};
       view.axActive = fr.axActive;
       view.axInactive = fr.axInactive.map(a => ({ kind: a.kind, pieces: cut(a.pts) }));
     }
+    /* Topología: toda capa que termina cerca de una falla (la activa, el
+     * retro, los splays o una pasiva que viaja con las capas) queda apoyada
+     * EXACTAMENTE sobre ella — se recorta la cola que la cruzó o se prolonga
+     * la que no llegó —, así los cortes no quedan colgando a un segmento de
+     * la falla y Unit polygons cierra los cuerpos. */
+    const faultSet = view.faults.slice();
+    for (const e of view.lines)
+      if (e.line.kind === "fault") for (const pc of e.pieces) faultSet.push(pc);
+    const seatTol = res.sp * 4;
+    const seat = pc => SW.topology.seatOnFaults(pc, faultSet, seatTol).vertices;
+    for (const e of view.lines)
+      if (e.line.kind !== "fault") e.pieces = e.pieces.map(seat);
+    for (const g of view.growth) g.pts = seat(g.pts);
     res.views[i] = view;
     return view;
   }
@@ -15357,7 +16122,7 @@ SW.panels.polygons = (function () {
 
     const clipRow = document.createElement("label");
     clipRow.className = "rail-check";
-    clipRow.style.marginBottom = "6px";
+    clipRow.style.cssText = "display:flex;align-items:center;gap:4px;margin-bottom:4px;";
     const clipChk = document.createElement("input");
     clipChk.type = "checkbox";
     clipChk.checked = SW.settings.state.polygonClipFaults !== false;
@@ -15368,14 +16133,90 @@ SW.panels.polygons = (function () {
     clipRow.appendChild(document.createTextNode(" Clip by faults"));
     body.appendChild(clipRow);
 
+    const closeRow = document.createElement("label");
+    closeRow.className = "rail-check";
+    closeRow.style.cssText = "display:flex;align-items:center;gap:4px;margin-bottom:4px;";
+    closeRow.title = "Loose horizon ends are carried along their own " +
+      "direction to the first line (fault, horizon or the boundary) they " +
+      "meet, so a layer drawn short of a fault or of the side still closes " +
+      "its body. Only for the fill: the lines are not edited.";
+    const closeChk = document.createElement("input");
+    closeChk.type = "checkbox";
+    closeChk.checked = SW.settings.state.polygonCloseEnds !== false;
+    closeChk.addEventListener("change", function () {
+      SW.settings.state.polygonCloseEnds = closeChk.checked;
+      SW.settings.save();
+    });
+    closeRow.appendChild(closeChk);
+    closeRow.appendChild(document.createTextNode(" Close loose ends"));
+    body.appendChild(closeRow);
+
+    const gapRow = document.createElement("label");
+    gapRow.style.cssText = "display:flex;align-items:center;gap:6px;" +
+      "margin-bottom:6px;font-size:11px;color:var(--ink-2);";
+    gapRow.title = "Longest jump a loose end may make to close (m). Empty = " +
+      "as far as the first line or the boundary.";
+    gapRow.appendChild(document.createTextNode("Max gap (m)"));
+    const gapIn = document.createElement("input");
+    gapIn.type = "number"; gapIn.min = "0"; gapIn.step = "any";
+    gapIn.placeholder = "to first line";
+    gapIn.style.cssText = "width:96px;font-size:11px;";
+    gapIn.value = +SW.settings.state.polygonMaxGap > 0 ? SW.settings.state.polygonMaxGap : "";
+    gapIn.addEventListener("change", function () {
+      SW.settings.state.polygonMaxGap = +gapIn.value > 0 ? +gapIn.value : 0;
+      SW.settings.save();
+    });
+    gapRow.appendChild(gapIn);
+    body.appendChild(gapRow);
+
+    // borde del modelo
+    const sec = SW.model.state.sec;
+    const bInfo = document.createElement("div");
+    bInfo.style.cssText = "color:var(--ink-3);font-size:11px;margin-bottom:4px;";
+    bInfo.textContent = sec.model_boundary
+      ? "Model boundary: " + sec.model_boundary.vertices.length + " corners."
+      : "Model boundary: automatic (horizons' extent, floor below the lowest).";
+    body.appendChild(bInfo);
+    const bRow = document.createElement("div");
+    bRow.className = "row";
+    bRow.style.marginBottom = "6px";
+    const editing = SW.tools.activeToolName() === "boundary";
+    const bEdit = document.createElement("button");
+    bEdit.className = "mini" + (editing ? " active" : "");
+    bEdit.textContent = editing ? "Done" : "Edit boundary";
+    bEdit.title = "Drag the corners and sides of the area to fill: the basal " +
+      "unit reaches its bottom, layers that stop short reach its sides.";
+    bEdit.addEventListener("click", function () {
+      if (SW.tools.activeToolName() === "boundary") { SW.tools.activate("select"); render(); return; }
+      if (!SW.model.state.sec.model_boundary) SW.actions.boundaryFromAuto();
+      SW.tools.activate("boundary");
+      render();
+    });
+    bRow.appendChild(bEdit);
+    const bFit = document.createElement("button");
+    bFit.className = "mini";
+    bFit.textContent = "Fit";
+    bFit.title = "Reset the boundary to the horizons' extent";
+    bFit.addEventListener("click", function () { SW.actions.boundaryFromAuto(); render(); });
+    bRow.appendChild(bFit);
+    if (sec.model_boundary) {
+      const bClr = document.createElement("button");
+      bClr.className = "mini";
+      bClr.textContent = "Auto";
+      bClr.title = "Forget the drawn boundary and use the automatic one";
+      bClr.addEventListener("click", function () { SW.actions.clearBoundary(); render(); });
+      bRow.appendChild(bClr);
+    }
+    body.appendChild(bRow);
+
     const btns = document.createElement("div");
     btns.className = "row";
     const build = document.createElement("button");
     build.className = "primary";
     build.textContent = "Build polygons";
-    build.title = "Fill every horizon down to the next one below (or to " +
-      "its own lowest point if it's the basal unit), clipped against the " +
-      "visible faults.";
+    build.title = "Fill every closed area between horizons, faults and the " +
+      "model boundary with the unit of the horizon above it (the basal " +
+      "unit down to the boundary).";
     build.addEventListener("click", function () {
       SW.actions.buildUnitPolygons({ clip_faults: clipChk.checked });
     });
@@ -16057,6 +16898,10 @@ SW.panels.properties = (function () {
           () => SW.actions.bezierSelected());
     mkBtn("Tidy", "Collapse duplicate vertices and snap endpoints",
           () => SW.actions.tidySelected());
+    if (SW.view.selectedLines().some(l => l.kind !== "fault"))
+      mkBtn("To faults", "End the layers exactly on the faults they reach " +
+            "(trim the tail that crosses, extend the one that stops short)",
+            () => SW.actions.snapToFaults());
     if (SW.view.selectedLines().some(l => l.kind === "fault"))
       mkBtn("Follow line", "Where the fault crosses (or, extended, reaches) " +
             "another line, continue it along that line to its end — select " +
@@ -16828,7 +17673,8 @@ SW.panels.versions = (function () {
    * id, name, length, label_left/right, display_units, notes y calibration
    * no se tocan al restaurar (en el plugin tampoco: traza, anchos, nombre). */
   const FIELDS = ["z_min", "z_max", "vertical_exaggeration", "lines", "dips",
-                  "horizons", "polygons", "wells", "images", "scalebars"];
+                  "horizons", "polygons", "model_boundary", "wells", "images",
+                  "scalebars"];
 
   function versions() { return SW.model.state.sec.versions || []; }
 
@@ -18407,6 +19253,8 @@ SW.view = (function () {
     });
     const tidyBtn = $("tidy-btn");
     if (tidyBtn) tidyBtn.addEventListener("click", () => SW.actions.tidySelected());
+    const snapFaultBtn = $("snapfault-btn");
+    if (snapFaultBtn) snapFaultBtn.addEventListener("click", () => SW.actions.snapToFaults());
     const joinBtn = $("join-btn");
     if (joinBtn) joinBtn.addEventListener("click", () => SW.actions.joinSelected());
 
