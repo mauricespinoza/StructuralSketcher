@@ -130,68 +130,50 @@ trace involved:
   - **Splay faults** — one or more splays branching from the main fault at
     a given distance/spacing, dip and length, each taking a share of the
     slip, in sequence after the main fault or synchronously.
-  - **Backthrust (wedge)** — Parallel flow only: tectonic wedge / triangle
-    zone. The main fault ends at a root point (distance along it, or drag
-    the handle) and a backthrust with dip β rises from there toward the
-    hinterland. The wedge under the backthrust advances along the main
-    fault; the root and the backthrust are material lines of the wedge, so
-    the tip propagates along the fault (P/S = 1) and the backthrust never
-    cuts it. The passive roof above the backthrust does not move
-    horizontally: it rises by sin θ + cos θ·tan β per unit slip (θ = main
-    fault dip at the root) while the backthrust takes cos θ / cos β, and
-    the rock crossing the vertical through the tip forms the roof's
-    forelimb monocline. The field conserves area exactly and the
-    backthrust offsets the layers. A **negative slip restores** the wedge
-    (the same field run backward: the tip and the backthrust retreat), and
-    **Join cutoffs** welds the layers back across the main fault and the
-    backthrust. Each stage updates the drawn main fault (its new tip; what
-    is drawn beyond it is kept as the tip's future path) and the backthrust
-    line, and moves the root for the next stage.
-  - **Drawn backthrusts and fault roles** — in Properties, a fault's
-    *Forward role* can be set to **Active backthrust** or **Passive
-    (carried)**. An active backthrust drawn from the main fault into its
-    hanging wall turns the wedge on by itself and replaces the root/β
-    numbers: its root is where it touches the main fault and it can have
-    any shape, listric included. The roof then moves over it by Fault
-    Parallel Flow relative to the wedge (a straight backthrust lifts it as
-    a block; a curved one folds it on the bisectors of its bends), the
-    layers it crosses are cut and offset, and it is prolonged straight
-    upward when the roof rises above its drawn end. A passive fault is
-    always carried with the layers, without slip of its own, its root
-    sliding along the main fault.
-  - **Backthrust model: main fault continues** — the alternative to the
-    tip model above. The main fault goes on past the backthrust, which is
-    rooted at a **bend** of the main fault (dip increasing, θ₂ > θ₁; the
-    root snaps to the nearest bend) and is straight with dip β. Rigid
-    blocks fix the slip split: the main fault slips **a = sin(θ₁+β) /
-    sin(θ₂+β)** × S beyond the bend and the backthrust **k = sin(θ₂−θ₁) /
-    sin(θ₂+β)** × S (e.g. flat → 30° ramp, β = 30°: a = k = 0.58). With the
-    same dip on both sides (θ₁ = θ₂) there is no solution — a rigid
-    backthrust cannot slip — and the tool says so. The backthrust is
-    stationary and the rock crosses it, so it is an **active axial
-    surface**: layers fold across it instead of being cut (as in Suppe's
-    fault-bend fold). The drawn main fault and backthrust do not change
-    between stages; area is conserved (also for rock crossing the
-    backthrust) and negative slip restores exactly.
-  - **Roof carried (%)** — how much of the wedge's horizontal motion the
-    roof (the block above the backthrust) takes toward the foreland. At 0 %
-    the roof is fixed and the backthrust slips cos θ / cos β per unit of
-    main-fault slip (θ = main fault dip at the root, β = backthrust dip at
-    its root), the maximum. The backthrust slip falls as (1 − share) and
-    the roof's velocity becomes (share·cos θ, sin θ + (1 − share)·cos θ·tan β);
-    its frontal axial surface (through the tip) leans over the foreland,
-    parallel to that velocity, so area is still conserved. Limited to 95 %
-    (100 % would be plain Parallel flow, with no backthrust). Limits: with
-    the root on a ramp the field restores exactly up to 95 %; with the
-    root on a flat the roof front becomes nearly horizontal and above
-    ~60 % a few per cent of the points next to it do not come back
-    exactly (7 % at 95 %).
-  - **Labels** — the canvas names the **Active fault** (the main fault the
-    wedge moves along), the **Backthrust** (drawn in its own colour) and
-    any **Passive** fault carried with the layers. Rooting a
-    rigid backthrust at a bend of the main fault instead does not offset
-    the beds — material flows through it like an active axial surface —
-    which is why the model roots it at the tip.
+  - **Backthrust (structural wedge)** — Parallel flow only. A structural
+    wedge / triangle zone with a passive roof (Banks & Warburton, 1986;
+    Medwedeff, 1992; Shaw et al., 2005). The backthrust is rooted at the
+    wedge tip on the main fault and rises toward the hinterland; it is
+    either drawn (any shape, listric included — mark it in Properties as
+    *Forward role → Active backthrust*) or straight from a root distance
+    and a dip β. Blocks: footwall (fixed); the **wedge** below the
+    backthrust; the **roof** above it; the **block ahead** of the tip.
+    **Slip past the tip (a)** is the share of the main-fault slip S that
+    goes on along the main fault beyond the tip (the block ahead slides
+    a·S on it); the rest, (1 − a)·S, is taken by the wedge under a roof
+    that does not move horizontally relative to the block ahead (passive
+    roof). The velocity field is therefore
+    `v = a·v(fault-parallel flow) + (1 − a)·v(passive-roof wedge)`, and
+    across every boundary the normal velocity is continuous (area is
+    conserved) while the tangential jump is the slip:
+    - backthrust slip **k = (1 − a)·cos θ / cos β** per unit of S
+      (θ = main fault dip at the tip, β = backthrust dip at its root);
+    - roof uplift over the wedge (1 − a)·(sin θ + cos θ·tan β), taken up by
+      a frontal axial surface through the tip — vertical for a straight
+      backthrust, bent on the bisectors of a listric one — which forms the
+      roof's forelimb.
+    a = 0: the main fault ends at the tip; a = 100 %: no backthrust slip
+    (plain Parallel flow). The tip and the backthrust are material lines of
+    the wedge: the tip advances S along the main fault and the backthrust
+    never cuts it; the roof flows parallel to the backthrust (Egan et al.,
+    1997), so a drawn backthrust keeps its whole shape. Both faults cut and
+    offset the layers. **Negative slip restores** (the same field run
+    backward) and **Join cutoffs** welds the layers back across the main
+    fault and the backthrust. Each stage updates the drawn main fault (its
+    new tip; what is drawn beyond it is kept) and the backthrust line, and
+    moves the root for the next stage.
+    Why the backthrust is rooted at the tip: a material backthrust rooted
+    on a main fault that keeps the same slip on both sides of the root
+    cannot slip (the relative velocity of the blocks on either side would
+    be parallel to the main fault); rooted at a bend it is stationary and
+    the rock flows through it, i.e. it is an axial surface, not a fault
+    (the same velocity-boundary condition as Suppe's slip ratio). The wedge
+    tip is the configuration in which both faults slip and offset layers.
+  - **Fault roles** — in Properties, *Forward role*: **Active backthrust**
+    (above) or **Passive (carried)**: a passive fault is always carried
+    with the layers, without slip of its own, its root sliding along the
+    main fault. The canvas labels the **Active fault**, the
+    **Backthrust** (in its own colour) and **Passive** faults.
 
   Checkboxes show the **axial surfaces** (active, fixed to the fault, and
   inactive, carried by the hanging wall) and **strain markers** — a grid of
