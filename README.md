@@ -69,10 +69,29 @@ project this app descends from) and adapted to StructuralSketcher's own
 plain (distance, elevation) section space — no world coordinates or map
 trace involved:
 
-- **Unit polygons** — each horizon is the top of a unit and the next one
-  down is its base; the fill is clipped against every visible fault, so a
-  unit cut by a fault becomes one polygon per fault block. Rebuild from the
-  Unit polygons panel after editing the horizons.
+- **Unit polygons** — the visible horizons, faults, topography and the
+  **model boundary** form a planar arrangement (every crossing is a node);
+  each closed area is one body, filled with the unit of the horizon that
+  bounds it from above. The basal unit therefore reaches the bottom of the
+  boundary, layers that stop short of the sides reach them, a unit cut by a
+  fault becomes one polygon per fault block, and curved layers that cross
+  or partly overlap are resolved without assuming which one is "below".
+  Loose layer ends are carried (for the fill only) along their own
+  direction to the first line they meet (optionally up to a maximum gap);
+  closed lenses become holes. The boundary is automatic (the horizons'
+  extent with a floor below the lowest one) until edited with **Edit
+  boundary** in the Unit polygons panel: drag corners or sides (sides move
+  square to themselves), double click a side to add a corner, right click
+  or Del to remove one, Shift+drag to draw a new rectangle; the fills are
+  rebuilt on every change. Rebuild from the panel after editing the
+  horizons.
+- **Layer–fault topology** — forward-modeling cuts end exactly on the
+  fault (each piece is carried along its own direction to the trace), and
+  every layer end close to the active fault, a backthrust, a splay or a
+  passive fault is seated on it after each step. **To faults** (Edit rail,
+  Properties, context menu) does the same on drawn lines: an end within the
+  Tidy max distance of a visible fault is trimmed where it crossed or
+  extended until it touches.
 - **Fault Parallel Flow restoration** — moves the hanging-wall side of a
   fault by a given slip, carrying points along flow lines parallel to the
   fault (an unclamped offset of the fault trace), the standard 2D
