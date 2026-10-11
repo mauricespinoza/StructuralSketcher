@@ -4486,8 +4486,23 @@ SW.kink = (function () {
     return { vertices: vertices, domains: domains, axes: axes };
   }
 
+  /* Varias semillas sobre los MISMOS tadpoles: dominios y ejes no dependen
+   * de la semilla (kinkAxes ignora seedZ), así que se construyen una vez y
+   * sólo la marcha del horizonte se repite — el mismo resultado que llamar
+   * constructHorizon por semilla, sin rehacer N veces la red de ejes.
+   * `vertices[i]` es null si esa semilla falló. */
+  function constructHorizons(tadpoles, seeds, sLimits, tolDeg, direction) {
+    const domains = groupDomains(tadpoles, tolDeg);
+    const axes = kinkAxes(domains, null, direction);
+    const vertices = seeds.map(function (seed) {
+      try { return traceHorizon(seed, domains, axes, sLimits); }
+      catch (e) { return null; }
+    });
+    return { vertices: vertices, domains: domains, axes: axes };
+  }
+
   return {
-    groupDomains, kinkAxes, traceHorizon, constructHorizon,
+    groupDomains, kinkAxes, traceHorizon, constructHorizon, constructHorizons,
     beddingDir, normalDir, axialDir, lineIntersect, crossSegment, sideOfAxis,
     bisectDirections, resolveAxisHit,
   };
@@ -5895,6 +5910,47 @@ SW.render = (function () {
     }
   }
 
+  /* Traza en `ctx` (beginPath ya hecho por quien llama) la polilínea de
+   * vértices de sección [s, z], RECORTADA al recuadro visible más un margen.
+   *
+   * El canvas rasteriza el tramo completo aunque caiga fuera de pantalla, y
+   * con trazo punteado genera cada guion a lo largo de toda su longitud: un
+   * horizonte kink que sale casi vertical (manteo de 89.9°) se extrapola
+   * decenas de miles de km hasta el borde de la sección, o sea millones de
+   * guiones por cuadro, y la pestaña se congela. Recortar cada tramo al
+   * recuadro (Liang-Barsky) deja exactamente lo que se ve — la geometría
+   * guardada no cambia, sólo lo que se le pide dibujar al canvas. */
+  function tracePolyline(ctx, verts) {
+    const V = SW.view;
+    const r = V.plotRect();
+    const M = 64;
+    const x0 = r.x - M, x1 = r.x + r.w + M;
+    const y0 = r.y - M, y1 = r.y + r.h + M;
+    let penX = NaN, penY = NaN;
+    let px = V.sx(verts[0][0]), py = V.zy(verts[0][1]);
+    for (let i = 1; i < verts.length; i++) {
+      const qx = V.sx(verts[i][0]), qy = V.zy(verts[i][1]);
+      const dx = qx - px, dy = qy - py;
+      let t0 = 0, t1 = 1, ok = true;
+      const pp = [-dx, dx, -dy, dy];
+      const qq = [px - x0, x1 - px, py - y0, y1 - py];
+      for (let k = 0; k < 4 && ok; k++) {
+        if (pp[k] === 0) { if (qq[k] < 0) ok = false; continue; }
+        const t = qq[k] / pp[k];
+        if (pp[k] < 0) { if (t > t1) ok = false; else if (t > t0) t0 = t; }
+        else { if (t < t0) ok = false; else if (t < t1) t1 = t; }
+      }
+      if (ok && isFinite(dx) && isFinite(dy)) {
+        const ax = px + t0 * dx, ay = py + t0 * dy;
+        const bx = px + t1 * dx, by = py + t1 * dy;
+        if (ax !== penX || ay !== penY) ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        penX = bx; penY = by;
+      }
+      px = qx; py = qy;
+    }
+  }
+
   function drawLines(ctx, sec, st) {
     const V = SW.view;
     ctx.font = "10px 'Segoe UI', sans-serif";
@@ -5910,9 +5966,7 @@ SW.render = (function () {
                       (selected ? 1.2 : 0);
       ctx.setLineDash(stl.dash ? [6, 4] : []);
       ctx.beginPath();
-      line.vertices.forEach((v, i) =>
-        i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1]))
-          : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+      tracePolyline(ctx, line.vertices);
       ctx.stroke();
       ctx.setLineDash([]);
       if (selected) {
@@ -5920,9 +5974,7 @@ SW.render = (function () {
         ctx.strokeStyle = COLORS.select;
         ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
         ctx.beginPath();
-        line.vertices.forEach((v, i) =>
-          i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1]))
-            : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+        tracePolyline(ctx, line.vertices);
         ctx.stroke();
         ctx.restore();
       }
@@ -6250,7 +6302,7 @@ SW.render = (function () {
   }
 
   return { draw, hitEndLabel, COLORS, drawTick, niceStep, lineColor, dipColor,
-           invalidateImage, clearImageCache };
+           invalidateImage, clearImageCache, tracePolyline };
 })();
 
 /* ==== js/export.js ==== */
@@ -6845,6 +6897,31 @@ SW.bridge = (function () {
                   unit_id: null,
                   fault_style: { sense: "none", flip: false } },
           n_domains: res.domains.length, n_axes: res.axes.length,
+        });
+      } catch (e) { return err(String(e)); }
+    },
+
+    /* Lo mismo que constructKink para varias semillas a la vez, con una
+     * sola red de dominios/ejes: results[i] es {line, n_domains, n_axes}
+     * de la semilla i, o null si esa semilla no produjo horizonte. */
+    constructKinks: function (p) {
+      try {
+        const res = SW.kink.constructHorizons(
+          p.tadpoles, p.seeds, [0, sec().length], p.tol_deg, p.direction);
+        return ok({
+          results: res.vertices.map(function (verts) {
+            if (!verts) return null;
+            return {
+              line: { id: SW.model.genId(), kind: "horizon",
+                      vertices: verts.map(v => [v[0], v[1]]),
+                      style: SW.model.defaultStyle("horizon"),
+                      locked: false, origin: "kink",
+                      name: nextName("horizon", 0), visible: true,
+                      unit_id: null,
+                      fault_style: { sense: "none", flip: false } },
+              n_domains: res.domains.length, n_axes: res.axes.length,
+            };
+          }),
         });
       } catch (e) { return err(String(e)); }
     },
@@ -11349,40 +11426,30 @@ window.SW = window.SW || {};
     return out;
   }
 
-  function refreshAxes(dips) {
-    if (!dips.length) { previewAxes = []; return; }
-    const seedZ = dips.reduce((a, m) => a + m.z, 0) / dips.length;
-    try {
-      const domains = SW.kink.groupDomains(dips.map(m => [m.s, m.z, m.dip]));
-      previewAxes = SW.kink.kinkAxes(domains, seedZ, SW.view.state.kinkDirection);
-    } catch (err) {
-      previewAxes = [];
-    }
-  }
-
-  /* Un horizonte por dip: constructHorizon con la MISMA lista de tadpoles
-   * (misma partición en dominios) pero semilla en cada dip, así cada
-   * horizonte pasa por su dip — la disposición que MOVE muestra al marcar
-   * varios datos de buzamiento. */
-  function recomputePreviews() {
-    const dips = currentDips();
-    previews = [];
+  /* Un horizonte por dip con la MISMA lista de tadpoles (misma partición en
+   * dominios) pero semilla en cada dip, así cada horizonte pasa por su dip —
+   * la disposición que MOVE muestra al marcar varios datos de buzamiento.
+   * Dominios y ejes son comunes a todas las semillas: se construyen una vez
+   * (constructHorizons) y sirven también para dibujar la construcción. */
+  function recompute(dips) {
+    previews = []; previewAxes = [];
     if (!dips.length) return;
-    const tps = dips.map(m => [m.s, m.z, m.dip]);
-    const lims = [0, SW.model.state.sec.length];
-    const dir = SW.view.state.kinkDirection;
-    for (const d of dips) {
-      try {
-        const res = SW.kink.constructHorizon(tps, [d.s, d.z], lims, undefined, dir);
-        previews.push({ verts: res.vertices, key: d.key });
-      } catch (err) { /* dip degenerado: sin preview para ese punto */ }
-    }
+    try {
+      const res = SW.kink.constructHorizons(
+        dips.map(m => [m.s, m.z, m.dip]), dips.map(d => [d.s, d.z]),
+        [0, SW.model.state.sec.length], undefined,
+        SW.view.state.kinkDirection);
+      previewAxes = res.axes;
+      res.vertices.forEach(function (verts, i) {
+        // dip degenerado: sin preview para ese punto
+        if (verts) previews.push({ verts: verts, key: dips[i].key });
+      });
+    } catch (err) { previews = []; previewAxes = []; }
   }
 
   function refresh() {
     const dips = currentDips();
-    refreshAxes(dips);
-    recomputePreviews();
+    recompute(dips);
     // texto corto a propósito: el readout va en una barra de una sola línea
     // (el detalle completo vive en el tooltip de la tool / el hint)
     SW.view.status(dips.length
@@ -11407,19 +11474,14 @@ window.SW = window.SW || {};
       return;
     }
     const tps = dips.map(m => [m.s, m.z, m.dip]);
-    let pending = dips.length;
-    const results = new Array(dips.length);
-    dips.forEach(function (d, i) {
-      SW.bridge.call("constructKink", {
-        tadpoles: tps, seed: [d.s, d.z],
-        direction: SW.view.state.kinkDirection,
-      }, function (res) {
-        results[i] = (res && res.ok !== false && res.line) ? res : null;
-        if (--pending === 0) finish();
-      });
+    SW.bridge.call("constructKinks", {
+      tadpoles: tps, seeds: dips.map(d => [d.s, d.z]),
+      direction: SW.view.state.kinkDirection,
+    }, function (res) {
+      finish(res && res.ok !== false && res.results ? res.results : []);
     });
 
-    function finish() {
+    function finish(results) {
       const good = results.filter(Boolean);
       if (!good.length) {
         SW.view.status("Kink failed: no seed produced a horizon.");
@@ -11660,9 +11722,7 @@ window.SW = window.SW || {};
         ctx.strokeStyle = SW.render.COLORS.kinds.horizon;
         ctx.setLineDash([7, 5]); ctx.lineWidth = 2;
         ctx.beginPath();
-        verts.forEach((p, i) =>
-          i ? ctx.lineTo(V.sx(p[0]), V.zy(p[1]))
-            : ctx.moveTo(V.sx(p[0]), V.zy(p[1])));
+        SW.render.tracePolyline(ctx, verts);
         ctx.stroke();
         ctx.setLineDash([]);
       }
