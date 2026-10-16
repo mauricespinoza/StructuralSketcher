@@ -925,7 +925,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
         <div class="rail-opts" data-for="fwd_fpf fwd_fbf fwd_fpfold fwd_trishear fwd_shear">
           <div class="fwd-title" id="fwd-title"></div>
           <div class="fwd-note" id="fwd-fault-name"></div>
-          <label class="rail-field" data-m="fpf shear trishear" title="Move the hanging wall over the exact trace of the selected (clicked) fault line, or over a flat-ramp-flat built from the numbers below">Fault
+          <label class="rail-field" data-m="fpf shear trishear fpfold" title="Move the hanging wall over the exact trace of the selected (clicked) fault line, or over a flat-ramp-flat built from the numbers below">Fault
             <select id="fwd-fault-src">
               <option value="param" selected>Parametric ramp</option>
               <option value="line">Selected fault line</option>
@@ -12615,7 +12615,13 @@ window.SW = window.SW || {};
  *    largo de la rampa todo lo que llega al quiebre superior es flanco
  *    trasero y B se reemplaza por la bisectriz B0 (R = 1): la cresta se
  *    ensancha y el flanco frontal ya formado sólo se traslada.
- *  - Fault-propagation fold de espesor constante (Suppe y Medwedeff, 1990):
+ *  - Fault-propagation fold de espesor constante (Suppe y Medwedeff, 1990),
+ *    por defecto SOBRE LA TRAZA DIBUJADA de la falla (la rampa paramétrica
+ *    queda como alternativa): el bloque colgante fluye paralelo a cada
+ *    tramo de la traza (quiebres en las bisectrices) y delante de la punta
+ *    el pliegue se arma con el manteo del tramo bajo la punta; si ese
+ *    manteo pasa de 30° el pliegue no existe y se avisa (mensaje con el
+ *    ángulo y el lugar de la traza). Con la rampa paramétrica:
  *    la punta avanza por la rampa a razón P/S = 2; el sinclinal frontal
  *    está anclado a la punta con ángulo axial γ* (sin(2γ*−θ) = 2 sin θ) y
  *    el flanco frontal (buzamiento 180°−2γ*) es la cuña entre ese
@@ -12690,6 +12696,26 @@ SW.forward = (function () {
     return (lo + hi) / 2;
   }
 
+  /* -- Suppe y Medwedeff (1990), pliegue por propagación de espesor constante
+   * Con P/S = 2 el sinclinal frontal sale de sin(2γ*−θ) = 2 sin θ: sólo hay
+   * solución para θ ≤ 30°. `foldAt(θ)` devuelve las constantes del pliegue
+   * para una rampa de manteo θ (rad) o null si es imposible. */
+  const FPFOLD_MAX_DEG = 30;
+  function foldAt(th) {
+    const x = 2 * Math.sin(th);
+    if (!(th >= 0) || !(x <= 1 + 1e-9)) return null;
+    const gs = (th + Math.asin(Math.min(1, x))) / 2;
+    const lam = gs > 1e-9 ? 4 * Math.cos(gs) * Math.sin(gs - th) / Math.sin(gs) : 0;
+    return { th: th, gs: gs, lam: lam, v2: [lam * Math.cos(gs), lam * Math.sin(gs)] };
+  }
+  function fpfoldImpossible(deg, where) {
+    return "No constant-thickness fault-propagation fold (Suppe & Medwedeff, 1990) " +
+           "can be modelled for a fault dipping " + (Math.round(deg * 10) / 10) +
+           "°" + (where || "") + ": the solution only exists for dips up to " +
+           FPFOLD_MAX_DEG + "° (measured from the horizontal bedding). " +
+           "Lower the dip or use Trishear, Fault-bend fold or Parallel flow for steeper faults.";
+  }
+
   /* -- geometría paramétrica ------------------------------------------------
    * Marco local: origen en la base de la rampa (s0, zd), x en el sentido del
    * transporte (verg = ±1), z hacia arriba. */
@@ -12742,15 +12768,34 @@ SW.forward = (function () {
                   "slip ratio R = " + g.R.toFixed(3),
                   "ramp length = " + g.L.toFixed(0) + " m");
       if (slip > g.L) g.info.push("slip > ramp length: the crest widens");
+    } else if (p.method === "fpfold" && usesLine(p)) {
+      // sobre la traza dibujada: no hay rampa teórica; el manteo que manda
+      // es el del tramo bajo la punta, y la punta recorre la traza
+      g.ps = 2;
+      g.hw = "fpf";           // detrás de la punta: flujo paralelo a la falla
+      g.psi = 0;              // (sin abanico de backlimb)
+      const err = setupTriLine(p, g);
+      if (err) return { error: err };
+      const bad = checkFoldLine(g.tl, g.ps * Math.abs(slip));
+      if (bad) return { error: bad };
+      const f0 = foldAt(tlDipAt(g.tl, g.tl.L0));
+      const dips = tlDipRange(g.tl, g.ps * Math.abs(slip));
+      if (dips.max - dips.min > 1)
+        g.info.push("the drawn fault changes dip (" + dips.min.toFixed(0) + "°–" +
+                    dips.max.toFixed(0) + "°) along the tip path: the fold is recomputed " +
+                    "at each dip (a single planar ramp gives the textbook fold)");
+      g.info.push("tip dip " + (f0.th / D2R).toFixed(1) + "°",
+                  "γ* = " + (f0.gs / D2R).toFixed(1) + "°",
+                  "forelimb dip = " + (180 - 2 * f0.gs / D2R).toFixed(1) + "°",
+                  "P/S = 2 → tip advances " + (2 * slip).toFixed(0) + " m");
     } else if (p.method === "fpfold") {
-      const x = 2 * Math.sin(th);
-      if (x > 1) return { error: "No constant-thickness fault-propagation " +
-                                 "fold for ramps steeper than 30°." };
-      const gs = (th + Math.asin(x)) / 2;
+      const f = foldAt(th);
+      if (!f) return { error: fpfoldImpossible(p.theta, " (parametric ramp)") };
+      const gs = f.gs;
       g.gs = gs;
       g.ps = 2;
-      g.lam = 4 * Math.cos(gs) * Math.sin(gs - th) / Math.sin(gs);
-      g.v2 = [g.lam * Math.cos(gs), g.lam * Math.sin(gs)];
+      g.lam = f.lam;
+      g.v2 = f.v2;
       g.L0 = Math.max(0, +p.L0 || 0);
       g.uA = dirv(Math.PI / 2 + th / 2);
       g.info.push("γ* = " + (gs / D2R).toFixed(1) + "°",
@@ -13001,6 +13046,60 @@ SW.forward = (function () {
     return null;
   }
 
+  /* Manteo (rad, desde la horizontal) del tramo de la traza donde está el
+   * arco `arc` medido desde el extremo bajo; pasado el extremo dibujado, el
+   * del último tramo (la punta sigue recta). El tramo 0 es el despegue.
+   * En un vértice, `ahead` toma el tramo que la punta va a empezar a recorrer
+   * (y no el que acaba de terminar). */
+  function tlSegAt(T, arc, ahead) {
+    const full = T.full, cum = T.cum, target = T.far + arc;
+    let i = 0;
+    while (i < full.length - 2 && (ahead ? cum[i + 1] <= target + 1e-9
+                                         : cum[i + 1] < target - 1e-9)) i++;
+    return i;
+  }
+  function tlSegDip(T, i) {
+    return Math.atan2(T.full[i + 1][1] - T.full[i][1], T.full[i + 1][0] - T.full[i][0]);
+  }
+  function tlDipAt(T, arc) { return tlSegDip(T, tlSegAt(T, arc, true)); }
+
+  /* Menor y mayor manteo (grados) de los tramos que recorre la punta. */
+  function tlDipRange(T, travel) {
+    const i0 = tlSegAt(T, T.L0, true), i1 = tlSegAt(T, T.L0 + Math.max(0, travel), false);
+    let mn = Infinity, mx = -Infinity;
+    for (let i = i0; i <= i1; i++) {
+      const a = tlSegDip(T, i) / D2R;
+      mn = Math.min(mn, a); mx = Math.max(mx, a);
+    }
+    return { min: mn, max: mx };
+  }
+
+  /* ¿Puede la punta recorrer la traza? Revisa cada tramo entre la punta
+   * inicial (arco L0) y la final (L0 + P/S·slip): manteo entre 0° y 30°
+   * medido desde la horizontal, y subiendo hacia el antepaís. Devuelve el
+   * mensaje de error o null. */
+  function checkFoldLine(T, travel) {
+    const a0 = T.L0, a1 = T.L0 + Math.max(0, travel);
+    const i0 = tlSegAt(T, a0, true), i1 = tlSegAt(T, a1, false);
+    let worst = null;
+    for (let i = i0; i <= i1; i++) {
+      const dx = T.full[i + 1][0] - T.full[i][0], dz = T.full[i + 1][1] - T.full[i][1];
+      const dip = Math.atan2(dz, dx) / D2R;
+      const at = Math.max(0, T.cum[i] - T.far);
+      if (!(dx > 1e-9) || dz < -1e-9)
+        return "The drawn fault " + (dx > 1e-9 ? "descends" : "turns vertical or overturned") +
+               " toward the foreland at " + Math.round(at) + " m from its lower end, " +
+               "where the tip would pass: a fault-propagation fold needs a ramp that " +
+               "rises forward (dip between 0° and " + FPFOLD_MAX_DEG + "°).";
+      if (!worst || dip > worst.dip) worst = { dip: dip, at: at };
+    }
+    if (worst && worst.dip > FPFOLD_MAX_DEG + 1e-6)
+      return fpfoldImpossible(worst.dip, " at " + Math.round(worst.at) +
+        " m along the drawn fault from its lower end, in the stretch the tip travels " +
+        "(" + Math.round(a0) + "–" + Math.round(a1) + " m)");
+    return null;
+  }
+
   /* Franjas de flujo paralelo de una polilínea: cada punto pertenece al
    * tramo entre las bisectrices de sus extremos (el de |h| mínimo); h > 0
    * a la izquierda. Misma construcción que fpfMapper. */
@@ -13109,7 +13208,10 @@ SW.forward = (function () {
     const T = g.tl;
     // RK2 alterna s y s + ds/2 en cada punto: se guardan los últimos cuatro
     for (const e of T.lru) if (e.s === sAbs) return e.c;
-    const target = T.far + Math.max(1e-6, T.L0 + g.ps * sAbs);
+    // pliegue: 1 mm de ventaja para que la punta, parada en un vértice,
+    // ya tenga el manteo del tramo que va a recorrer
+    const target = T.far + Math.max(1e-6, T.L0 + g.ps * sAbs) +
+                   (g.method === "fpfold" ? 1e-3 : 0);
     const full = T.full, cum = T.cum, tot = cum[cum.length - 1];
     let f;
     if (target >= tot - 1e-9) {
@@ -13144,7 +13246,8 @@ SW.forward = (function () {
                 am: Math.PI / 2 + D / 2 };
       }
     }
-    const out = { f: f, S: S, tip: tip, d: d, fan: fan };
+    const out = { f: f, S: S, tip: tip, d: d, fan: fan,
+                  fold: g.method === "fpfold" ? foldAt(Math.atan2(d[1], d[0])) : null };
     T.lru.unshift({ s: sAbs, c: out });
     if (T.lru.length > 4) T.lru.pop();
     return out;
@@ -13181,7 +13284,34 @@ SW.forward = (function () {
     return [u[0], u[1]];
   }
 
-  const VFIELD = { fbf: vFBF, fpfold: vFPFold, trishear: vTrishear };
+  /* Pliegue por propagación sobre la traza dibujada. La punta está en el
+   * arco L0 + P/S·|s| de la traza (recta pasado su extremo). Detrás del
+   * plano normal a la falla en la punta, el colgante fluye paralelo a cada
+   * tramo (como el trishear sobre la traza); delante, el pliegue de Suppe y
+   * Medwedeff con el manteo θ del tramo bajo la punta: yaciente quieto
+   * hasta el sinclinal (a < γ*), flanco frontal con velocidad paralela al
+   * sinclinal (γ* ≤ a < 2γ*) y colgante paralelo a la falla (a ≥ 2γ*). Como
+   * 2γ* − θ ≤ 90° el flanco nunca cruza el plano de la punta, y el campo es
+   * continuo en la normal a ambos lados. */
+  function vFPFoldLine(g, x, z, s) {
+    const c = triState(g, Math.abs(s)), d = c.d, fd = c.fold;
+    const dx = x - c.tip[0], dz = z - c.tip[1];
+    if (dx * d[0] + dz * d[1] > 0) {
+      if (!fd) return [d[0], d[1]];
+      if (Math.atan2(dz, dx) < fd.gs) return [0, 0];
+      if (Math.atan2(dz, dx) < 2 * fd.gs) return fd.v2;
+      return [d[0], d[1]];
+    }
+    const loc = c.S.locate([x, z]);
+    if (!loc || loc.h <= 0) return [0, 0];
+    const u = c.S.dirs[loc.j];
+    return [u[0], u[1]];
+  }
+  function vFPFoldAny(g, x, z, s) {
+    return g.tl ? vFPFoldLine(g, x, z, s) : vFPFold(g, x, z, s);
+  }
+
+  const VFIELD = { fbf: vFBF, fpfold: vFPFoldAny, trishear: vTrishear };
 
   /* Integra una nube de puntos (marco local) con RK2 de punto medio, del
    * slip acumulado sA al sB (la posición de la punta y el cambio de régimen
@@ -13247,6 +13377,17 @@ SW.forward = (function () {
     if (p.method === "fbf") {
       ray([0, 0], g.uA, "A");
       ray(g.P2, slip < g.L ? g.uB : g.uB0, slip < g.L ? "B" : "B0");
+    } else if (p.method === "fpfold" && g.tl) {
+      const c = triState(g, Math.abs(slip));
+      if (c.fold && c.fold.gs > 1e-6) {
+        ray(c.tip, dirv(c.fold.gs), "syncline");
+        ray(c.tip, dirv(2 * c.fold.gs), "forelimb");
+      }
+      for (const r of fpfSkeleton(c.f)) {
+        const kind = r.i === 1 ? "A" : "bend";
+        if (r.e) out.push({ o: r.o, e: r.e, u: r.u, kind: kind });
+        else ray(r.o, r.u, kind);
+      }
     } else if (p.method === "fpfold") {
       const Lt = g.L0 + g.ps * Math.abs(slip);
       const T = [Lt * g.r[0], Lt * g.r[1]];
@@ -14084,7 +14225,8 @@ SW.forward = (function () {
 
   function usesLine(p) {
     return (p.method === "fpf" || p.method === "shear" ||
-            p.method === "trishear") && p.faultSrc === "line";
+            p.method === "trishear" || p.method === "fpfold") &&
+           p.faultSrc === "line";
   }
   function trace(p, g, slip) {
     if (g && g.tl) return triState(g, Math.abs(slip)).f.map(g.tl.F.toSec);
@@ -14295,8 +14437,12 @@ window.SW = window.SW || {};
   function usesLine() {
     const src = $("fwd-fault-src");
     return (st.method === "fpf" || st.method === "shear" ||
-            st.method === "trishear") && src && src.value === "line";
+            st.method === "trishear" || st.method === "fpfold") &&
+           src && src.value === "line";
   }
+  // métodos cuya punta recorre la traza dibujada (la punta inicial y su
+  // manija se miden a lo largo de ella)
+  const tipOnLine = () => st.method === "trishear" || st.method === "fpfold";
   const isVelocity = () => st.method === "fbf" || st.method === "fpfold" ||
                            st.method === "trishear";
   // retrocorrimiento en cuña: sólo con Parallel flow; lo enciende la casilla
@@ -14454,7 +14600,7 @@ window.SW = window.SW || {};
     const fl = faultLine();
     const fl_len = fl ? SW.geom.polylineLength(fl.vertices) : span;
     setBounds("fwd-blpos", 0, round(fl_len), nice(fl_len));
-    if (usesLine() && st.method === "trishear")
+    if (usesLine() && tipOnLine())
       setBounds("fwd-l0", 0, round(fl_len * 2), nice(fl_len));
   }
 
@@ -14530,12 +14676,13 @@ window.SW = window.SW || {};
     st.faultId = line.id;
     const src = $("fwd-fault-src");
     if (src && (st.method === "fpf" || st.method === "shear" ||
-                st.method === "trishear")) src.value = "line";
+                st.method === "trishear" || st.method === "fpfold")) src.value = "line";
     if (st.fittedId !== line.id) fitFromLine(line, true);
-    // trishear sobre la traza: la punta inicial es el extremo dibujado
-    if (st.method === "trishear" && usesLine()) {
+    // trishear / pliegue por propagación sobre la traza: la punta inicial
+    // es el extremo dibujado
+    if (tipOnLine() && usesLine()) {
       setVal("fwd-l0", round(SW.geom.polylineLength(line.vertices)));
-      setVal("fwd-blpos", "");
+      if (st.method === "trishear") setVal("fwd-blpos", "");
     }
     resetStage();
     if (!quiet)
@@ -14825,13 +14972,13 @@ window.SW = window.SW || {};
     });
     // trishear sobre la traza: la punta y el quiebre del backlimb se
     // ubican a lo largo de la falla dibujada
-    const triLine = st.method === "trishear" && !geom;
+    const triLine = (st.method === "trishear" || st.method === "fpfold") && !geom;
     const l0l = $("fwd-l0-label");
     if (l0l && triLine) l0l.classList.remove("fwd-hide");
     const triShear = st.method === "trishear" &&
                      (($("fwd-tri-hw") || {}).value === "shear");
     const blp = $("fwd-blpos-label");
-    if (blp) blp.classList.toggle("fwd-hide", !triLine || triShear);
+    if (blp) blp.classList.toggle("fwd-hide", !triLine || triShear || st.method !== "trishear");
     const psl = $("fwd-psi-label");
     if (psl && st.method === "trishear") psl.classList.toggle("fwd-hide", triShear);
     const all = $("fwd-alpha-label");
@@ -14866,7 +15013,10 @@ window.SW = window.SW || {};
     }
     const fl = faultLine();
     const fe = $("fwd-fault-name");
-    if (fe) fe.textContent = fl ? "Active fault: " + (fl.name || "fault") : "Active fault: parametric ramp (no fault selected)";
+    if (fe) fe.textContent = fl ? "Active fault: " + (fl.name || "fault") +
+      (usesLine() ? " (drawn geometry)" : " (parametric ramp)")
+      : st.method === "fpfold" ? "Active fault: parametric ramp — click a drawn fault to use its geometry"
+      : "Active fault: parametric ramp (no fault selected)";
   }
 
   function refresh() {
@@ -14962,11 +15112,11 @@ window.SW = window.SW || {};
     const R = ramp(pp);
     const minLen = 55 / Math.max(V.state.scale, 1e-9);
     const path = mainPath(pp);
-    if (usesLine() && st.method === "trishear" && path) {
+    if (usesLine() && tipOnLine() && path) {
       const ext = extendPath(path, pp.span * 2);
       const L0 = pp.p.L0 > 0 ? pp.p.L0 : SW.geom.polylineLength(path);
       hs.push({ id: "tip", at: along(ext, L0), label: "tip " + Math.round(L0) + " m" });
-      const bl = blArc(pp, path);
+      const bl = st.method === "trishear" ? blArc(pp, path) : null;
       if (bl !== null)
         hs.push({ id: "bl", at: along(path, bl),
                   label: "backlimb at " + Math.round(bl) + " m" });
@@ -15045,7 +15195,7 @@ window.SW = window.SW || {};
     let pp = params();
     let R = ramp(pp);
     // arrastrar el tope/punta al otro lado de la base invierte el manteo
-    if (usesLine() && st.method === "trishear" && (h.id === "tip" || h.id === "bl")) {
+    if (usesLine() && tipOnLine() && (h.id === "tip" || h.id === "bl")) {
       const path = mainPath(pp);
       if (!path) return;
       if (h.id === "tip") {
@@ -15621,7 +15771,8 @@ window.SW = window.SW || {};
       cursor: "crosshair",
       hint: "Forward model (" + SW.forward.METHODS[method].short + "): the " +
             "fault geometry defines the hanging wall; slip + = up (reverse), " +
-            "− = down (normal). Drag the handles (base, ramp top/tip — across " +
+            "− = down (normal). " + (method === "fpfold" ? "The drawn fault is used by " +
+            "default (its dip must be ≤ 30°). " : "") + "Drag the handles (base, ramp top/tip — across " +
             "the base flips the dip —, slip arrow, splays, datum) or the " +
             "sliders; click a fault to model on it. Shift snaps angles to 5°.",
       activate: function () {
@@ -15631,8 +15782,20 @@ window.SW = window.SW || {};
         stopAnim();
         buildSliders();
         dipLabels();
-        // por defecto: la falla seleccionada
-        const selFault = SW.view.selectedLines().find(l => l.kind === "fault");
+        // por defecto: la falla seleccionada; el pliegue por propagación
+        // además toma la última falla usada o, si hay una sola falla
+        // dibujada, esa (su geometría manda, no una rampa teórica)
+        let selFault = SW.view.selectedLines().find(l => l.kind === "fault");
+        if (!selFault && method === "fpfold") {
+          const faults = (SW.model.state.sec.lines || []).filter(l => l.kind === "fault" &&
+            l.visible !== false && (l.vertices || []).length >= 2 &&
+            roleOf(l) !== "backthrust" && roleOf(l) !== "passive");
+          selFault = faults.find(l => l.id === st.faultId) ||
+                     (faults.length === 1 ? faults[0] : null);
+          if (!selFault && faults.length > 1)
+            SW.view.status("Click the fault to model the propagation fold on (" +
+                           faults.length + " faults drawn).");
+        }
         if (selFault) useFault(selFault, true);
         ensureDefaults();
         updateBounds();

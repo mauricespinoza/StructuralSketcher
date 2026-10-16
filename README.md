@@ -127,7 +127,11 @@ trace involved:
     the ramp length the crest widens and the forelimb is carried along.
   - *Fault-propagation fold* (Suppe & Medwedeff, 1990), constant thickness —
     tip advancing at P/S = 2, forelimb syncline pinned to the tip with
-    sin(2γ*−θ) = 2 sin θ and forelimb dip 180°−2γ*.
+    sin(2γ*−θ) = 2 sin θ and forelimb dip 180°−2γ*. By default it runs on
+    the drawn fault (the only drawn fault, the selected one or the one you
+    click); the parametric ramp is the alternative. It only exists for
+    dips up to 30°: steeper faults, or a drawn fault that turns vertical or
+    overturned where the tip passes, give an error message with the angle.
   - *Trishear* (Erslev, 1991; Zehnder & Allmendinger, 2000) with apical
     angle, P/S and concentration factor, plus the backlimb trishear fan of
     Cristallini & Allmendinger (2002) at the fault bend (0° = sharp kink).
@@ -234,6 +238,16 @@ array, the view only lists the first two.
   multi-select (like Ctrl+click); a lasso also works.
 - When a tool finishes a shape it hands control back to Select.
 - Extend, Transform, etc. act on the whole selection.
+
+## Propagation fold on the drawn fault
+
+With the Propagation tool the hanging wall flows parallel to each segment of
+the drawn trace (axial surfaces on the bisectors of the bends) and the
+Suppe & Medwedeff fold grows ahead of the tip with the dip of the segment the
+tip is on. The tip starts at the drawn end (editable: *Initial tip*, or drag
+its handle) and advances 2 × slip along the trace, straight beyond its end.
+If the drawn fault dips more than 30° anywhere the tip travels, the model
+reports the angle and where it occurs instead of drawing a wrong fold.
 
 ## Trishear on the selected fault
 
