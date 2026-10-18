@@ -14045,6 +14045,69 @@ SW.forward = (function () {
     return out;
   }
 
+  /* Cola de una polilínea desde el arco `arc` (medido desde su primer punto). */
+  function tailFrom(f, arc) {
+    let acc = 0;
+    for (let i = 1; i < f.length; i++) {
+      const L = Math.hypot(f[i][0] - f[i - 1][0], f[i][1] - f[i - 1][1]);
+      if (acc + L > arc + 1e-9) {
+        const t = L > 0 ? (arc - acc) / L : 0;
+        const a = [f[i - 1][0] + t * (f[i][0] - f[i - 1][0]), f[i - 1][1] + t * (f[i][1] - f[i - 1][1])];
+        return [a].concat(f.slice(i).map(q => q.slice()));
+      }
+      acc += L;
+    }
+    return [];
+  }
+
+  /* Restricción de largo de capa (deslizamiento flexural): tras mover una
+   * capa, cada tramo recupera exactamente el largo que tenía antes del paso
+   * (se conserva su dirección). Los tramos que cruzan una falla (el corte,
+   * que se abre) quedan libres, y cada corrida entre cortes se ancla en su
+   * vértice que menos se movió: lo que sobra se desliza paralelo a la capa. */
+  function keepBedLength(prev, cur, faults) {
+    const n = cur.length;
+    if (n < 2 || prev.length !== n) return cur;
+    const crosses = function (a, b) {
+      for (const f of faults)
+        for (let k = 0; k < f.length - 1; k++) {
+          const h = SW.geom.segmentIntersection(a, b, f[k], f[k + 1]);
+          if (h && h[0] > 1e-9 && h[0] < 1 - 1e-9) return true;
+        }
+      return false;
+    };
+    const out = cur.map(q => q.slice());
+    let i0 = 0;
+    while (i0 < n - 1) {
+      let i1 = i0;
+      while (i1 < n - 1 && !crosses(cur[i1], cur[i1 + 1]) && !crosses(prev[i1], prev[i1 + 1])) i1++;
+      if (i1 > i0) {
+        let pin = i0, best = Infinity;
+        for (let i = i0; i <= i1; i++) {
+          const d = Math.hypot(cur[i][0] - prev[i][0], cur[i][1] - prev[i][1]);
+          if (d < best) { best = d; pin = i; }
+        }
+        const seg = function (i, j) {                 // de i a j = i ± 1
+          const L = Math.hypot(prev[j][0] - prev[i][0], prev[j][1] - prev[i][1]);
+          let dx = cur[j][0] - cur[i][0], dz = cur[j][1] - cur[i][1];
+          let M = Math.hypot(dx, dz);
+          if (M < 1e-12) { dx = prev[j][0] - prev[i][0]; dz = prev[j][1] - prev[i][1]; M = Math.hypot(dx, dz) || 1; }
+          return [dx / M * L, dz / M * L];
+        };
+        for (let i = pin; i < i1; i++) {
+          const v = seg(i, i + 1);
+          out[i + 1] = [out[i][0] + v[0], out[i][1] + v[1]];
+        }
+        for (let i = pin; i > i0; i--) {
+          const v = seg(i, i - 1);
+          out[i - 1] = [out[i][0] + v[0], out[i][1] + v[1]];
+        }
+      }
+      i0 = i1 + 1;
+    }
+    return out;
+  }
+
   /* -- simulación por pasos -------------------------------------------------
    * cfg: {main, splays: [{p, frac}], sets: {clave: puntos}, surfaceKeys:
    *       fn(clave) → ¿cuenta como superficie para el onlap?, S (slip total),
@@ -14164,8 +14227,26 @@ SW.forward = (function () {
     }
     const frames = [snapshot(from)];
     let gcount = 0;
+    const noCut = {};
+    for (const key of cfg.noCutKeys || []) noCut[key] = true;
+    const isLayer = key => key[0] !== "m" && !noCut[key];
+    const cutEps = span * 1e-4;
     for (let k = from + 1; k <= n; k++) {
       const sA = (k - 1) * S / n, sB = k * S / n;
+      // una falla que se propaga corta las capas por donde pasa su punta: al
+      // llegar a una capa se insertan dos vértices a ambos lados del cruce,
+      // que desde ahí se mueven con su propio bloque (sin un tramo que los
+      // una y se estire)
+      {
+        const fA = mm.fault(sgn * slipOf(0, sA)), fB = mm.fault(sgn * slipOf(0, sB));
+        const lenA = SW.geom.polylineLength(fA), lenB = SW.geom.polylineLength(fB);
+        if (lenB > lenA + 1e-9) {
+          const ext = tailFrom(fB, lenA);
+          if (ext.length >= 2)
+            for (const key of Object.keys(sets))
+              if (isLayer(key)) sets[key] = cutAtFault(sets[key], ext, cutEps);
+        }
+      }
       const keys = Object.keys(sets);
       const flat = [];
       for (const key of keys) for (const q of sets[key]) flat.push(q);
@@ -14187,7 +14268,18 @@ SW.forward = (function () {
         idx.forEach((i, j) => { moved[i] = res[j]; });
       });
       let i = 0;
-      for (const key of keys) { sets[key] = moved.slice(i, i + sets[key].length); i += sets[key].length; }
+      const before = {};
+      for (const key of keys) {
+        before[key] = sets[key];
+        sets[key] = moved.slice(i, i + sets[key].length); i += sets[key].length;
+      }
+      // pliegue de espesor constante: las capas conservan su largo
+      if (p.method === "fpfold") {
+        const fl = [mm.fault(sgn * slipOf(0, sB))]
+          .concat(sps.map((sp, si) => sp.m.fault(sgn * slipOf(si + 1, sB))));
+        for (const key of keys)
+          if (isLayer(key)) sets[key] = keepBedLength(before[key], sets[key], fl);
+      }
       ax = ax.map(a => { const r = moved.slice(i, i + a.length); i += a.length; return r; });
       for (const ck of carKeys) { carried[ck] = moved.slice(i, i + carried[ck].length); i += carried[ck].length; }
       // en secuencia, la falla que terminó su slip queda pasiva: su traza y
@@ -14822,6 +14914,7 @@ window.SW = window.SW || {};
     try {
       res = SW.forward.simulate({
         main: p, splays: spl, sets: sets,
+        noCutKeys: Object.keys(out.rooted).map(i2 => "l" + i2),
         surfaceKeys: k => k[0] === "l" || k[0] === "g",
         S: p.slip, n: pp.n, from: Math.min(st.done, pp.n),
         increments: Math.max(2, Math.round((st.fast ? Math.min(p.steps, 40) : p.steps) / pp.n)),
@@ -15426,7 +15519,8 @@ window.SW = window.SW || {};
     ctx.save();
     ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
     if (preview) {
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      // opaco: la geometría inicial no debe verse de fondo en el preview
+      ctx.fillStyle = "#fff";
       ctx.fillRect(r.x, r.y, r.w, r.h);
       ctx.lineJoin = "round"; ctx.lineCap = "round";
       for (const e of view.lines) {
