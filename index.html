@@ -14061,49 +14061,47 @@ SW.forward = (function () {
   }
 
   /* Restricción de largo de capa (deslizamiento flexural): tras mover una
-   * capa, cada tramo recupera exactamente el largo que tenía antes del paso
-   * (se conserva su dirección). Los tramos que cruzan una falla (el corte,
-   * que se abre) quedan libres, y cada corrida entre cortes se ancla en su
-   * vértice que menos se movió: lo que sobra se desliza paralelo a la capa. */
-  function keepBedLength(prev, cur, faults) {
+   * pieza de capa, cada tramo recupera exactamente el largo que tenía antes
+   * del paso (se conserva su dirección). La pieza se ancla en su vértice que
+   * menos se movió; lo que sobra se desliza paralelo a la capa. */
+  function keepBedLength(prev, cur, faults, tol) {
     const n = cur.length;
     if (n < 2 || prev.length !== n) return cur;
-    const crosses = function (a, b) {
-      for (const f of faults)
+    let pin = 0, best = Infinity;
+    for (let i = 0; i < n; i++) {
+      const d = Math.hypot(cur[i][0] - prev[i][0], cur[i][1] - prev[i][1]);
+      if (d < best) { best = d; pin = i; }
+    }
+    // un extremo apoyado en una falla (el corte) manda: se ancla ahí y el
+    // resto cede, así el corte no se despega de la falla ni vuelve a cortarse
+    let nearest = tol;
+    for (const e of [0, n - 1]) {
+      for (const f of faults || []) {
         for (let k = 0; k < f.length - 1; k++) {
-          const h = SW.geom.segmentIntersection(a, b, f[k], f[k + 1]);
-          if (h && h[0] > 1e-9 && h[0] < 1 - 1e-9) return true;
-        }
-      return false;
-    };
-    const out = cur.map(q => q.slice());
-    let i0 = 0;
-    while (i0 < n - 1) {
-      let i1 = i0;
-      while (i1 < n - 1 && !crosses(cur[i1], cur[i1 + 1]) && !crosses(prev[i1], prev[i1 + 1])) i1++;
-      if (i1 > i0) {
-        let pin = i0, best = Infinity;
-        for (let i = i0; i <= i1; i++) {
-          const d = Math.hypot(cur[i][0] - prev[i][0], cur[i][1] - prev[i][1]);
-          if (d < best) { best = d; pin = i; }
-        }
-        const seg = function (i, j) {                 // de i a j = i ± 1
-          const L = Math.hypot(prev[j][0] - prev[i][0], prev[j][1] - prev[i][1]);
-          let dx = cur[j][0] - cur[i][0], dz = cur[j][1] - cur[i][1];
-          let M = Math.hypot(dx, dz);
-          if (M < 1e-12) { dx = prev[j][0] - prev[i][0]; dz = prev[j][1] - prev[i][1]; M = Math.hypot(dx, dz) || 1; }
-          return [dx / M * L, dz / M * L];
-        };
-        for (let i = pin; i < i1; i++) {
-          const v = seg(i, i + 1);
-          out[i + 1] = [out[i][0] + v[0], out[i][1] + v[1]];
-        }
-        for (let i = pin; i > i0; i--) {
-          const v = seg(i, i - 1);
-          out[i - 1] = [out[i][0] + v[0], out[i][1] + v[1]];
+          const ax = f[k][0], az = f[k][1], dx = f[k + 1][0] - ax, dz = f[k + 1][1] - az;
+          const L2 = dx * dx + dz * dz;
+          const t = L2 > 0 ? Math.max(0, Math.min(1, ((cur[e][0] - ax) * dx + (cur[e][1] - az) * dz) / L2)) : 0;
+          const d = Math.hypot(ax + t * dx - cur[e][0], az + t * dz - cur[e][1]);
+          if (d < nearest) { nearest = d; pin = e; }
         }
       }
-      i0 = i1 + 1;
+    }
+    const seg = function (i, j) {                 // de i a j = i ± 1
+      const L = Math.hypot(prev[j][0] - prev[i][0], prev[j][1] - prev[i][1]);
+      let dx = cur[j][0] - cur[i][0], dz = cur[j][1] - cur[i][1];
+      let M = Math.hypot(dx, dz);
+      if (M < 1e-12) { dx = prev[j][0] - prev[i][0]; dz = prev[j][1] - prev[i][1]; M = Math.hypot(dx, dz) || 1; }
+      return [dx / M * L, dz / M * L];
+    };
+    const out = cur.map(q => q.slice());
+    out[pin] = cur[pin].slice();
+    for (let i = pin; i < n - 1; i++) {
+      const v = seg(i, i + 1);
+      out[i + 1] = [out[i][0] + v[0], out[i][1] + v[1]];
+    }
+    for (let i = pin; i > 0; i--) {
+      const v = seg(i, i - 1);
+      out[i - 1] = [out[i][0] + v[0], out[i][1] + v[1]];
     }
     return out;
   }
@@ -14229,24 +14227,20 @@ SW.forward = (function () {
     let gcount = 0;
     const noCut = {};
     for (const key of cfg.noCutKeys || []) noCut[key] = true;
-    const isLayer = key => key[0] !== "m" && !noCut[key];
+    const isLayer = key => key[0] !== "m" && !noCut[key.split("#")[0]];
     const cutEps = span * 1e-4;
+    let cutSeq = 0;
+    // cada paso se subdivide: la punta que se propaga avanza poco por
+    // tramo, y las capas se cortan justo cuando ella llega (con pasos
+    // grandes, los vértices del corte se arrastran antes de ser alcanzados)
+    const lenAt = (m, sl) => SW.geom.polylineLength(m.fault(sgn * sl));
+    const grow = Math.max(0, lenAt(mm, S) - lenAt(mm, 0),
+                          ...sps.map((sp, si) => lenAt(sp.m, S) - lenAt(sp.m, 0)));
+    const CH = Math.max(1, Math.min(32, Math.ceil(grow / n / Math.max(span / 800, 1e-9))));
     for (let k = from + 1; k <= n; k++) {
-      const sA = (k - 1) * S / n, sB = k * S / n;
-      // una falla que se propaga corta las capas por donde pasa su punta: al
-      // llegar a una capa se insertan dos vértices a ambos lados del cruce,
-      // que desde ahí se mueven con su propio bloque (sin un tramo que los
-      // una y se estire)
-      {
-        const fA = mm.fault(sgn * slipOf(0, sA)), fB = mm.fault(sgn * slipOf(0, sB));
-        const lenA = SW.geom.polylineLength(fA), lenB = SW.geom.polylineLength(fB);
-        if (lenB > lenA + 1e-9) {
-          const ext = tailFrom(fB, lenA);
-          if (ext.length >= 2)
-            for (const key of Object.keys(sets))
-              if (isLayer(key)) sets[key] = cutAtFault(sets[key], ext, cutEps);
-        }
-      }
+      const kA = (k - 1) * S / n, kB = k * S / n;
+      for (let ch = 0; ch < CH; ch++) {
+      const sA = kA + (kB - kA) * ch / CH, sB = kA + (kB - kA) * (ch + 1) / CH;
       const keys = Object.keys(sets);
       const flat = [];
       for (const key of keys) for (const q of sets[key]) flat.push(q);
@@ -14254,7 +14248,7 @@ SW.forward = (function () {
       const carKeys = Object.keys(carried);
       for (const ck of carKeys) for (const q of carried[ck]) flat.push(q);
       const a0 = slipOf(0, sA), a1 = slipOf(0, sB);
-      let moved = a1 > a0 ? mm.move(flat, sgn * a0, sgn * a1, Math.max(1, Math.round(incr * (a1 - a0) / (sB - sA || 1))))
+      let moved = a1 > a0 ? mm.move(flat, sgn * a0, sgn * a1, Math.max(1, Math.round(incr / CH * (a1 - a0) / (sB - sA || 1))))
                           : flat.map(q => q.slice());
       sps.forEach(function (sp, si) {
         const b0 = slipOf(si + 1, sA), b1 = slipOf(si + 1, sB);
@@ -14264,7 +14258,7 @@ SW.forward = (function () {
         const hw = sp.m.p.isCopy ? null : hwTest(sgn * slipOf(0, sB));
         const idx = [], sub = [];
         moved.forEach((q, i) => { if (!hw || hw(q)) { idx.push(i); sub.push(q); } });
-        const res = sp.m.move(sub, sgn * b0, sgn * b1, Math.max(1, Math.round(incr * (b1 - b0) / (sB - sA || 1))));
+        const res = sp.m.move(sub, sgn * b0, sgn * b1, Math.max(1, Math.round(incr / CH * (b1 - b0) / (sB - sA || 1))));
         idx.forEach((i, j) => { moved[i] = res[j]; });
       });
       let i = 0;
@@ -14278,7 +14272,29 @@ SW.forward = (function () {
         const fl = [mm.fault(sgn * slipOf(0, sB))]
           .concat(sps.map((sp, si) => sp.m.fault(sgn * slipOf(si + 1, sB))));
         for (const key of keys)
-          if (isLayer(key)) sets[key] = keepBedLength(before[key], sets[key], fl);
+          if (isLayer(key)) sets[key] = keepBedLength(before[key], sets[key], fl, cutEps * 6);
+      }
+      // toda capa que cruza una falla viva se corta ahí (se corta DESPUÉS de
+      // mover el tramo, con la punta ya pasada): las dos piezas siguen cada
+      // una con su bloque y nunca queda un tramo que las una y se estire
+      {
+        const live = [];
+        if (!carried[0]) live.push(mm.fault(sgn * slipOf(0, sB)));
+        if (W) live.push(W.bt(sgn * slipOf(0, sB)));
+        sps.forEach((sp, si) => { if (!carried[si + 1]) live.push(sp.m.fault(sgn * slipOf(si + 1, sB))); });
+        for (const key of Object.keys(sets)) {
+          if (!isLayer(key)) continue;
+          let pcs = [sets[key]];
+          for (const f of live) {
+            if (!f || f.length < 2) continue;
+            const nx = [];
+            for (const pc of pcs) for (const q of cutPieces(pc, f, cutEps)) nx.push(q);
+            pcs = nx;
+          }
+          if (pcs.length === 1 && pcs[0].length === sets[key].length) continue;
+          delete sets[key];
+          pcs.forEach((pc, q) => { sets[key + "#" + (cutSeq++) + "." + q] = pc; });
+        }
       }
       ax = ax.map(a => { const r = moved.slice(i, i + a.length); i += a.length; return r; });
       for (const ck of carKeys) { carried[ck] = moved.slice(i, i + carried[ck].length); i += carried[ck].length; }
@@ -14296,6 +14312,7 @@ SW.forward = (function () {
             axKinds.push((j ? "splay" + j + ":" : "") + a.kind);
           }
         }
+      }
       }
       const newKeys = [];
       if (cfg.growth) {
@@ -14461,9 +14478,65 @@ SW.forward = (function () {
     return out;
   }
 
+  /* Corta de verdad una polilínea en cada cruce con `fault`: devuelve las
+   * piezas (arreglos de puntos), con un hueco de 2·eps en cada corte. Cada
+   * pieza se mueve desde ahí con su propio bloque; así no queda ningún tramo
+   * que una colgante y yaciente y se estire. Piezas de un solo punto se
+   * descartan. */
+  function cutPieces(verts, fault, eps, minPiece) {
+    const cum = [0];
+    for (let i = 1; i < verts.length; i++)
+      cum.push(cum[i - 1] + Math.hypot(verts[i][0] - verts[i - 1][0], verts[i][1] - verts[i - 1][1]));
+    const total = cum[cum.length - 1];
+    // un cruce pegado al extremo de la pieza o a otro corte es el borde de un
+    // corte anterior que oscila con la falla: no se vuelve a cortar
+    const minP = Math.max(minPiece || 0, 4 * eps);
+    const out = [];
+    let cur = [verts[0].slice()], lastCut = 0;
+    for (let i = 1; i < verts.length; i++) {
+      const a = verts[i - 1], b = verts[i];
+      const hits = [];
+      const sx0 = Math.min(a[0], b[0]), sx1 = Math.max(a[0], b[0]);
+      const sz0 = Math.min(a[1], b[1]), sz1 = Math.max(a[1], b[1]);
+      for (let k = 0; k < fault.length - 1; k++) {
+        const f0 = fault[k], f1 = fault[k + 1];
+        if (Math.max(f0[0], f1[0]) < sx0 || Math.min(f0[0], f1[0]) > sx1 ||
+            Math.max(f0[1], f1[1]) < sz0 || Math.min(f0[1], f1[1]) > sz1) continue;
+        const h = SW.geom.segmentIntersection(a, b, f0, f1);
+        if (h && h[0] > 1e-9 && h[0] < 1 - 1e-9) hits.push([h[0], k]);
+      }
+      hits.sort((x, y) => x[0] - y[0]);
+      const L = cum[i] - cum[i - 1];
+      for (const [t, k] of hits) {
+        // ninguna pieza minúscula: un cruce pegado al extremo o a otro corte
+        // es el borde de un corte anterior que oscila con la falla
+        const at = cum[i - 1] + t * L;
+        if (at - lastCut < minP || total - at < minP) continue;
+        lastCut = at;
+        // normal de la falla hacia arriba (el lado del bloque colgante):
+        // la orilla de arriba queda justo encima de la falla y la otra justo
+        // debajo, así cada una nace en su bloque aunque el campo la mueva
+        const fx = fault[k + 1][0] - fault[k][0], fz = fault[k + 1][1] - fault[k][1];
+        const FL = Math.hypot(fx, fz) || 1;
+        let nx = -fz / FL, nz = fx / FL;
+        if (nz < 0) { nx = -nx; nz = -nz; }
+        const X = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+        const side = (b[0] - a[0]) * nx + (b[1] - a[1]) * nz;       // + : la capa sube de lado
+        const before = [X[0] + (side > 0 ? -nx : nx) * eps, X[1] + (side > 0 ? -nz : nz) * eps];
+        const after = [X[0] + (side > 0 ? nx : -nx) * eps, X[1] + (side > 0 ? nz : -nz) * eps];
+        cur.push(before);
+        out.push(cur);
+        cur = [after];
+      }
+      cur.push(b.slice());
+    }
+    if (cur.length >= 2) out.push(cur);
+    return out;
+  }
+
   return { METHODS, run, prepare, simulate, splayParams, growthBed, nudgeRoot, setup, faultTrace, suppeGamma, strainGrid, ellipseOf,
            wedge, wedgeFaults,
-           splitAtFault, cutAtFault, sampleLine, extendEnds,
+           splitAtFault, cutAtFault, cutPieces, sampleLine, extendEnds,
            _v: VFIELD, _integrate: integrate };
 })();
 
@@ -14860,6 +14933,15 @@ window.SW = window.SW || {};
     return out;
   }
 
+  /* Traza con que se CORTAN las capas. Flujo paralelo y cizalla simple
+   * prolongan la falla en recta más allá de su extremo dibujado (así mueven
+   * también lo que queda sobre él): hay que cortar con esa prolongación, o
+   * las capas de arriba quedan sin corte y con un tramo estirado. */
+  function cutTrace(f, p, span) {
+    return (p.method === "fpf" || p.method === "shear") && usesLine() && f && f.length >= 2
+      ? SW.forward.extendEnds(f, span * 3) : f;
+  }
+
   /* -- cálculo --------------------------------------------------------------- */
   function compute() {
     const pp = params();
@@ -14872,13 +14954,13 @@ window.SW = window.SW || {};
     // fallas iniciales donde se cortan las líneas: la principal (con cuña,
     // sólo hasta la raíz del retro) y el retro
     const cuts = pp.bt ? (SW.forward.wedgeFaults(p, pp.bt, 0) || [])
-                       : [SW.forward.faultTrace(p, 0)].filter(Boolean);
+                       : [cutTrace(SW.forward.faultTrace(p, 0), p, span)].filter(Boolean);
     // las copias (splays) también cortan las capas desde el inicio
     if (!pp.bt && pp.splays) {
       const specs = splaySpecs(pp);
       if (Array.isArray(specs))
         for (const sp_ of specs) {
-          const t = SW.forward.faultTrace(sp_.p, 0);
+          const t = cutTrace(SW.forward.faultTrace(sp_.p, 0), sp_.p, span);
           if (t) cuts.push(t);
         }
     }
@@ -14896,8 +14978,17 @@ window.SW = window.SW || {};
       if (rooted) {
         out.rooted[i] = true;
         v = SW.restore.seatEnds(v, rooted, f0, sp * 1e-3);
-      } else for (const f of cuts) v = SW.forward.cutAtFault(v, f, sp * 0.05);
-      sets["l" + i] = v;
+        sets["l" + i] = v;
+      } else {
+        let pcs = [v];
+        for (const f of cuts) {
+          const nx = [];
+          for (const pc of pcs) for (const q of SW.forward.cutPieces(pc, f, sp * 0.05)) nx.push(q);
+          pcs = nx;
+        }
+        if (pcs.length === 1) sets["l" + i] = pcs[0];
+        else pcs.forEach((pc, q) => { sets["l" + i + "#" + q] = pc; });
+      }
     });
     let rings = 0;
     if (checked("fwd-strain")) {
@@ -14943,9 +15034,10 @@ window.SW = window.SW || {};
   function frameView(res, i) {
     if (res.views[i]) return res.views[i];
     const fr = res.frames[i];
+    const cutF = res.pp.bt ? fr.faults : fr.faults.map(f => cutTrace(f, res.pp.p, res.span || res.pp.span));
     const cut = function (pl) {
       let pcs = [pl];
-      for (const f of fr.faults) {
+      for (const f of cutF) {
         const nx = [];
         for (const pc of pcs) for (const q of SW.forward.splitAtFault(pc, f)) nx.push(q);
         pcs = nx;
@@ -14958,7 +15050,13 @@ window.SW = window.SW || {};
     res.lines.forEach(function (l, i2) {
       let pts = fr.sets["l" + i2];
       let pcs;
-      if (pts && res.rooted[i2]) {
+      if (!pts) {
+        // la capa se cortó en piezas independientes (claves l<i>#…)
+        const pre = "l" + i2 + "#";
+        pcs = [];
+        for (const key of Object.keys(fr.sets))
+          if (key.slice(0, pre.length) === pre) for (const q of cut(fr.sets[key])) pcs.push(q);
+      } else if (res.rooted[i2]) {
         // apoyada en la principal: no se corta con ella, se vuelve a apoyar
         pts = SW.restore.snapEndsToFault(pts, fr.faults[0], res.sp * 2).vertices;
         pcs = [pts];
@@ -14967,7 +15065,7 @@ window.SW = window.SW || {};
           for (const pc of pcs) for (const q of SW.forward.splitAtFault(pc, f)) nx.push(q);
           pcs = nx;
         }
-      } else pcs = pts ? cut(pts) : [];
+      } else pcs = cut(pts);
       const pieces = pcs.map(pc => SW.geom.simplifyDP(pc, tol)).filter(pc => pc.length >= 2);
       view.lines.push({ line: l, pieces: pieces });
     });
