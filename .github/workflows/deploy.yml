@@ -1,7 +1,8 @@
 name: Deploy to GitHub Pages
 
 # StructuralSketcher es un único index.html autocontenido (sin build, sin
-# dependencias): este workflow solo lo publica tal cual en Pages.
+# dependencias): este workflow lo publica tal cual en Pages, junto con el
+# manifiesto y los íconos de la pantalla de inicio.
 
 on:
   push:
@@ -30,6 +31,8 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/index.html
+          cp manifest.webmanifest _site/
+          cp -r icons _site/icons
       - uses: actions/configure-pages@v5
         with:
           enablement: true
