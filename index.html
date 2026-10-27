@@ -614,6 +614,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-lasso" viewBox="0 0 24 24"><ellipse cx="12" cy="9" rx="8" ry="5.5"/><path d="M7 13.4c-1 1.6-1 3.4.4 4.3 1.2.8 1.6 2 .8 3.1"/></symbol>
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5z"/><path d="M14.5 5.5l4 4"/></symbol>
   <symbol id="i-vertex" viewBox="0 0 24 24"><path d="M4 18l6-9 4 5 6-9"/><rect x="2" y="16" width="4" height="4"/><rect x="8" y="7" width="4" height="4"/><rect x="12" y="12" width="4" height="4"/><rect x="18" y="3" width="4" height="4"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v11m-4-4l4 4 4-4"/><path d="M3 15l4 5h10l4-5"/><circle cx="7" cy="17.2" r=".6"/><circle cx="12" cy="18" r=".6"/><circle cx="16.5" cy="17" r=".6"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5-5-6 6-2-2-5 5"/></symbol>
   <symbol id="i-split" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M7.8 16.2L18 4M16.2 16.2L6 4"/></symbol>
   <symbol id="i-extend" viewBox="0 0 24 24"><path d="M3 12h13m-4-4l4 4-4 4M20 4v16"/></symbol>
@@ -702,6 +703,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <span class="sep"></span>
   <div class="hgroup">
     <button id="import-image-btn" class="icon-only" title="Import image to trace over"><svg class="ic"><use href="#i-image"/></svg></button>
+    <button id="import-data-btn" class="icon-only" title="Import data: shapefile (2D/3D points, polylines, polygons + .lyr symbology) projected onto the section, or a SEG-Y line"><svg class="ic"><use href="#i-import"/></svg></button>
     <button id="setup-btn" class="icon-only" title="Section setup: name, extent, units, end labels"><svg class="ic"><use href="#i-setup"/></svg></button>
   </div>
   <span class="sep"></span>
@@ -1110,6 +1112,10 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <h2>Images &amp; scale</h2>
       <div class="panel-body" id="panel-images-body"></div>
     </div>
+    <div class="panel collapsed" id="panel-imports">
+      <h2>Imported data</h2>
+      <div class="panel-body" id="panel-imports-body"></div>
+    </div>
     <div class="panel collapsed" id="panel-linelength">
       <h2>Line-Length</h2>
       <div class="panel-body" id="panel-linelength-body"></div>
@@ -1140,7 +1146,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.17.0",
+  version: "0.18.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1152,6 +1158,19 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.18.0", date: "2026-10-27", highlights: [
+      "Import shapefiles (2D or 3D points, multipoints, polylines and " +
+        "polygons) projected onto a section trace drawn on a map preview, " +
+        "with a max-distance swath, Mercator scale correction and Z from " +
+        "the geometry or an attribute; polylines become editable horizons/" +
+        "faults, points and polygons reference layers (Imported data panel).",
+      "ArcGIS .lyr symbology (unique-value classes) and MOVE's colorval " +
+        "field colour the imported features; dip/azimuth points can also " +
+        "become apparent-dip symbols.",
+      "SEG-Y: int16/int32/int8 samples, little-endian files, trace-header " +
+        "coordinates (spacing and placement on the section trace), " +
+        "time-to-depth with a constant velocity; fixed scrambled images.",
+    ] },
     { version: "0.17.0", date: "2026-10-06", highlights: [
       "Unit polygons from a planar arrangement of horizons, faults, " +
         "topography and the model boundary: the basal unit reaches the " +
@@ -4623,6 +4642,15 @@ SW.model = (function () {
       // Sondajes: collar (s, z_collar) + columna de intervalos con espesor
       // y patrón litológico. Ver SW.wellPatterns.
       wells: [],
+      // Datos de referencia importados (shapefile proyectado sobre la traza):
+      // {kind:"points", xy:[s,z,…], classes, runs, size…} o {kind:
+      // "polygons", items:[{vertices, holes, color…}]}. Se dibujan y se
+      // exportan, pero no se editan vértice a vértice. Ver js/io/shapefile.js.
+      overlays: [],
+      // Traza en el mapa con la que se proyectó lo importado ({x0, y0, x1,
+      // y1, crs, length…}) o null: las importaciones siguientes la reusan
+      // para que todo comparta las mismas distancias.
+      geo_trace: null,
       // Escala espacial declarada por el usuario, un registro por eje:
       // {real, unit, factor, image_id, at}. null = ese eje todavía no se
       // calibró, y hasta que lo esté las longitudes que mida la app son
@@ -4693,6 +4721,15 @@ SW.model = (function () {
                              intervals: [], visible: true, width_px: 18,
                              show_labels: true }, w);
     });
+    sec.overlays = (sec.overlays || []).map(function (o) {
+      return Object.assign({ id: genId(), kind: "points", name: "Imported",
+                             visible: true, opacity: 1, size: 3,
+                             color: [40, 40, 50], use_classes: true,
+                             classes: [], runs: [], xy: [], items: [],
+                             fill_opacity: 0.5, width: 1.2 }, o);
+    });
+    sec.geo_trace = sec.geo_trace && isFinite(sec.geo_trace.x0)
+      ? sec.geo_trace : null;
     sec.calibration = Object.assign({ h: null, v: null },
                                     sec.calibration || {});
     sec.versions = (sec.versions || []).map(function (v) {
@@ -4970,6 +5007,34 @@ SW.model = (function () {
         break;
       }
 
+      /* -- datos importados (overlays) y traza georreferenciada -------- */
+      case "add_overlay":
+        sec.overlays.push(clone(op.overlay));
+        break;
+      case "remove_overlay": {
+        const i = (sec.overlays || []).findIndex(o => o.id === op.id);
+        if (i >= 0) sec.overlays.splice(i, 1);
+        break;
+      }
+      case "restore_overlay": {
+        const idx = (op.index === undefined || op.index === null ||
+                     op.index > sec.overlays.length) ? sec.overlays.length
+                                                     : op.index;
+        sec.overlays.splice(idx, 0, clone(op.overlay));
+        break;
+      }
+      case "set_overlay_props": {
+        const o = (sec.overlays || []).find(x => x.id === op.id);
+        if (o)
+          for (const k of ["name", "visible", "opacity", "size", "color",
+                           "use_classes", "fill_opacity", "width", "classes"])
+            if (k in (op.props || {})) o[k] = clone(op.props[k]);
+        break;
+      }
+      case "set_geo_trace":
+        sec.geo_trace = op.trace ? clone(op.trace) : null;
+        break;
+
       default:
         console.warn("applyOp: unknown op", op.op);
     }
@@ -5003,6 +5068,14 @@ SW.model = (function () {
     if (sec.model_boundary)
       sec.model_boundary.vertices = sec.model_boundary.vertices.map(v => [fs(v[0]), fz(v[1])]);
     for (const w of sec.wells || []) { w.s = fs(w.s); w.z_collar = fz(w.z_collar); }
+    for (const o of sec.overlays || []) {
+      const xy = o.xy || [];
+      for (let i = 0; i + 1 < xy.length; i += 2) { xy[i] = fs(xy[i]); xy[i + 1] = fz(xy[i + 1]); }
+      for (const it of o.items || []) {
+        it.vertices = it.vertices.map(v => [fs(v[0]), fz(v[1])]);
+        if (it.holes) it.holes = it.holes.map(h => h.map(v => [fs(v[0]), fz(v[1])]));
+      }
+    }
     sec.length = Math.abs(as) * sec.length;
     const z0 = fz(sec.z_min), z1 = fz(sec.z_max);
     sec.z_min = Math.min(z0, z1); sec.z_max = Math.max(z0, z1);
@@ -5048,6 +5121,12 @@ SW.model = (function () {
     }
     for (const p of M.sec.polygons || [])
       for (const v of p.vertices) add(v[0], v[1]);
+    for (const o of M.sec.overlays || []) {
+      if (o.visible === false) continue;
+      const xy = o.xy || [];
+      for (let i = 0; i + 1 < xy.length; i += 2) add(xy[i], xy[i + 1]);
+      for (const it of o.items || []) for (const v of it.vertices) add(v[0], v[1]);
+    }
     for (const w of M.sec.wells || []) {
       add(w.s, w.z_collar);
       let z = w.z_collar;
@@ -5726,8 +5805,10 @@ SW.render = (function () {
     }
     if (st.showFrame) drawSectionFrame(ctx, sec);
     drawImages(ctx, sec);
+    drawOverlayPolygons(ctx, sec, st);
     if (st.showPolygons) drawPolygons(ctx, sec, st);
     if (st.showPolygons) drawModelBoundary(ctx, sec);
+    drawOverlayPoints(ctx, sec, r);
     drawLines(ctx, sec, st);
     drawDips(ctx, sec, st);
     if (st.showWells) drawWells(ctx, sec, st);
@@ -5776,6 +5857,77 @@ SW.render = (function () {
       ctx.save();
       ctx.globalAlpha = im.opacity === undefined ? 1 : im.opacity;
       ctx.drawImage(entry.img, x0, y0, x1 - x0, y1 - y0);
+      ctx.restore();
+    }
+  }
+
+  /* Datos importados (sec.overlays): polígonos de referencia bajo todo lo
+   * dibujado, y nubes de puntos (sismos, datos de terreno proyectados) bajo
+   * las líneas. Los puntos se agrupan por clase en un único path cada una
+   * y se descartan los que caen fuera del recuadro: un catálogo proyectado
+   * tiene decenas de miles. */
+  function overlayClassColor(o, ci) {
+    const c = o.use_classes !== false && o.classes && o.classes[ci] &&
+              o.classes[ci].color;
+    return "rgb(" + (c || o.color || [40, 40, 50]).join(",") + ")";
+  }
+
+  function drawOverlayPolygons(ctx, sec, st) {
+    const V = SW.view;
+    for (const o of sec.overlays || []) {
+      if (o.kind !== "polygons" || o.visible === false) continue;
+      for (const it of o.items || []) {
+        if ((it.vertices || []).length < 3) continue;
+        ctx.beginPath();
+        for (const ring of [it.vertices].concat(it.holes || [])) {
+          ring.forEach((v, i) =>
+            i ? ctx.lineTo(V.sx(v[0]), V.zy(v[1])) : ctx.moveTo(V.sx(v[0]), V.zy(v[1])));
+          ctx.closePath();
+        }
+        const rgb = (it.color || [150, 150, 160]).join(",");
+        ctx.fillStyle = "rgba(" + rgb + "," + (o.fill_opacity === undefined ? 0.5 : o.fill_opacity) + ")";
+        ctx.fill("evenodd");
+        if (o.width !== 0) {
+          ctx.strokeStyle = "rgb(" + (it.line_color || it.color || [90, 90, 90]).join(",") + ")";
+          ctx.lineWidth = o.width || 1.2;
+          ctx.stroke();
+        }
+        if (st.showLabels && it.name) {
+          const lp = SW.geom.polygonLabelPoint(it.vertices);
+          ctx.font = "10px 'Segoe UI', sans-serif";
+          ctx.fillStyle = "rgba(40,40,50,0.85)";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(it.name, V.sx(lp[0]), V.zy(lp[1]));
+        }
+      }
+    }
+  }
+
+  function drawOverlayPoints(ctx, sec, r) {
+    const V = SW.view;
+    const x0 = r.x - 10, x1 = r.x + r.w + 10, y0 = r.y - 10, y1 = r.y + r.h + 10;
+    for (const o of sec.overlays || []) {
+      if (o.kind !== "points" || o.visible === false) continue;
+      const xy = o.xy || [];
+      const size = Math.max(0.5, +o.size || 3), h = size / 2;
+      const runs = (o.runs && o.runs.length) ? o.runs : [[0, 0, xy.length / 2]];
+      ctx.save();
+      ctx.globalAlpha = o.opacity === undefined ? 1 : o.opacity;
+      for (const run of runs) {
+        ctx.fillStyle = overlayClassColor(o, run[0]);
+        ctx.beginPath();
+        const a = run[1] * 2, b = (run[1] + run[2]) * 2;
+        for (let i = a; i < b; i += 2) {
+          const X = V.sx(xy[i]), Y = V.zy(xy[i + 1]);
+          if (X < x0 || X > x1 || Y < y0 || Y > y1) continue;
+          if (size <= 3) ctx.rect(X - h, Y - h, size, size);
+          else { ctx.moveTo(X + h, Y); ctx.arc(X, Y, h, 0, Math.PI * 2); }
+        }
+        ctx.fill();
+        if (size > 3) {
+          ctx.lineWidth = 0.6; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.stroke();
+        }
+      }
       ctx.restore();
     }
   }
@@ -6412,6 +6564,47 @@ SW.exporter = (function () {
                esc(im.data_url) + '"/>');
     }
 
+    // datos importados: polígonos de referencia (abajo) y nubes de puntos
+    // (arriba de los rellenos, bajo las líneas; sólo los que caen en vista)
+    const ovPoints = [];
+    for (const o of sec.overlays || []) {
+      if (o.visible === false) continue;
+      if (o.kind === "points") { ovPoints.push(o); continue; }
+      for (const it of o.items || []) {
+        if ((it.vertices || []).length < 3) continue;
+        const d = [it.vertices].concat(it.holes || []).map(r =>
+          "M" + r.map(v => sx(v[0]).toFixed(1) + "," + zy(v[1]).toFixed(1)).join("L") + "Z").join("");
+        out.push('<path fill-rule="evenodd" d="' + d + '" fill="rgb(' +
+          (it.color || [150, 150, 160]).join(",") + ')" fill-opacity="' +
+          (o.fill_opacity === undefined ? 0.5 : o.fill_opacity) + '" stroke="' +
+          (o.width === 0 ? "none" : "rgb(" + (it.line_color || it.color || [90, 90, 90]).join(",") + ")") +
+          '" stroke-width="' + (o.width || 1.2) + '"/>');
+      }
+    }
+    function overlayPointsSVG() {
+      for (const o of ovPoints) {
+        const xy = o.xy || [];
+        const rad = Math.max(0.25, (+o.size || 3) / 2);
+        const runs = (o.runs && o.runs.length) ? o.runs : [[0, 0, xy.length / 2]];
+        out.push('<g opacity="' + (o.opacity === undefined ? 1 : o.opacity) + '">');
+        for (const run of runs) {
+          const c = o.use_classes !== false && o.classes && o.classes[run[0]] &&
+                    o.classes[run[0]].color;
+          const pts = [];
+          for (let i = run[1] * 2; i < (run[1] + run[2]) * 2; i += 2) {
+            const X = sx(xy[i]), Y = zy(xy[i + 1]);
+            if (X < r.x || X > r.x + r.w || Y < r.y || Y > r.y + r.h) continue;
+            pts.push('<circle cx="' + X.toFixed(1) + '" cy="' + Y.toFixed(1) +
+                     '" r="' + rad + '"/>');
+          }
+          if (pts.length)
+            out.push('<g fill="rgb(' + (c || o.color || [40, 40, 50]).join(",") +
+                     ')">' + pts.join("") + "</g>");
+        }
+        out.push("</g>");
+      }
+    }
+
     // rellenos de unidad (Unit polygons)
     if (st.showPolygons)
       for (const poly of sec.polygons || []) {
@@ -6440,6 +6633,8 @@ SW.exporter = (function () {
                    rgb + ')">' + esc(poly.name) + "</text>");
         }
       }
+
+    overlayPointsSVG();
 
     // líneas
     for (const line of sec.lines || []) {
@@ -9729,8 +9924,8 @@ window.SW = window.SW || {};
       for (const name of Object.keys(hp)) {
         const p = hp[name];
         ctx.beginPath();
-        const hp = HANDLE_PX();
-        ctx.rect(V.sx(p[0]) - hp / 2, V.zy(p[1]) - hp / 2, hp, hp);
+        const hs = HANDLE_PX();
+        ctx.rect(V.sx(p[0]) - hs / 2, V.zy(p[1]) - hs / 2, hs, hs);
         ctx.fill(); ctx.stroke();
       }
       ctx.restore();
@@ -9883,7 +10078,9 @@ window.SW = window.SW || {};
       e.preventDefault();
       const img = [...files].find(f => /^image\//.test(f.type));
       if (img) SW.actions.importImageFile(img);
-      else SW.view.status("Drop an image file to trace over it.");
+      else if (SW.actions.importDataFiles && SW.actions.importDataFiles(files)) return;
+      else SW.view.status("Drop an image to trace over, a shapefile " +
+                          "(.shp + .dbf/.prj, optional .lyr) or a SEG-Y.");
     });
   };
 
@@ -10351,25 +10548,33 @@ SW.chronoColor = function (k) {
 
 /* ==== js/io/segy.js ==== */
 "use strict";
-/* Lector y renderizador SEG-Y (dominio TWTT) + importación como imagen.
+/* Lector y renderizador SEG-Y + importación como imagen.
  *
- * Port de StructuralWorks/io/seismic/segy_reader.py + render.py:
- *   - Lector mínimo rev 0/1: big-endian (el estándar), formatos de muestra
- *     1 (float IBM) y 5 (float IEEE) — los dos que cubren los datos reales
- *     de amplitud. Cabecera textual EBCDIC/ASCII best-effort (informativa).
+ * Port de StructuralWorks/io/seismic/segy_reader.py + render.py, ampliado:
+ *   - Lector rev 0/1/2: big-endian (el estándar) o little-endian (se
+ *     detecta por la geometría del encabezado binario), formatos de muestra
+ *     1 (float IBM), 2 (int32), 3 (int16), 5 (float IEEE) y 8 (int8).
+ *     Cabecera textual EBCDIC/ASCII best-effort (informativa).
+ *   - Cabeceras de traza: coordenadas CDP X/Y (181–188) o de fuente
+ *     (73–80) con su escalar (71–72) y el retardo de registro (109–110).
+ *     De ellas sale el espaciado entre trazas por defecto (mediana) y, si
+ *     la sección ya tiene una traza georreferenciada (sec.geo_trace, de una
+ *     importación de shapefile), la ubicación de la línea sobre ella.
  *   - Render: paletas "grayscale", "seismic_rwb", "amber" y "spectral" (las
  *     mismas control points del plugin), escala de color por percentil
  *     simétrico (clip_pct, 98) y contraste (gain) — las propiedades de
  *     visualización de StructuralWorks.
  *   - El resultado es UNA imagen de la sección como cualquier foto: se puede
- *     mover, redimensionar y calibrar. El eje vertical es TWTT en ms
- *     (0 en el techo, negativo hacia abajo), NO profundidad — igual que el
- *     plugin, que crea el corte en el dominio `twtt`.
+ *     mover, redimensionar y calibrar. El eje vertical es, a elección, TWTT
+ *     en ms (0 en el techo, negativo hacia abajo — como el dominio `twtt`
+ *     del plugin), profundidad convertida con una velocidad constante
+ *     (z = datum − v·t/2) o profundidad directa (volumen migrado en
+ *     profundidad).
  *   - Para poder recolorear tras guardar/reabrir el proyecto sin releer el
  *     .sgy (el navegador no vuelve a tener el archivo), se persiste en
  *     calibration_meta el "índice de paleta" de la amplitud ya clipada
- *     (1 byte/muestra). El PNG de pantalla se renderiza aparte, con
- *     resolución acotada a MAX_PX. */
+ *     (1 byte/muestra, por filas de imagen). El PNG de pantalla se
+ *     renderiza aparte, con resolución acotada a MAX_PX. */
 
 window.SW = window.SW || {};
 SW.segy = SW.segy || {};
@@ -10379,7 +10584,6 @@ SW.actions = SW.actions || {};
   const TEXT_HEADER_SIZE = 3200;
   const BINARY_HEADER_SIZE = 400;
   const TRACE_HEADER_SIZE = 240;
-  const BPS = 4;                       // formatos 1 y 5: 4 bytes por muestra
   const MAX_SAMPLES = 16 * 1024 * 1024;
   const MAX_PX = 4096;                 // lado largo máximo del PNG de pantalla
   const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -10455,29 +10659,64 @@ SW.actions = SW.actions || {};
     return out.replace(/\s+/g, " ").trim();
   }
 
+  /* Bytes por muestra de cada código de formato soportado (rev 1/2):
+   * 1 float IBM, 2 int32, 3 int16, 5 float IEEE, 8 int8. */
+  const FORMAT_BPS = { 1: 4, 2: 4, 3: 2, 5: 4, 8: 1 };
+  const FORMAT_NAME = { 1: "IBM float", 2: "int32", 3: "int16",
+                        5: "IEEE float", 8: "int8" };
+
+  function sampleReader(fmt, le) {
+    switch (fmt) {
+      case 1: return (dv, at) => ibmToFloat(dv.getUint32(at, le));
+      case 2: return (dv, at) => dv.getInt32(at, le);
+      case 3: return (dv, at) => dv.getInt16(at, le);
+      case 8: return (dv, at) => dv.getInt8(at);
+      default: return (dv, at) => dv.getFloat32(at, le);
+    }
+  }
+
+  /* Geometría del encabezado binario en un orden de bytes; null si no es
+   * creíble (así se detecta un archivo little-endian, que el estándar no
+   * admite hasta rev 2 pero que muchos programas escriben igual). */
+  function binaryGeometry(dv, le) {
+    const H = TEXT_HEADER_SIZE;
+    const dt_us = dv.getInt16(H + 16, le);
+    const n_samples = dv.getUint16(H + 20, le);
+    const fmt = dv.getInt16(H + 24, le);
+    const ext = dv.getInt16(H + 304, le) || 0;
+    if (dt_us <= 0 || n_samples <= 0 || n_samples > 65535 || !FORMAT_BPS[fmt] ||
+        ext < 0 || ext > 100)
+      return null;
+    return { dt_us, n_samples, sample_format: fmt, ext, le };
+  }
+
   /* Lee un .sgy/.segy. Devuelve {amplitude (Float64Array traces*samples),
-   * dt_ms, n_traces, n_samples, sample_format, text_header, truncated}.
+   * dt_ms, n_traces, n_samples, sample_format, text_header, truncated,
+   * little_endian, delay_ms, coords (Float64Array x0,y0,x1,y1… por traza o
+   * null), coord_units, spacing (m, mediana entre trazas o null)}.
    * Errores → Error con mensaje claro (estilo SegyError del plugin). */
   function read(file) {
     return file.slice(0, TEXT_HEADER_SIZE + BINARY_HEADER_SIZE)
       .arrayBuffer().then(function (headBuf) {
       const hdr = new DataView(headBuf);
       const textRaw = new Uint8Array(headBuf, 0, TEXT_HEADER_SIZE);
-      const dt_us = hdr.getInt16(TEXT_HEADER_SIZE + 16, false);
-      const n_samples = hdr.getUint16(TEXT_HEADER_SIZE + 20, false);
-      const sample_format = hdr.getInt16(TEXT_HEADER_SIZE + 24, false);
-      const ext = hdr.getInt16(TEXT_HEADER_SIZE + 304, false) || 0;
-      if (dt_us <= 0 || n_samples <= 0)
-        throw new Error("Binary header reports sample_interval=" + dt_us +
-          ", samples_per_trace=" + n_samples + " — not a readable trace " +
-          "geometry (possibly little-endian or a non-standard file).");
-      if (sample_format !== 1 && sample_format !== 5)
-        throw new Error("Sample format " + sample_format +
-          " isn't supported yet — only IBM float (1) and IEEE float (5) " +
-          "are; re-export the line as one of those.");
-      const perTrace = TRACE_HEADER_SIZE + n_samples * BPS;
+      if (headBuf.byteLength < TEXT_HEADER_SIZE + BINARY_HEADER_SIZE)
+        throw new Error("File too small to be a SEG-Y (no binary header).");
+      const g = binaryGeometry(hdr, false) || binaryGeometry(hdr, true);
+      if (!g) {
+        const fmt = hdr.getInt16(TEXT_HEADER_SIZE + 24, false);
+        throw new Error("Binary header reports sample_interval=" +
+          hdr.getInt16(TEXT_HEADER_SIZE + 16, false) + ", samples_per_trace=" +
+          hdr.getUint16(TEXT_HEADER_SIZE + 20, false) + ", format=" + fmt +
+          " — not a readable trace geometry in either byte order (supported " +
+          "sample formats: 1 IBM float, 2 int32, 3 int16, 5 IEEE float, 8 int8).");
+      }
+      const le = g.le, n_samples = g.n_samples, sample_format = g.sample_format;
+      const BPS_F = FORMAT_BPS[sample_format];
+      const sample = sampleReader(sample_format, le);
+      const perTrace = TRACE_HEADER_SIZE + n_samples * BPS_F;
       const dataStart = TEXT_HEADER_SIZE + BINARY_HEADER_SIZE +
-                        ext * TEXT_HEADER_SIZE;
+                        g.ext * TEXT_HEADER_SIZE;
       const maxReadable = Math.max(0,
         Math.floor((file.size - dataStart) / perTrace));
       const n_traces = Math.min(maxReadable,
@@ -10486,35 +10725,73 @@ SW.actions = SW.actions || {};
         throw new Error("No complete traces found (file too small or a " +
                         "trace geometry that doesn't divide the data).");
       const amplitude = new Float64Array(n_traces * n_samples);
+      const coords = new Float64Array(n_traces * 2);
+      let delay_ms = 0, coord_units = 1;
+      // de a bloques: miles de slices de 1 traza cada uno ahogan al navegador
+      const CHUNK = Math.max(1, Math.floor(8 * 1048576 / perTrace));
       const reads = [];
-      let off = dataStart;
-      for (let i = 0; i < n_traces; i++) {
-        reads.push(file.slice(off, off + perTrace).arrayBuffer().then(
+      for (let i0 = 0; i0 < n_traces; i0 += CHUNK) {
+        const nT = Math.min(CHUNK, n_traces - i0);
+        const off = dataStart + i0 * perTrace;
+        reads.push(file.slice(off, off + nT * perTrace).arrayBuffer().then(
           function (buf) {
             const dv = new DataView(buf);
-            const base = i * n_samples;
-            for (let j = 0; j < n_samples; j++) {
-              const at = TRACE_HEADER_SIZE + j * BPS;
-              amplitude[base + j] = sample_format === 1
-                ? ibmToFloat(dv.getUint32(at, false))
-                : dv.getFloat32(at, false);
+            for (let t = 0; t < nT; t++) {
+              const i = i0 + t, h = t * perTrace;
+              // escalar de coordenadas (bytes 71-72): >0 multiplica, <0 divide
+              const sc = dv.getInt16(h + 70, le);
+              const f = sc > 0 ? sc : (sc < 0 ? -1 / sc : 1);
+              let x = dv.getInt32(h + 180, le), y = dv.getInt32(h + 184, le);
+              if (!x && !y) { x = dv.getInt32(h + 72, le); y = dv.getInt32(h + 76, le); }
+              coords[i * 2] = x * f; coords[i * 2 + 1] = y * f;
+              if (i === 0) {
+                delay_ms = dv.getInt16(h + 108, le);
+                coord_units = dv.getInt16(h + 88, le) || 1;
+              }
+              const base = i * n_samples;
+              for (let j = 0; j < n_samples; j++)
+                amplitude[base + j] = sample(dv, h + TRACE_HEADER_SIZE + j * BPS_F);
             }
           }));
-        off += perTrace;
       }
       return Promise.all(reads).then(function () {
-        return { amplitude: amplitude, dt_ms: dt_us / 1000,
+        // coordenadas útiles sólo si varían entre trazas
+        let hasXY = false;
+        for (let i = 1; i < n_traces && !hasXY; i++)
+          hasXY = coords[i * 2] !== coords[0] || coords[i * 2 + 1] !== coords[1];
+        if (coord_units === 2)      // segundos de arco → grados
+          for (let i = 0; i < coords.length; i++) coords[i] /= 3600;
+        let spacing = null;
+        if (hasXY && coord_units !== 2 && coord_units !== 3) {
+          const d = [];
+          for (let i = 1; i < n_traces; i++) {
+            const v = Math.hypot(coords[i * 2] - coords[i * 2 - 2],
+                                 coords[i * 2 + 1] - coords[i * 2 - 1]);
+            if (v > 0) d.push(v);
+          }
+          d.sort((p, q) => p - q);
+          if (d.length) spacing = d[Math.floor(d.length / 2)];
+        }
+        return { amplitude: amplitude, dt_ms: g.dt_us / 1000,
                  n_traces: n_traces, n_samples: n_samples,
                  sample_format: sample_format,
                  text_header: decodeText(textRaw),
-                 truncated: maxReadable > n_traces };
+                 truncated: maxReadable > n_traces,
+                 little_endian: le, delay_ms: delay_ms,
+                 coords: hasXY ? coords : null, coord_units: coord_units,
+                 spacing: spacing };
       });
     });
   }
 
   /* PNG + índice de paleta de una amplitud ya cargada. Devolver
    * {data_url, index (Uint8Array traces*samples), w, h} del PNG de pantalla. */
-  function renderAmplitude(amp, n_traces, n_samples, palette, clipPct, gain) {
+  /* La amplitud viene traza a traza (amp[traza*n_samples + muestra]); el
+   * índice sale por filas de imagen (index[muestra*n_traces + columna]),
+   * que es lo que espera ImageData. reverse: columnas en orden inverso
+   * (una línea cuyas coordenadas avanzan hacia el inicio de la traza). */
+  function renderAmplitude(amp, n_traces, n_samples, palette, clipPct, gain,
+                           reverse) {
     clipPct = clipPct === undefined ? 98 : (+clipPct || 98);
     gain = gain === undefined ? 1 : (+gain || 1);
     const total = n_traces * n_samples;
@@ -10532,11 +10809,13 @@ SW.actions = SW.actions || {};
     if (hi <= lo) hi = lo + 1;
     const span = hi - lo;
     const index = new Uint8Array(total);
-    for (let i = 0; i < total; i++) {
-      const a = amp[i];
-      if (!isFinite(a)) { index[i] = 128; continue; }
-      let v = (a - lo) / span * gain * 255;
-      index[i] = v < 0 ? 0 : (v > 255 ? 255 : (v | 0));
+    for (let t = 0; t < n_traces; t++) {
+      const col = reverse ? n_traces - 1 - t : t;
+      for (let j = 0; j < n_samples; j++) {
+        const a = amp[t * n_samples + j];
+        let v = isFinite(a) ? (a - lo) / span * gain * 255 : 128;
+        index[j * n_traces + col] = v < 0 ? 0 : (v > 255 ? 255 : (v | 0));
+      }
     }
     const out = pngFromIndex(index, n_traces, n_samples, palette);
     return { data_url: out.data_url, index: index, w: out.w, h: out.h };
@@ -10585,17 +10864,56 @@ SW.actions = SW.actions || {};
 
   /* -- importación --------------------------------------------------------- */
 
+  /* Ubicación horizontal de la línea: por el espaciado nominal (n_traces ×
+   * espaciado, desde 0) o, si la sección tiene traza georreferenciada
+   * (sec.geo_trace, de una importación de shapefile) y las cabeceras traen
+   * coordenadas, proyectando la primera y la última traza sobre ella — el
+   * SEG-Y cae entonces bajo los datos importados, con las mismas
+   * distancias. Devuelve {s0, s1, offset (m, máx. distancia a la traza)}. */
+  function placeOnTrace(data) {
+    const gt = SW.model.state.sec.geo_trace;
+    if (!gt || !data.coords || !SW.shp) return null;
+    const crs = SW.shp.parsePrj(gt.crs || "");
+    if (gt.crs_kind) crs.kind = gt.crs_kind;
+    if (data.coord_units === 2 || data.coord_units === 3) {
+      if (crs.kind !== "geographic") return null;
+    }
+    const P = SW.shp.makeProjector(gt, crs,
+                                   { correct: gt.mercator_correction !== false });
+    const n = data.n_traces, c = data.coords;
+    const a = P.project(c[0], c[1]), b = P.project(c[2 * n - 2], c[2 * n - 1]);
+    let off = 0;
+    const step = Math.max(1, Math.floor(n / 200));
+    for (let i = 0; i < n; i += step)
+      off = Math.max(off, Math.abs(P.project(c[2 * i], c[2 * i + 1])[1]));
+    return { s0: a[0], s1: b[0], offset: off };
+  }
+
   function placeSegy(f, data, dataUrl, wPix, hPix, index, cfg) {
     const totalMs = data.n_samples * data.dt_ms;
-    const sRight = data.n_traces * cfg.spacing;
+    const t0 = cfg.delay ? data.delay_ms : 0;
+    let zTop, zBottom, vText;
+    if (cfg.domain === "depth") {
+      // muestras en metros (dt del encabezado leído como m o pies × 1000)
+      const dz = data.dt_ms;                 // µs/1000 → "m" por muestra
+      zTop = cfg.datum - t0; zBottom = zTop - data.n_samples * dz;
+      vText = "DEPTH (" + dz + " m/sample)";
+    } else if (cfg.domain === "velocity") {
+      zTop = cfg.datum - cfg.velocity * (t0 / 1000) / 2;
+      zBottom = zTop - cfg.velocity * (totalMs / 1000) / 2;
+      vText = "depth converted with " + cfg.velocity + " m/s";
+    } else {
+      zTop = t0 ? -t0 : 0; zBottom = -(t0 + totalMs);
+      vText = "TIME (ms TWTT), not depth";
+    }
     const base = String(f.name || "segy").replace(/\.[^.]+$/, "") || "segy";
     const img = {
       id: SW.model.genId(),
       name: base,
       data_url: dataUrl,
       natural_w: wPix, natural_h: hPix,
-      s_left: 0, s_right: sRight,
-      z_top: 0, z_bottom: -totalMs,
+      s_left: cfg.s_left, s_right: cfg.s_right,
+      z_top: zTop, z_bottom: zBottom,
       opacity: 1, visible: true, locked: false,
       calibration_meta: {
         type: "segy", segy_name: f.name,
@@ -10603,6 +10921,9 @@ SW.actions = SW.actions || {};
         dt_ms: data.dt_ms, n_traces: data.n_traces,
         n_samples: data.n_samples, total_ms: totalMs,
         sample_format: data.sample_format,
+        domain: cfg.domain, velocity: cfg.velocity, datum: cfg.datum,
+        placement: cfg.placement, reversed: !!cfg.reverse,
+        layout: "rows",
         index: indexToBase64(index),
       },
     };
@@ -10616,9 +10937,11 @@ SW.actions = SW.actions || {};
     SW.view.requestDraw();
     if (SW.project) SW.project.touch();
     SW.view.status("Imported SEG-Y \"" + base + "\" (" + data.n_traces +
-      " traces, ~" + totalMs.toFixed(0) + " ms TWTT — the vertical axis is " +
-      "TIME, not depth) at " + (sRight / 1000).toFixed(2) + " km with " +
-      cfg.spacing.toFixed(0) + " m/trace." +
+      " traces, " + FORMAT_NAME[data.sample_format] +
+      (data.little_endian ? ", little-endian" : "") + ") from " +
+      (cfg.s_left / 1000).toFixed(2) + " to " + (cfg.s_right / 1000).toFixed(2) +
+      " km" + (cfg.placement === "trace" ? " (on the section trace)" : "") +
+      " — vertical axis: " + vText + "." +
       (data.truncated ? "  ⚠ Read only the first " + data.n_traces +
         " traces (16M-sample read guard)." : ""));
   }
@@ -10630,7 +10953,7 @@ SW.actions = SW.actions || {};
       try {
         const png = renderAmplitude(data.amplitude, data.n_traces,
                                     data.n_samples, cfg.palette,
-                                    cfg.clip_pct, cfg.gain);
+                                    cfg.clip_pct, cfg.gain, cfg.reverse);
         placeSegy(f, data, png.data_url, png.w, png.h, png.index, cfg);
       } catch (err) {
         SW.view.status("SEG-Y render: " +
@@ -10642,21 +10965,28 @@ SW.actions = SW.actions || {};
   function importDialog(f, data) {
     const U = SW.ui;
     const totalMs = data.n_samples * data.dt_ms;
-    let paletteSel, clipInp, gainInp, spaceInp;
+    const onTrace = placeOnTrace(data);
+    let paletteSel, clipInp, gainInp, spaceInp, placeSel, domSel, velInp,
+        datumInp, delayChk;
     const names = paletteNames();
     U.modal({
       title: "Import SEG-Y — " + String(f.name || "seismic line"),
       build: function (body) {
         U.note(body, "Read " + data.n_traces + " traces × " +
-          data.n_samples + " samples, " + data.dt_ms.toFixed(1) +
-          " ms sample interval → " + totalMs.toFixed(0) +
-          " ms two-way-time." +
+          data.n_samples + " samples (" + FORMAT_NAME[data.sample_format] +
+          (data.little_endian ? ", little-endian" : "") + "), " +
+          data.dt_ms.toFixed(1) + " ms sample interval → " +
+          totalMs.toFixed(0) + " ms two-way-time" +
+          (data.delay_ms ? ", recording delay " + data.delay_ms + " ms" : "") +
+          "." + (data.coords ? " Trace headers carry coordinates" +
+            (data.spacing ? " (median spacing " + data.spacing.toFixed(1) +
+              " m)" : "") + "." : " Trace headers carry no usable coordinates.") +
           (data.truncated ? "  ⚠ Only the first " + data.n_traces +
             " traces were read (16M-sample read guard); re-export the " +
-            "line decimated for the rest." : "") +
-          " A seismic record is TIME, not depth: it will be placed from 0 " +
-          "at the top down to -" + totalMs.toFixed(0) + " ms, like the " +
-          "plugin's TWTT sections.");
+            "line decimated for the rest." : ""));
+        if (data.text_header)
+          U.note(body, "Header: " + data.text_header.slice(0, 240) +
+                       (data.text_header.length > 240 ? "…" : ""));
         paletteSel = U.select(names.map(p => ({ value: p, label: p })),
                               names.indexOf("seismic_rwb") >= 0
                                 ? "seismic_rwb" : names[0]);
@@ -10670,20 +11000,77 @@ SW.actions = SW.actions || {};
         gainInp = U.numberInput(1, 0.1, 0.1, 20);
         U.row(body, "Gain", gainInp,
               "Post-clip contrast multiplier.");
-        spaceInp = U.numberInput(25, 1, 1);
+
+        const pOpts = [{ value: "spacing", label: "From 0, by trace spacing" }];
+        if (onTrace) pOpts.unshift({ value: "trace",
+          label: "On the section trace (header coordinates)" });
+        placeSel = U.select(pOpts, pOpts[0].value);
+        U.row(body, "Horizontal placement", placeSel,
+              "On the section trace: the first and last trace are projected " +
+              "onto the trace of the imported shapefile data (same CRS " +
+              "assumed), so the line sits under them at the right distance.");
+        if (onTrace)
+          U.note(body, "On the trace: " + (onTrace.s0 / 1000).toFixed(2) +
+            " → " + (onTrace.s1 / 1000).toFixed(2) + " km; the line runs up " +
+            "to " + (onTrace.offset / 1000).toFixed(2) + " km off the trace." +
+            (onTrace.offset > 2000 ? "  ⚠ That is far: check the line and " +
+              "the trace share the coordinate system." : ""));
+        spaceInp = U.numberInput(data.spacing ? +data.spacing.toFixed(2) : 25,
+                                 1, 0.1);
         U.row(body, "Trace spacing (m)", spaceInp,
-              "Horizontal extent = n_traces × spacing. Matches the plugin's " +
-              "nominal 25 m/trace when the trace headers carry no placeable " +
-              "coordinates.");
+              "Horizontal extent = n_traces × spacing. Defaults to the median " +
+              "distance between trace-header coordinates, or the plugin's " +
+              "nominal 25 m/trace when there are none.");
+
+        domSel = U.select([
+          { value: "time", label: "Time (ms TWTT)" },
+          { value: "velocity", label: "Time → depth, constant velocity" },
+          { value: "depth", label: "Depth (samples in metres)" }], "time");
+        U.row(body, "Vertical axis", domSel,
+              "Time: 0 at the top down to −TWTT ms, like the plugin's TWTT " +
+              "sections. Constant velocity: z = datum − v·t/2. Depth: a " +
+              "depth-migrated volume whose sample interval is metres.");
+        velInp = U.numberInput(3000, 50, 100);
+        U.row(body, "Velocity (m/s)", velInp,
+              "Average (interval-free) velocity for the time-to-depth " +
+              "conversion.");
+        datumInp = U.numberInput(0, 10);
+        U.row(body, "Datum elevation (m)", datumInp,
+              "Elevation of time/depth zero (the seismic reference datum).");
+        delayChk = document.createElement("input");
+        delayChk.type = "checkbox"; delayChk.checked = !!data.delay_ms;
+        U.row(body, "Apply recording delay", delayChk,
+              "Shift the first sample by the delay recording time of the " +
+              "trace header (bytes 109–110).");
+        const sync = function () {
+          const v = domSel.value;
+          velInp.disabled = v !== "velocity";
+          datumInp.disabled = v === "time";
+          spaceInp.disabled = placeSel.value === "trace";
+        };
+        domSel.addEventListener("change", sync);
+        placeSel.addEventListener("change", sync);
+        sync();
       },
       buttons: [
         { label: "Cancel" },
         { label: "Import", primary: true, action: function () {
+          const spacing = Math.max(0.1, +spaceInp.value || 25);
+          let s0 = 0, s1 = data.n_traces * spacing, placement = "spacing";
+          if (placeSel.value === "trace" && onTrace) {
+            s0 = onTrace.s0; s1 = onTrace.s1; placement = "trace";
+          }
           doRender(f, data, {
             palette: paletteSel.value,
             clip_pct: Math.max(0.1, Math.min(99.9, +clipInp.value || 98)),
             gain: Math.max(0.1, +gainInp.value || 1),
-            spacing: Math.max(0.1, +spaceInp.value || 25),
+            spacing: spacing,
+            s_left: Math.min(s0, s1), s_right: Math.max(s0, s1),
+            reverse: s1 < s0, placement: placement,
+            domain: domSel.value,
+            velocity: Math.max(1, +velInp.value || 3000),
+            datum: +datumInp.value || 0,
+            delay: delayChk.checked,
           });
         } },
       ],
@@ -10699,6 +11086,7 @@ SW.actions = SW.actions || {};
     });
   }
 
+  SW.actions.importSegyFile = handleFile;
   SW.actions.importSegy = function () {
     const inp = document.createElement("input");
     inp.type = "file";
@@ -10742,6 +11130,18 @@ SW.actions = SW.actions || {};
             SW.view.status("Recolor: stored amplitude is corrupted.");
             return false;   // keep modal open
           }
+          if (meta.layout !== "rows") {
+            // proyectos de antes de 0.18: el índice quedó traza a traza
+            // (y la imagen salía revuelta); se reordena por filas y se
+            // guarda así
+            const nt = meta.n_traces, ns = meta.n_samples;
+            const rows = new Uint8Array(index.length);
+            for (let t = 0; t < nt; t++)
+              for (let j = 0; j < ns; j++) rows[j * nt + t] = index[t * ns + j];
+            index = rows;
+            meta.layout = "rows";
+            meta.index = indexToBase64(index);
+          }
           const png = pngFromIndex(index, meta.n_traces, meta.n_samples,
                                    palSel.value);
           img.data_url = png.data_url;
@@ -10761,6 +11161,1606 @@ SW.actions = SW.actions || {};
   };
 
   SW.segy = { read, renderAmplitude, paletteNames, hasPalette };
+})();
+
+/* ==== js/io/shapefile.js ====
+ * Importación de shapefiles (2D y 3D: PointZ, MultiPointZ, PolyLineZ,
+ * PolygonZ y sus variantes M) PROYECTADOS sobre la sección, con simbología
+ * de un .lyr de ArcGIS.
+ *
+ * La sección es un lienzo (s, z) sin coordenadas de mundo, así que para
+ * traer datos georreferenciados hace falta una TRAZA: el segmento del mapa
+ * sobre el que corre el perfil. Cada vértice se proyecta en perpendicular
+ * sobre ella — s = distancia a lo largo de la traza desde su inicio, z = la
+ * Z del dato (o un campo numérico) — y los que caen a más de la distancia
+ * máxima (el "buffer" del plugin) se descartan. La traza se guarda en la
+ * sección (sec.geo_trace) para que una segunda importación — otra capa,
+ * un SEG-Y con coordenadas — caiga en el mismo sistema.
+ *
+ *   - Puntos (sismos, datos estructurales…): una capa de referencia
+ *     (sec.overlays, kind "points") que se dibuja pero no se edita; con
+ *     campos dip/azimuth pueden además crear símbolos de manteo con el
+ *     manteo APARENTE en el plano de la sección.
+ *   - Polilíneas: líneas editables (horizonte, falla, topografía… por nombre
+ *     o a elección), con el color de la simbología.
+ *   - Polígonos: rellenos de referencia (sec.overlays, kind "polygons");
+ *     los anillos se reagrupan en (s, z) — en un shapefile exportado de una
+ *     sección vertical (MOVE) su orientación en planta no significa nada.
+ *
+ * Mercator: una distancia en metros de Mercator vale 1/cos φ metros reales
+ * (×1.27 a 38° S), así que con un .prj Mercator o geográfico las
+ * distancias a lo largo de la traza se corrigen por el factor de escala de
+ * cada latitud (integrado a lo largo de la traza), y las Z — que ya son
+ * metros reales — quedan en la misma escala que las s.
+ *
+ * Simbología: el .lyr es un documento compuesto OLE con los objetos de
+ * ArcMap serializados. No hay especificación pública; se recorre el stream
+ * "Layer" buscando lo que importa — cadenas UTF-16 con prefijo de largo
+ * (campo del renderer, etiquetas y valores) y colores (CLSID de RgbColor y
+ * familia, que guardan el color como CIELAB D50) — y se asigna a cada valor
+ * del renderer de valores únicos los colores de su símbolo. Sin .lyr, se
+ * usa el campo "colorval" (hex) que exporta MOVE, si está. */
+"use strict";
+
+window.SW = window.SW || {};
+SW.actions = SW.actions || {};
+
+SW.shp = (function () {
+  const GEOM = { 1: "point", 3: "line", 5: "polygon", 8: "multipoint",
+                 11: "point", 13: "line", 15: "polygon", 18: "multipoint",
+                 21: "point", 23: "line", 25: "polygon", 28: "multipoint" };
+
+  /* -- .shp --------------------------------------------------------------- */
+  /* Devuelve {shapeType, geom, hasZ, bbox, n (registros), y según el tipo:
+   *   puntos/multipuntos: px, py, pz (Float64Array) y pf (Int32Array: el
+   *     registro — fila del .dbf — de cada punto);
+   *   líneas/polígonos: features[i] = [[ [x,y,z], … ] por parte] o null}. */
+  function parseShp(buf) {
+    const dv = new DataView(buf);
+    if (buf.byteLength < 100 || dv.getInt32(0, false) !== 9994)
+      throw new Error("not a shapefile (.shp header code is not 9994)");
+    const shapeType = dv.getInt32(32, true);
+    const geom = GEOM[shapeType];
+    if (!geom)
+      throw new Error("shape type " + shapeType + " is not supported " +
+                      "(points, multipoints, polylines and polygons are)");
+    const hasZ = shapeType >= 11 && shapeType <= 18;
+    const end = Math.min(buf.byteLength,
+                         Math.max(100, dv.getInt32(24, false) * 2));
+    const bbox = [dv.getFloat64(36, true), dv.getFloat64(44, true),
+                  dv.getFloat64(52, true), dv.getFloat64(60, true),
+                  dv.getFloat64(68, true), dv.getFloat64(76, true)];
+    const out = { shapeType, geom, hasZ, bbox, n: 0 };
+
+    // primera pasada: cuántos registros y cuántos puntos (para dimensionar
+    // arreglos tipados: un catálogo sísmico trae cientos de miles)
+    let off = 100, nRec = 0, nPts = 0;
+    while (off + 8 <= end) {
+      const clen = dv.getInt32(off + 4, false) * 2;
+      const p = off + 8;
+      if (clen < 4 || p + clen > end) break;
+      const t = dv.getInt32(p, true);
+      if (t !== 0) {
+        if (geom === "point") nPts++;
+        else if (geom === "multipoint") nPts += dv.getInt32(p + 36, true);
+      }
+      nRec++;
+      off = p + clen;
+    }
+    out.n = nRec;
+
+    if (geom === "point" || geom === "multipoint") {
+      const px = new Float64Array(nPts), py = new Float64Array(nPts);
+      const pz = new Float64Array(nPts), pf = new Int32Array(nPts);
+      let k = 0, rec = 0;
+      off = 100;
+      while (rec < nRec) {
+        const clen = dv.getInt32(off + 4, false) * 2;
+        const p = off + 8;
+        const t = dv.getInt32(p, true);
+        if (t !== 0 && geom === "point") {
+          px[k] = dv.getFloat64(p + 4, true);
+          py[k] = dv.getFloat64(p + 12, true);
+          pz[k] = hasZ && clen >= 28 ? dv.getFloat64(p + 20, true) : NaN;
+          pf[k] = rec; k++;
+        } else if (t !== 0) {
+          const n = dv.getInt32(p + 36, true);
+          const zAt = p + 40 + 16 * n + 16;
+          const zOk = hasZ && zAt + 8 * n <= p + clen;
+          for (let i = 0; i < n; i++) {
+            px[k] = dv.getFloat64(p + 40 + 16 * i, true);
+            py[k] = dv.getFloat64(p + 48 + 16 * i, true);
+            pz[k] = zOk ? dv.getFloat64(zAt + 8 * i, true) : NaN;
+            pf[k] = rec; k++;
+          }
+        }
+        rec++;
+        off = p + clen;
+      }
+      out.px = px; out.py = py; out.pz = pz; out.pf = pf;
+      out.nPoints = k;
+      return out;
+    }
+
+    const features = new Array(nRec);
+    off = 100;
+    for (let rec = 0; rec < nRec; rec++) {
+      const clen = dv.getInt32(off + 4, false) * 2;
+      const p = off + 8;
+      off = p + clen;
+      if (dv.getInt32(p, true) === 0) { features[rec] = null; continue; }
+      const nParts = dv.getInt32(p + 36, true);
+      const n = dv.getInt32(p + 40, true);
+      const P = p + 44 + 4 * nParts;
+      const Z = P + 16 * n + 16;
+      const zOk = hasZ && Z + 8 * n <= p + clen;
+      const parts = [];
+      for (let j = 0; j < nParts; j++) {
+        const a = dv.getInt32(p + 44 + 4 * j, true);
+        const b = j + 1 < nParts ? dv.getInt32(p + 48 + 4 * j, true) : n;
+        const part = [];
+        for (let i = a; i < b; i++)
+          part.push([dv.getFloat64(P + 16 * i, true),
+                     dv.getFloat64(P + 16 * i + 8, true),
+                     zOk ? dv.getFloat64(Z + 8 * i, true) : NaN]);
+        if (part.length) parts.push(part);
+      }
+      features[rec] = parts;
+    }
+    out.features = features;
+    return out;
+  }
+
+  /* -- .dbf --------------------------------------------------------------- */
+  /* Lectura perezosa: un catálogo de 760 000 sismos no se convierte en
+   * 760 000 objetos; value(i, nombre) decodifica sólo la celda pedida. */
+  function parseDbf(buf, encoding) {
+    const u8 = new Uint8Array(buf);
+    const dv = new DataView(buf);
+    if (buf.byteLength < 32) throw new Error("the .dbf is empty");
+    const nRec = dv.getUint32(4, true);
+    const hdrLen = dv.getUint16(8, true);
+    const recLen = dv.getUint16(10, true);
+    const fields = [];
+    let pos = 32, fo = 1;
+    while (pos + 32 <= hdrLen && u8[pos] !== 0x0d) {
+      let name = "";
+      for (let i = 0; i < 11 && u8[pos + i]; i++)
+        name += String.fromCharCode(u8[pos + i]);
+      const f = { name: name.trim(), type: String.fromCharCode(u8[pos + 11]),
+                  len: u8[pos + 16], dec: u8[pos + 17], off: fo };
+      fo += f.len;
+      fields.push(f);
+      pos += 32;
+    }
+    let dec;
+    try { dec = new TextDecoder(encoding || "utf-8", { fatal: !encoding }); }
+    catch (e) { dec = new TextDecoder("utf-8"); }
+    const latin = new TextDecoder("windows-1252");
+    const byName = {};
+    for (const f of fields) byName[f.name.toLowerCase()] = f;
+    const n = Math.max(0, Math.min(nRec,
+                Math.floor((buf.byteLength - hdrLen) / Math.max(1, recLen))));
+
+    function raw(i, f) {
+      const a = hdrLen + i * recLen + f.off;
+      const bytes = u8.subarray(a, a + f.len);
+      let s;
+      try { s = dec.decode(bytes); }
+      catch (e) { s = latin.decode(bytes); }
+      return s.replace(/\u0000/g, "").trim();
+    }
+    function value(i, name) {
+      const f = typeof name === "string" ? byName[name.toLowerCase()] : name;
+      if (!f || i < 0 || i >= n) return null;
+      if (u8[hdrLen + i * recLen] === 0x2a) return null;   // borrado
+      const s = raw(i, f);
+      if (f.type === "N" || f.type === "F") {
+        if (!s) return null;
+        const v = parseFloat(s);
+        return isFinite(v) ? v : null;
+      }
+      if (f.type === "L") return /^[YyTt]/.test(s);
+      return s;
+    }
+    function field(name) {
+      return byName[String(name || "").toLowerCase()] || null;
+    }
+    return { n, fields, value, field };
+  }
+
+  /* -- .prj --------------------------------------------------------------- */
+  function parsePrj(text) {
+    const t = String(text || "");
+    const out = { text: t, kind: "unknown", name: "", a: 6378137, e: 0,
+                  k0: 1, fn: 0, unit: 1 };
+    if (!t.trim()) return out;
+    const nm = /^\s*(PROJCS|GEOGCS)\s*\[\s*"([^"]*)"/i.exec(t);
+    out.name = nm ? nm[2] : "";
+    const sph = /SPHEROID\s*\[\s*"[^"]*"\s*,\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)/i.exec(t);
+    if (sph) {
+      out.a = +sph[1] || 6378137;
+      const invf = +sph[2];
+      const f = invf > 0 ? 1 / invf : 0;
+      out.e = Math.sqrt(Math.max(0, 2 * f - f * f));
+    }
+    const param = function (key) {
+      const m = new RegExp('PARAMETER\\s*\\[\\s*"' + key +
+                           '"\\s*,\\s*([\\d.eE+-]+)', "i").exec(t);
+      return m ? +m[1] : null;
+    };
+    if (/^\s*GEOGCS/i.test(t)) { out.kind = "geographic"; return out; }
+    const proj = /PROJECTION\s*\[\s*"([^"]+)"/i.exec(t);
+    const pname = proj ? proj[1] : "";
+    // unidad lineal: el último UNIT del PROJCS
+    const units = [...t.matchAll(/UNIT\s*\[\s*"([^"]*)"\s*,\s*([\d.eE+-]+)/gi)];
+    if (units.length) out.unit = +units[units.length - 1][2] || 1;
+    if (/mercator/i.test(pname) && !/transverse/i.test(pname)) {
+      out.kind = "mercator";
+      if (/auxiliary_sphere|pseudo|popular/i.test(pname + " " + out.name))
+        out.e = 0;
+      const lat1 = param("standard_parallel_1");
+      const sf = param("scale_factor");
+      if (lat1) {
+        const s1 = Math.sin(lat1 * Math.PI / 180);
+        out.k0 = Math.cos(lat1 * Math.PI / 180) /
+                 Math.sqrt(1 - out.e * out.e * s1 * s1);
+      } else if (sf) out.k0 = sf;
+      out.fn = param("false_northing") || 0;
+    } else {
+      out.kind = "projected";
+    }
+    return out;
+  }
+
+  function crsLabel(crs) {
+    if (!crs || crs.kind === "unknown") return "no .prj (coordinates taken as metres)";
+    if (crs.kind === "geographic") return "geographic (lon/lat) " + crs.name;
+    if (crs.kind === "mercator") return "Mercator " + crs.name;
+    return "projected " + crs.name;
+  }
+
+  /* -- traza y proyección -------------------------------------------------- */
+  const D2R = Math.PI / 180;
+
+  /* Mercator (o geográfico pasado a Mercator) → latitud, para el factor de
+   * escala. Inversa elipsoidal por iteración (converge en 4–5 vueltas). */
+  function mercLat(y, crs) {
+    const yy = (y - (crs.fn || 0)) / (crs.a * (crs.k0 || 1));
+    const t = Math.exp(-yy);
+    let phi = Math.PI / 2 - 2 * Math.atan(t);
+    const e = crs.e || 0;
+    if (e > 0)
+      for (let i = 0; i < 6; i++) {
+        const es = e * Math.sin(phi);
+        phi = Math.PI / 2 - 2 * Math.atan(t * Math.pow((1 - es) / (1 + es), e / 2));
+      }
+    return phi;
+  }
+  function mercK(phi, crs) {
+    const e = crs.e || 0, s = Math.sin(phi);
+    return (crs.k0 || 1) * Math.sqrt(1 - e * e * s * s) /
+           Math.max(1e-9, Math.cos(phi));
+  }
+
+  /* Coordenadas nativas → plano donde la traza es recta. Para geográficas
+   * es Mercator esférico (donde una recta es una loxodrómica y los azimuts
+   * se conservan, igual que en el Mercator de los datos de MOVE). */
+  function planar(crs) {
+    if (crs.kind === "geographic") {
+      const R = crs.a || 6378137;
+      return function (x, y) {
+        const lat = Math.max(-89.9, Math.min(89.9, y));
+        return [R * x * D2R, R * Math.log(Math.tan(Math.PI / 4 + lat * D2R / 2))];
+      };
+    }
+    return function (x, y) { return [x, y]; };
+  }
+
+  /* trace = {x0, y0, x1, y1} en coordenadas nativas; opts.correct: aplica el
+   * factor de escala de Mercator; opts.yRange: [ymin, ymax] nativos de los
+   * datos (acelera ese factor). Devuelve {length (m reales), azimuth,
+   * project(x, y) → [s, d]} con d con signo (izquierda +). */
+  function makeProjector(trace, crs, opts) {
+    crs = crs || { kind: "unknown", unit: 1 };
+    opts = opts || {};
+    const P = planar(crs);
+    const a = P(trace.x0, trace.y0), b = P(trace.x1, trace.y1);
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L;
+    const merc = (crs.kind === "mercator" || crs.kind === "geographic") &&
+                 opts.correct !== false;
+    const mcrs = crs.kind === "geographic"
+      ? { a: crs.a || 6378137, e: 0, k0: 1, fn: 0 } : crs;
+    const unit = crs.kind === "geographic" ? 1 : (crs.unit || 1);
+    const az = (Math.atan2(dx, dy) / D2R + 360) % 360;
+    if (opts.yRange)
+      opts = Object.assign({}, opts, { yRange: [P(0, opts.yRange[0])[1],
+                                                P(0, opts.yRange[1])[1]] });
+    if (!merc) {
+      return { length: L * unit, azimuth: az,
+        project: function (x, y) {
+          const q = P(x, y), ex = q[0] - a[0], ey = q[1] - a[1];
+          return [(ex * ux + ey * uy) * unit, (ux * ey - uy * ex) * unit];
+        } };
+    }
+    // s(t) = ∫ dt / k(φ(y(t))): tabla acumulada a lo largo de la traza
+    const N = 1024, cum = new Float64Array(N + 1);
+    const kExact = y => mercK(mercLat(y, mcrs), mcrs);
+    // 1/k tabulado sobre el rango de Y de los datos (opts.yRange, en el
+    // plano): con cientos de miles de puntos, la inversa iterativa por
+    // punto es lo que más cuesta
+    let kAt = kExact;
+    if (opts.yRange && opts.yRange[1] > opts.yRange[0]) {
+      const M = 8192, y0 = opts.yRange[0], dy0 = (opts.yRange[1] - y0) / M;
+      const lut = new Float64Array(M + 1);
+      for (let i = 0; i <= M; i++) lut[i] = kExact(y0 + i * dy0);
+      kAt = function (y) {
+        const f = (y - y0) / dy0;
+        if (!(f >= 0 && f < M)) return kExact(y);
+        const i = f | 0;
+        return lut[i] + (lut[i + 1] - lut[i]) * (f - i);
+      };
+    }
+    for (let i = 1; i <= N; i++) {
+      const ym = a[1] + dy * (i - 0.5) / N;
+      cum[i] = cum[i - 1] + (L / N) / kAt(ym);
+    }
+    const k0 = kAt(a[1]), k1 = kAt(b[1]);
+    function sOf(t) {
+      if (t <= 0) return t / k0;
+      if (t >= L) return cum[N] + (t - L) / k1;
+      const f = t / L * N, i = Math.floor(f);
+      return cum[i] + (cum[Math.min(N, i + 1)] - cum[i]) * (f - i);
+    }
+    return { length: cum[N], azimuth: az,
+      project: function (x, y) {
+        const q = P(x, y), ex = q[0] - a[0], ey = q[1] - a[1];
+        return [sOf(ex * ux + ey * uy), (ux * ey - uy * ex) / kAt(q[1])];
+      } };
+  }
+
+  /* Traza por defecto: eje principal (PCA) de las coordenadas, con extremos
+   * en la proyección mínima y máxima. Orientada de W a E (o de N a S cuando
+   * corre más N–S que E–W), la convención de la mayoría de los perfiles. */
+  function fitTrace(xs, ys) {
+    const n = xs.length;
+    if (!n) return null;
+    let mx = 0, my = 0;
+    for (let i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+    mx /= n; my /= n;
+    let sxx = 0, syy = 0, sxy = 0;
+    for (let i = 0; i < n; i++) {
+      const ex = xs[i] - mx, ey = ys[i] - my;
+      sxx += ex * ex; syy += ey * ey; sxy += ex * ey;
+    }
+    const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    let ux = Math.cos(ang), uy = Math.sin(ang);
+    if (Math.abs(ux) >= Math.abs(uy) ? ux < 0 : uy > 0) { ux = -ux; uy = -uy; }
+    let tmin = Infinity, tmax = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const t = (xs[i] - mx) * ux + (ys[i] - my) * uy;
+      if (t < tmin) tmin = t;
+      if (t > tmax) tmax = t;
+    }
+    if (!(tmax > tmin)) { tmin = -1; tmax = 1; }
+    return { x0: mx + ux * tmin, y0: my + uy * tmin,
+             x1: mx + ux * tmax, y1: my + uy * tmax };
+  }
+
+  function compass(az) {
+    const N = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+               "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+    return N[Math.round(((az % 360) + 360) % 360 / 22.5) % 16];
+  }
+
+  /* -- .lyr (simbología de ArcMap) ----------------------------------------- */
+  /* Documento compuesto OLE (CFB): sólo lo necesario para sacar sus streams. */
+  function cfbStreams(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(buf);
+    const SIG = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+    for (let i = 0; i < 8; i++) if (u8[i] !== SIG[i]) return null;
+    const ssz = 1 << dv.getUint16(30, true), mssz = 1 << dv.getUint16(32, true);
+    const nFat = dv.getUint32(44, true), dirStart = dv.getUint32(48, true);
+    const miniCut = dv.getUint32(56, true), miniFatStart = dv.getUint32(60, true);
+    let dif = dv.getUint32(68, true);
+    const secOff = s => (s + 1) * ssz;
+    const fatSecs = [];
+    for (let i = 0; i < 109 && fatSecs.length < nFat; i++)
+      fatSecs.push(dv.getUint32(76 + i * 4, true));
+    let guard = 0;
+    while (dif < 0xfffffffa && fatSecs.length < nFat && guard++ < 1e4) {
+      const o = secOff(dif);
+      if (o + ssz > u8.length) break;
+      for (let i = 0; i < ssz / 4 - 1 && fatSecs.length < nFat; i++)
+        fatSecs.push(dv.getUint32(o + i * 4, true));
+      dif = dv.getUint32(o + ssz - 4, true);
+    }
+    const fat = [];
+    for (const s of fatSecs) {
+      const o = secOff(s);
+      for (let i = 0; i < ssz / 4; i++)
+        fat.push(o + i * 4 + 4 <= u8.length ? dv.getUint32(o + i * 4, true)
+                                            : 0xfffffffe);
+    }
+    function chain(start, table) {
+      const out = [];
+      let s = start;
+      while (s < 0xfffffffa && s < table.length && out.length <= table.length) {
+        out.push(s); s = table[s];
+      }
+      return out;
+    }
+    function readBig(start, size) {
+      const out = new Uint8Array(size);
+      let p = 0;
+      for (const s of chain(start, fat)) {
+        const o = secOff(s), n = Math.min(ssz, size - p);
+        if (n <= 0 || o + n > u8.length) break;
+        out.set(u8.subarray(o, o + n), p); p += n;
+      }
+      return out;
+    }
+    const entries = [];
+    for (const s of chain(dirStart, fat)) {
+      const o = secOff(s);
+      for (let k = 0; k < ssz / 128; k++) {
+        const e = o + k * 128;
+        if (e + 128 > u8.length) break;
+        const nl = dv.getUint16(e + 64, true);
+        let name = "";
+        for (let i = 0; i < Math.max(0, Math.min(31, nl / 2 - 1)); i++)
+          name += String.fromCharCode(dv.getUint16(e + i * 2, true));
+        entries.push({ name, type: u8[e + 66], start: dv.getUint32(e + 116, true),
+                       size: dv.getUint32(e + 120, true) });
+      }
+    }
+    const root = entries[0];
+    const mini = root ? readBig(root.start, root.size) : new Uint8Array(0);
+    const minifat = [];
+    for (const s of chain(miniFatStart, fat)) {
+      const o = secOff(s);
+      for (let i = 0; i < ssz / 4; i++) minifat.push(dv.getUint32(o + i * 4, true));
+    }
+    const res = {};
+    for (const e of entries) {
+      if (e.type !== 2) continue;
+      if (e.size < miniCut) {
+        const out = new Uint8Array(e.size);
+        let p = 0;
+        for (const s of chain(e.start, minifat)) {
+          const n = Math.min(mssz, e.size - p);
+          if (n <= 0) break;
+          out.set(mini.subarray(s * mssz, s * mssz + n), p); p += n;
+        }
+        res[e.name] = out;
+      } else res[e.name] = readBig(e.start, e.size);
+    }
+    return res;
+  }
+
+  /* CIELAB (D50, como lo guarda ArcObjects) → sRGB (D65, Bradford). */
+  function labToRgb(L, A, B) {
+    const fy = (L + 16) / 116, fx = fy + A / 500, fz = fy - B / 200;
+    const f = t => (t * t * t > 0.008856 ? t * t * t : (t - 16 / 116) / 7.787);
+    const X = 0.96422 * f(fx), Y = f(fy), Z = 0.82521 * f(fz);
+    const x = 0.9555766 * X - 0.0230393 * Y + 0.0631636 * Z;
+    const y = -0.0282895 * X + 1.0099416 * Y + 0.0210077 * Z;
+    const z = 0.0122982 * X - 0.0204830 * Y + 1.3299098 * Z;
+    const lin = [3.2404542 * x - 1.5371385 * y - 0.4985314 * z,
+                 -0.9692660 * x + 1.8760108 * y + 0.0415560 * z,
+                 0.0556434 * x - 0.2040259 * y + 1.0572252 * z];
+    return lin.map(function (c) {
+      c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+      return Math.max(0, Math.min(255, Math.round(c * 255)));
+    });
+  }
+
+  /* Tokens del stream: {at, s} cadenas UTF-16 con prefijo de largo y
+   * {at, c:[r,g,b], nil, size} colores. Los colores de ArcObjects son
+   * {7EE9C49x-D123-11D0-8383-080009B996CC} (RgbColor, CmykColor, HsvColor…),
+   * seguidos de ref (u32), versión (u16), 3 bytes y L, a, b en double; tras
+   * ellos, un byte de "nulo". En un marcador de carácter siguen el código
+   * (u32), el ángulo y el tamaño (double). */
+  function lyrTokens(L) {
+    const dv = new DataView(L.buffer, L.byteOffset, L.byteLength);
+    const tail = [0x23, 0xd1, 0xd0, 0x11, 0x83, 0x83, 0x08, 0x00, 0x09, 0xb9, 0x96, 0xcc];
+    const toks = [];
+    for (let i = 0; i + 20 < L.length; i++) {
+      if (L[i + 1] === 0xc4 && L[i + 2] === 0xe9 && L[i + 3] === 0x7e &&
+          (L[i] & 0xf0) === 0x90) {
+        let ok = true;
+        for (let k = 0; k < 12 && ok; k++) ok = L[i + 4 + k] === tail[k];
+        if (ok && i + 16 + 33 <= L.length) {
+          const p = i + 16;
+          const l = dv.getFloat64(p + 9, true), a = dv.getFloat64(p + 17, true),
+                b = dv.getFloat64(p + 25, true);
+          if (isFinite(l) && l >= -1 && l <= 101 && Math.abs(a) < 300 &&
+              Math.abs(b) < 300) {
+            const tok = { at: i, c: labToRgb(l, a, b),
+                          nil: p + 34 < L.length && L[p + 34] !== 0 };
+            if (p + 55 <= L.length) {
+              const ch = dv.getUint32(p + 35, true);
+              const ang = dv.getFloat64(p + 39, true);
+              const size = dv.getFloat64(p + 47, true);
+              if (ch > 0 && ch < 65536 && isFinite(ang) && Math.abs(ang) <= 360 &&
+                  size > 0 && size <= 500) tok.size = size;
+            }
+            toks.push(tok);
+            i += 40;
+            continue;
+          }
+        }
+      }
+      const n = dv.getUint32(i, true);
+      if (n >= 4 && n <= 1024 && n % 2 === 0 && i + 4 + n <= L.length &&
+          L[i + 3 + n] === 0 && L[i + 2 + n] === 0) {
+        let s = "", ok = true;
+        for (let k = 0; k < n / 2 - 1; k++) {
+          const c = dv.getUint16(i + 4 + k * 2, true);
+          if (c < 32 || c > 0xfffd) { ok = false; break; }
+          s += String.fromCharCode(c);
+        }
+        if (ok && s.length) { toks.push({ at: i, s: s }); i += 3 + n; }
+      }
+    }
+    return toks;
+  }
+
+  /* {field, classes:[{value, label, color, outline, size}], fallback} o null.
+   * Renderer de valores únicos: los valores van en una tira de cadenas
+   * seguidas al final; cada símbolo va ANTES de su etiqueta. Se descartan
+   * los colores comunes a todas las clases (halo, fondo de máscara…), que
+   * no distinguen nada. Renderer de símbolo único: un solo color. */
+  function parseLyr(buf) {
+    const streams = cfbStreams(buf);
+    if (!streams) throw new Error("not an ArcGIS .lyr (no OLE container)");
+    const L = streams.Layer || Object.values(streams)
+      .sort((p, q) => q.length - p.length)[0];
+    if (!L) throw new Error("the .lyr holds no layer stream");
+    const toks = lyrTokens(L);
+    const colorsOf = seg => seg.filter(t => t.c && !t.nil);
+    const key = c => c.join(",");
+
+    const other = toks.findIndex(t => t.s === "<all other values>");
+    const field = other >= 0 && toks[other + 1] && toks[other + 1].s
+      ? toks[other + 1].s : null;
+    // tira de valores: una racha de cadenas sin colores en medio que
+    // comparte muchas cadenas con las etiquetas de la zona de símbolos
+    let best = [0, 0], bestScore = 0;
+    const runs = [];
+    if (other >= 0) {
+      const first = {};
+      for (let i = other + 1; i < toks.length; i++)
+        if (toks[i].s !== undefined && !(toks[i].s in first)) first[toks[i].s] = i;
+      let runA = -1;
+      for (let i = other + 1; i <= toks.length; i++) {
+        const isStr = i < toks.length && toks[i].s !== undefined;
+        if (isStr && runA < 0) runA = i;
+        if (!isStr && runA >= 0) {
+          if (i - runA >= 2) {
+            const seen = {};
+            let score = 0;
+            for (let j = runA; j < i; j++)
+              if (first[toks[j].s] < runA && !seen[toks[j].s]) {
+                seen[toks[j].s] = 1; score++;
+              }
+            runs.push([runA, i, score]);
+          }
+          runA = -1;
+        }
+      }
+      // más adelante el .lyr repite valores y nombres de campo en otras
+      // tablas (que pueden empatar o ganar por poco): vale la primera racha
+      // que se acerque a la mejor
+      const top = Math.max(0, ...runs.map(r => r[2]));
+      const pick = runs.find(r => r[2] >= 2 && r[2] >= 0.6 * top);
+      if (pick) { best = [pick[0], pick[1]]; bestScore = pick[2]; }
+    }
+
+    if (other < 0 || bestScore < 1) {
+      const cs = colorsOf(toks);
+      if (!cs.length) return null;
+      const sz = cs.find(t => t.size);
+      return { field: null, classes: [],
+               fallback: { color: cs[0].c, outline: cs[1] ? cs[1].c : null,
+                           size: sz ? sz.size : null } };
+    }
+    // un valor es etiqueta si aparece UNA vez en la zona de símbolos: así
+    // quedan fuera los nombres de fuente ("ESRI Default Marker") y demás
+    // cadenas que se repiten símbolo tras símbolo
+    const zoneCount = {};
+    for (let i = other + 1; i < best[0]; i++)
+      if (toks[i].s !== undefined) zoneCount[toks[i].s] = (zoneCount[toks[i].s] || 0) + 1;
+    const values = [];
+    for (let i = best[0]; i < best[1]; i++)
+      if (toks[i].s !== field && zoneCount[toks[i].s] === 1) values.push(toks[i].s);
+    // etiqueta de cada valor dentro de la zona de símbolos, en orden
+    const segs = [];
+    let cursor = other + 1, prev = other + 1;
+    const end = best[0];
+    for (const v of values) {
+      let j = cursor;
+      while (j < end && toks[j].s !== v) j++;
+      if (j >= end) { segs.push(null); continue; }
+      segs.push(toks.slice(prev + 1, j));
+      prev = j; cursor = j + 1;
+    }
+    const counts = {};
+    const real = segs.filter(Boolean);
+    for (const seg of real) {
+      const seen = {};
+      for (const t of colorsOf(seg)) seen[key(t.c)] = 1;
+      for (const k of Object.keys(seen)) counts[k] = (counts[k] || 0) + 1;
+    }
+    const common = k => real.length > 2 && counts[k] === real.length;
+    const classes = [];
+    values.forEach(function (v, i) {
+      const seg = segs[i];
+      if (!seg) return;
+      let cs = colorsOf(seg).filter(t => !common(key(t.c)));
+      if (!cs.length) cs = colorsOf(seg);
+      if (!cs.length) return;
+      const sz = cs.find(t => t.size);
+      classes.push({ value: v, label: v, color: cs[0].c,
+                     outline: cs[1] ? cs[1].c : null,
+                     size: sz ? sz.size : null });
+    });
+    const defSeg = colorsOf(toks.slice(0, other));
+    return { field: field, classes: classes,
+             fallback: defSeg.length ? { color: defSeg[0].c, outline: null,
+                                         size: null } : null };
+  }
+
+  function hexColor(s) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(s || "").trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  return { parseShp, parseDbf, parsePrj, crsLabel, makeProjector, fitTrace,
+           planar, compass, parseLyr, cfbStreams, labToRgb, hexColor };
+})();
+
+/* -- importación: diálogo, mapa de la traza y armado del comando ---------- */
+(function () {
+  const S = SW.shp;
+  const SHP_EXT = /\.(shp|shx|dbf|prj|cpg|lyr)$/i;
+  const MAX_POINTS = 400000;      // tope de puntos de UNA importación
+  const MAP_PTS = 60000;          // puntos dibujados en el mapa del diálogo
+  const AZ_FIELDS = ["azimuth", "dip_dir", "dipdir", "dip_azimuth",
+                     "dipazimuth", "dipaz", "dip_azi", "azi"];
+  const NAME_FIELDS = ["name", "horizon", "type", "label", "layer", "nombre"];
+
+  function ext(name) {
+    const m = /\.([^.]+)$/.exec(name || "");
+    return m ? m[1].toLowerCase() : "";
+  }
+  function base(name) { return String(name || "").replace(/\.[^.]+$/, ""); }
+
+  /* Agrupa los archivos por nombre base (capa.shp + capa.dbf + capa.prj…);
+   * los .lyr van aparte: se aplican a cualquier capa que tenga su campo. */
+  function readAll(files) {
+    const groups = {}, lyrs = [], orphans = [];
+    for (const f of files) {
+      const e = ext(f.name);
+      if (e === "lyr") { lyrs.push(f); continue; }
+      const k = base(f.name).toLowerCase();
+      (groups[k] = groups[k] || { name: base(f.name) })[e] = f;
+    }
+    const jobs = [];
+    const layers = [];
+    for (const k of Object.keys(groups)) {
+      const g = groups[k];
+      if (!g.shp) { if (g.dbf || g.prj) orphans.push(g.name); continue; }
+      jobs.push(Promise.all([
+        g.shp.arrayBuffer(),
+        g.dbf ? g.dbf.arrayBuffer() : null,
+        g.prj ? g.prj.text() : "",
+        g.cpg ? g.cpg.text() : "",
+      ]).then(function (r) {
+        const shp = S.parseShp(r[0]);
+        let enc = String(r[3] || "").trim().toLowerCase();
+        if (/^(utf-?8|65001)$/.test(enc)) enc = "utf-8";
+        else if (/^(1252|ansi|latin)/.test(enc)) enc = "windows-1252";
+        else if (/^88591|iso-?8859-?1$/.test(enc)) enc = "iso-8859-1";
+        else enc = "";
+        const dbf = r[1] ? S.parseDbf(r[1], enc || undefined) : null;
+        layers.push({ name: g.name, shp: shp, dbf: dbf,
+                      crs: S.parsePrj(r[2]) });
+      }).catch(function (err) {
+        throw new Error(g.name + ": " + (err && err.message ? err.message : err));
+      }));
+    }
+    const lyrJobs = lyrs.map(f => f.arrayBuffer().then(function (b) {
+      try {
+        const sym = S.parseLyr(b);
+        return sym ? Object.assign({ name: f.name }, sym) : null;
+      } catch (err) {
+        SW.view.status("Symbology " + f.name + ": " + err.message);
+        return null;
+      }
+    }));
+    return Promise.all(jobs).then(() => Promise.all(lyrJobs))
+      .then(function (syms) {
+        layers.sort((a, b) => a.name.localeCompare(b.name));
+        return { layers: layers, lyrs: syms.filter(Boolean), orphans: orphans };
+      });
+  }
+
+  /* Coordenadas sin .prj en rango de grados → geográficas. */
+  function guessCrs(layers) {
+    const withPrj = layers.find(l => l.crs.kind !== "unknown");
+    if (withPrj) return withPrj.crs;
+    const deg = layers.every(function (l) {
+      const b = l.shp.bbox;
+      return Math.abs(b[0]) <= 180 && Math.abs(b[2]) <= 180 &&
+             Math.abs(b[1]) <= 90 && Math.abs(b[3]) <= 90;
+    });
+    const c = S.parsePrj("");
+    if (deg) { c.kind = "geographic"; c.name = "(assumed from the ranges)"; }
+    return c;
+  }
+
+  /* -- simbología de una capa --------------------------------------------- */
+  /* {key(i) → clave de clase del registro i, info(key) → {label, color,
+   * outline, size}, source: texto para el diálogo}. Por registro: la clase
+   * del .lyr cuyo campo exista en el .dbf (si su valor es una de ellas),
+   * el campo "colorval" de MOVE, el símbolo por defecto del .lyr, o nada
+   * (color por defecto). La clave lleva el origen delante para que valores
+   * iguales de fuentes distintas no se mezclen. */
+  function symbolizer(layer, lyrs) {
+    const dbf = layer.dbf;
+    const lyr = dbf && lyrs.find(s => s.field && dbf.field(s.field));
+    const single = lyrs.find(s => !s.field && s.fallback);
+    const lf = lyr ? dbf.field(lyr.field) : null;
+    const cf = dbf ? dbf.field("colorval") : null;
+    const bf = dbf ? dbf.field("background") : null;
+    const byVal = {};
+    if (lyr) for (const c of lyr.classes) byVal[c.value] = c;
+    const src = [];
+    if (lyr) src.push(lyr.name + " — " + lyr.classes.length + " classes on \"" +
+                      lyr.field + "\"");
+    if (cf) src.push("\"colorval\" field (MOVE)");
+    if (!lyr && single) src.push(single.name + " (single symbol)");
+    return {
+      source: src.length ? src.join(", then ") : "default colours",
+      key: function (i) {
+        if (lf) {
+          const v = dbf.value(i, lf);
+          if (v !== null && byVal[String(v)]) return "L:" + v;
+        }
+        if (cf) {
+          const c = dbf.value(i, cf);
+          if (S.hexColor(c)) return "C:" + c;
+        }
+        if (lf) {
+          const v = dbf.value(i, lf);
+          return "D:" + (v === null ? "" : v);
+        }
+        return "";
+      },
+      info: function (k) {
+        const tag = k.slice(0, 2), v = k.slice(2);
+        if (tag === "L:") {
+          const c = byVal[v];
+          return { label: v, color: c.color, outline: c.outline, size: c.size };
+        }
+        if (tag === "C:") return { label: v, color: S.hexColor(v), outline: null,
+                                   size: null };
+        const fb = (lyr && lyr.fallback) || (single && single.fallback);
+        if (tag === "D:")
+          return fb ? Object.assign({ label: v || "(other values)" }, fb)
+                    : { label: v || "(other values)", color: null };
+        return fb ? Object.assign({ label: layer.name }, fb) : null;
+      },
+      background: bf ? (i => S.hexColor(dbf.value(i, bf))) : null,
+    };
+  }
+
+  function nameOf(layer, i) {
+    if (!layer.dbf) return "";
+    for (const n of NAME_FIELDS) {
+      const v = layer.dbf.value(i, n);
+      if (v !== null && v !== "" && typeof v === "string") return v;
+    }
+    return "";
+  }
+
+  function kindFromText(t) {
+    t = String(t || "");
+    if (/fault|falla|thrust|cabalg|detach|despegue|slip|shear/i.test(t))
+      return "fault";
+    if (/topo|terrain|terreno|surface|superficie|dem\b|relief/i.test(t))
+      return "topography";
+    if (/axial|axis|eje/i.test(t)) return "axial";
+    return "horizon";
+  }
+
+  function numericFields(layer) {
+    if (!layer.dbf) return [];
+    return layer.dbf.fields.filter(f => f.type === "N" || f.type === "F")
+      .map(f => f.name);
+  }
+
+  /* -- muestra de coordenadas para el ajuste y el mapa --------------------- */
+  function sampleXY(layers, which, cap) {
+    const xs = [], ys = [];
+    for (const l of layers) {
+      if (which && !which(l)) continue;
+      const sh = l.shp;
+      if (sh.px) {
+        const step = Math.max(1, Math.floor(sh.nPoints / cap));
+        for (let i = 0; i < sh.nPoints; i += step) {
+          if (!isFinite(sh.px[i])) continue;
+          xs.push(sh.px[i]); ys.push(sh.py[i]);
+        }
+      } else {
+        for (const ft of sh.features || [])
+          for (const part of ft || [])
+            for (const v of part) { xs.push(v[0]); ys.push(v[1]); }
+      }
+    }
+    return { xs: xs, ys: ys };
+  }
+
+  function defaultTrace(layers) {
+    const sec = SW.model.state.sec;
+    if (sec.geo_trace) return Object.assign({}, sec.geo_trace);
+    // las líneas y polígonos de un corte exportado (MOVE) están en el plano
+    // vertical: su eje principal ES la traza. Sólo con puntos, el de ellos.
+    let smp = sampleXY(layers, l => !l.shp.px, 200000);
+    if (smp.xs.length < 2) smp = sampleXY(layers, null, 200000);
+    return S.fitTrace(smp.xs, smp.ys);
+  }
+
+  /* -- el mapa del diálogo -------------------------------------------------- */
+  /* Planta de todas las capas con la traza (extremos arrastrables) y la faja
+   * de la distancia máxima. Arrastrar fuera de los extremos desplaza el
+   * mapa; Shift+arrastrar (o el botón "Draw trace") traza una nueva; la
+   * rueda acerca. */
+  function buildMap(parent, layers, st, onEdit) {
+    const wrap = SW.ui.el("div", "shp-map");
+    wrap.style.cssText = "position:relative;height:300px;border:1px solid " +
+      "var(--line, #ccd);border-radius:6px;overflow:hidden;background:#fbfcfd;" +
+      "touch-action:none;margin:6px 0;";
+    const cv = document.createElement("canvas");
+    cv.style.cssText = "width:100%;height:100%;display:block;cursor:grab;";
+    wrap.appendChild(cv);
+    const hint = SW.ui.el("div", null,
+      "Drag the ends to move the trace · Shift+drag to draw a new one · " +
+      "drag to pan · wheel to zoom");
+    hint.style.cssText = "position:absolute;left:6px;bottom:4px;font-size:10px;" +
+      "color:#667;background:rgba(255,255,255,.8);padding:1px 4px;" +
+      "border-radius:3px;pointer-events:none;";
+    wrap.appendChild(hint);
+    parent.appendChild(wrap);
+
+    // geográficas: x escalado por cos(lat) para no deformar la planta
+    const crs = st.crs;
+    const mid = layers[0] ? (layers[0].shp.bbox[1] + layers[0].shp.bbox[3]) / 2 : 0;
+    const ax = crs.kind === "geographic" ? Math.cos(mid * Math.PI / 180) : 1;
+
+    // muestras fijas para dibujar
+    const pts = [], lines = [];
+    let total = 0;
+    for (const l of layers) if (l.shp.px) total += l.shp.nPoints;
+    for (const l of layers) {
+      const sh = l.shp;
+      if (sh.px) {
+        const step = Math.max(1, Math.ceil(total / MAP_PTS));
+        for (let i = 0; i < sh.nPoints; i += step)
+          if (isFinite(sh.px[i])) pts.push(sh.px[i], sh.py[i]);
+      } else {
+        for (const ft of sh.features || [])
+          for (const part of ft || [])
+            lines.push({ poly: sh.geom === "polygon", v: part });
+      }
+    }
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const l of layers) {
+      const b = l.shp.bbox;
+      bx0 = Math.min(bx0, b[0]); by0 = Math.min(by0, b[1]);
+      bx1 = Math.max(bx1, b[2]); by1 = Math.max(by1, b[3]);
+    }
+    if (st.trace) {
+      bx0 = Math.min(bx0, st.trace.x0, st.trace.x1);
+      bx1 = Math.max(bx1, st.trace.x0, st.trace.x1);
+      by0 = Math.min(by0, st.trace.y0, st.trace.y1);
+      by1 = Math.max(by1, st.trace.y0, st.trace.y1);
+    }
+    const view = { cx: (bx0 + bx1) / 2, cy: (by0 + by1) / 2, k: 1 };
+    let W = 0, H = 0, fitted = false;
+
+    function fit() {
+      const w = Math.max(1e-9, (bx1 - bx0) * ax), h = Math.max(1e-9, by1 - by0);
+      view.k = 0.9 * Math.min(W / w, H / h);
+      view.cx = (bx0 + bx1) / 2; view.cy = (by0 + by1) / 2;
+    }
+    const X = x => W / 2 + (x - view.cx) * ax * view.k;
+    const Y = y => H / 2 - (y - view.cy) * view.k;
+    const invX = px => view.cx + (px - W / 2) / (ax * view.k);
+    const invY = py => view.cy - (py - H / 2) / view.k;
+
+    function draw() {
+      const dpr = window.devicePixelRatio || 1;
+      const rw = cv.clientWidth, rh = cv.clientHeight;
+      if (!rw || !rh) { requestAnimationFrame(draw); return; }
+      if (rw !== W || rh !== H) {
+        W = rw; H = rh; cv.width = W * dpr; cv.height = H * dpr;
+      }
+      if (!fitted) { fit(); fitted = true; }
+      const ctx = cv.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      // faja de la distancia máxima: medio ancho en unidades del mapa con la
+      // razón (largo de la traza en el mapa) / (largo real)
+      const t = st.trace;
+      if (t && st.buffer_km > 0 && st.proj && st.proj.length > 0) {
+        const dx = (t.x1 - t.x0) * ax, dy = t.y1 - t.y0;
+        const Ld = Math.hypot(dx, dy);
+        if (Ld > 0) {
+          const half = st.buffer_km * 1000 * Ld / st.proj.length * view.k;
+          const nx = -dy / Ld, ny = dx / Ld;     // normal en pantalla (y abajo)
+          ctx.fillStyle = "rgba(30,90,200,0.10)";
+          ctx.strokeStyle = "rgba(30,90,200,0.35)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          const ox = nx * half, oy = -ny * half;
+          ctx.moveTo(X(t.x0) + ox, Y(t.y0) + oy);
+          ctx.lineTo(X(t.x1) + ox, Y(t.y1) + oy);
+          ctx.lineTo(X(t.x1) - ox, Y(t.y1) - oy);
+          ctx.lineTo(X(t.x0) - ox, Y(t.y0) - oy);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+      }
+      ctx.fillStyle = "rgba(60,60,70,0.55)";
+      for (let i = 0; i < pts.length; i += 2)
+        ctx.fillRect(X(pts[i]) - 0.75, Y(pts[i + 1]) - 0.75, 1.5, 1.5);
+      ctx.lineWidth = 1.2;
+      for (const ln of lines) {
+        ctx.strokeStyle = ln.poly ? "rgba(200,90,40,0.8)" : "rgba(20,110,60,0.85)";
+        ctx.beginPath();
+        ln.v.forEach((v, i) => i ? ctx.lineTo(X(v[0]), Y(v[1]))
+                                 : ctx.moveTo(X(v[0]), Y(v[1])));
+        ctx.stroke();
+      }
+      if (t) {
+        ctx.strokeStyle = "#c81e1e"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(X(t.x0), Y(t.y0)); ctx.lineTo(X(t.x1), Y(t.y1));
+        ctx.stroke();
+        for (const e of [[t.x0, t.y0, st.labels[0]], [t.x1, t.y1, st.labels[1]]]) {
+          ctx.fillStyle = "#fff"; ctx.strokeStyle = "#c81e1e"; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(X(e[0]), Y(e[1]), 6, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#c81e1e"; ctx.font = "bold 11px sans-serif";
+          ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+          ctx.fillText(e[2], X(e[0]) + 8, Y(e[1]) - 4);
+        }
+      }
+    }
+
+    let drag = null;
+    function pos(e) {
+      const r = cv.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    }
+    cv.addEventListener("pointerdown", function (e) {
+      const p = pos(e), t = st.trace;
+      cv.setPointerCapture(e.pointerId);
+      if (st.drawMode || e.shiftKey) {
+        const x = invX(p[0]), y = invY(p[1]);
+        st.trace = { x0: x, y0: y, x1: x, y1: y };
+        drag = { mode: "end", end: 1 };
+        st.drawMode = false;
+      } else if (t && Math.hypot(p[0] - X(t.x0), p[1] - Y(t.y0)) < 10) {
+        drag = { mode: "end", end: 0 };
+      } else if (t && Math.hypot(p[0] - X(t.x1), p[1] - Y(t.y1)) < 10) {
+        drag = { mode: "end", end: 1 };
+      } else {
+        drag = { mode: "pan", p: p, cx: view.cx, cy: view.cy };
+        cv.style.cursor = "grabbing";
+      }
+    });
+    cv.addEventListener("pointermove", function (e) {
+      if (!drag) return;
+      const p = pos(e);
+      if (drag.mode === "pan") {
+        view.cx = drag.cx - (p[0] - drag.p[0]) / (ax * view.k);
+        view.cy = drag.cy + (p[1] - drag.p[1]) / view.k;
+      } else {
+        const x = invX(p[0]), y = invY(p[1]);
+        if (drag.end === 0) { st.trace.x0 = x; st.trace.y0 = y; }
+        else { st.trace.x1 = x; st.trace.y1 = y; }
+        onEdit(true);
+      }
+      draw();
+    });
+    function up() {
+      if (drag && drag.mode === "end") onEdit(false);
+      drag = null; cv.style.cursor = "grab";
+    }
+    cv.addEventListener("pointerup", up);
+    cv.addEventListener("pointercancel", up);
+    cv.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      const p = pos(e);
+      const x = invX(p[0]), y = invY(p[1]);
+      view.k *= Math.exp(-e.deltaY * 0.0015);
+      view.cx = x - (p[0] - W / 2) / (ax * view.k);
+      view.cy = y + (p[1] - H / 2) / view.k;
+      draw();
+    }, { passive: false });
+
+    requestAnimationFrame(draw);
+    return { draw: draw, fit: function () { fit(); draw(); } };
+  }
+
+  /* -- proyección de las capas: el corazón de la importación -------------- */
+  /* Devuelve {lines, dips, overlays, counts, zRange, sRange}. dryRun: sólo
+   * cuenta (para el resumen del diálogo), sin armar objetos. */
+  function project(layers, lyrs, st, dryRun) {
+    const P = st.proj;
+    const buf = st.buffer_km > 0 ? st.buffer_km * 1000 : Infinity;
+    const zf = (st.z_down ? -1 : 1) * ({ m: 1, km: 1000, ft: 0.3048 }[st.z_unit] || 1);
+    const sMin = st.clip_ends ? -Math.max(1, P.length * 1e-6) : -Infinity;
+    const sMax = st.clip_ends ? P.length * (1 + 1e-6) + 1 : Infinity;
+    const res = { lines: [], dips: [], overlays: [],
+                  counts: { points: 0, lines: 0, polygons: 0, dips: 0 },
+                  z0: Infinity, z1: -Infinity, s0: Infinity, s1: -Infinity,
+                  truncated: false };
+    const r1 = v => Math.round(v * 10) / 10;
+    function grow(s, z) {
+      if (s < res.s0) res.s0 = s;
+      if (s > res.s1) res.s1 = s;
+      if (z < res.z0) res.z0 = z;
+      if (z > res.z1) res.z1 = z;
+    }
+
+    for (const layer of layers) {
+      const opt = st.layer[layer.name];
+      if (!opt || !opt.include) continue;
+      const sh = layer.shp;
+      const sym = symbolizer(layer, lyrs);
+
+      if (sh.px) {
+        const zFld = opt.z_field && opt.z_field !== "@geom" && layer.dbf
+          ? layer.dbf.field(opt.z_field) : null;
+        const dipF = opt.dips && layer.dbf ? layer.dbf.field("dip") : null;
+        const azF = dipF ? AZ_FIELDS.map(n => layer.dbf.field(n)).find(Boolean) : null;
+        const buckets = {};          // clave de clase → [s, z, s, z…]
+        let n = 0;
+        for (let i = 0; i < sh.nPoints; i++) {
+          const x = sh.px[i], y = sh.py[i];
+          if (!isFinite(x) || !isFinite(y)) continue;
+          const rec = sh.pf[i];
+          let z = zFld ? layer.dbf.value(rec, zFld) : sh.pz[i];
+          if (z === null || !isFinite(z)) {
+            if (zFld || sh.hasZ) continue;
+            z = 0;
+          }
+          const sd = P.project(x, y);
+          if (Math.abs(sd[1]) > buf || sd[0] < sMin || sd[0] > sMax) continue;
+          z *= zf;
+          n++;
+          if (dryRun) { grow(sd[0], z); continue; }
+          if (res.counts.points + n > MAX_POINTS) { res.truncated = true; n--; break; }
+          const k = sym.key(rec);
+          (buckets[k] = buckets[k] || []).push(r1(sd[0]), r1(z));
+          grow(sd[0], z);
+          if (dipF && azF) {
+            const dip = layer.dbf.value(rec, dipF), az = layer.dbf.value(rec, azF);
+            if (isFinite(dip) && isFinite(az) && dip !== null && az !== null) {
+              // manteo aparente en el plano: tan δa = tan δ · |cos(α − β)|;
+              // inclina hacia el extremo derecho si la dirección de manteo
+              // tiene componente a lo largo de la traza
+              const c = Math.cos((az - P.azimuth) * Math.PI / 180);
+              const app = Math.atan(Math.tan(Math.min(89.99, Math.abs(dip)) *
+                                             Math.PI / 180) * Math.abs(c)) * 180 / Math.PI;
+              res.dips.push(SW.model.newDip(r1(sd[0]), r1(z),
+                                            c >= 0 ? app : 180 - app));
+            }
+          }
+        }
+        res.counts.points += n;
+        if (dryRun || !n) continue;
+        const keys = Object.keys(buckets).sort();
+        const xy = [], classes = [], runs = [];
+        for (const k of keys) {
+          const info = sym.info(k);
+          const arr = buckets[k];
+          runs.push([classes.length, xy.length / 2, arr.length / 2]);
+          classes.push({ label: (info && info.label) || k || layer.name,
+                         color: info && info.color ? info.color.slice() : null,
+                         count: arr.length / 2 });
+          for (let j = 0; j < arr.length; j++) xy.push(arr[j]);
+        }
+        const nAll = xy.length / 2;
+        res.overlays.push({
+          id: SW.model.genId(), kind: "points", name: layer.name,
+          visible: true, opacity: 1,
+          size: +opt.size || (nAll > 20000 ? 2 : 4),
+          color: [40, 40, 50], use_classes: classes.some(c => c.color),
+          classes: classes, runs: runs, xy: xy, n: nAll,
+        });
+        continue;
+      }
+
+      // líneas y polígonos: vértice por vértice; una parte entra si al
+      // menos la mitad de sus vértices cae dentro de la distancia máxima
+      const items = [];
+      sh.features.forEach(function (parts, rec) {
+        if (!parts) return;
+        const k = sym.key(rec);
+        const info = sym.info(k);
+        const nm = nameOf(layer, rec);
+        const rings = [];
+        for (const part of parts) {
+          const verts = [];
+          let inside = 0;
+          for (const v of part) {
+            const sd = P.project(v[0], v[1]);
+            const z = (isFinite(v[2]) ? v[2] : 0) * zf;
+            if (Math.abs(sd[1]) <= buf) inside++;
+            const q = [r1(sd[0]), r1(z)];
+            const last = verts[verts.length - 1];
+            if (!last || last[0] !== q[0] || last[1] !== q[1]) verts.push(q);
+          }
+          if (inside * 2 < part.length) continue;
+          if (st.clip_ends && verts.every(q => q[0] < sMin || q[0] > sMax)) continue;
+          if (verts.length < (sh.geom === "polygon" ? 3 : 2)) continue;
+          rings.push(verts);
+        }
+        if (!rings.length) return;
+        if (sh.geom === "line") {
+          for (const verts of rings) {
+            res.counts.lines++;
+            for (const q of verts) grow(q[0], q[1]);
+            if (dryRun) continue;
+            const kind = opt.line_kind === "auto"
+              ? kindFromText(nm + " " + k + " " + layer.name) : opt.line_kind;
+            const line = SW.model.newLine(kind, verts, "imported");
+            if (nm) line.name = nm + (rings.length > 1 ? " (" + (rings.indexOf(verts) + 1) + ")" : "");
+            if (info && info.color) line.style.color = info.color.slice();
+            res.lines.push(line);
+          }
+          return;
+        }
+        // polígonos: los anillos se reagrupan por contención en (s, z)
+        res.counts.polygons++;
+        for (const r of rings) for (const q of r) grow(q[0], q[1]);
+        if (dryRun) return;
+        const color = info && info.color ? info.color.slice() : [150, 150, 160];
+        const bg = sym.background ? sym.background(rec) : null;
+        rings.sort((a, b) => Math.abs(area(b)) - Math.abs(area(a)));
+        const outers = [];
+        for (const r of rings) {
+          const host = outers.find(o => inRing(r[0], o.vertices) &&
+                                        !o.holes.some(h => inRing(r[0], h)));
+          if (host) host.holes.push(r);
+          else outers.push({ name: nm || layer.name, color: color,
+                             line_color: info && info.outline ? info.outline.slice()
+                                                              : darker(color),
+                             background: bg, vertices: r, holes: [] });
+        }
+        for (const o of outers) items.push(o);
+      });
+      if (!dryRun && items.length)
+        res.overlays.push({ id: SW.model.genId(), kind: "polygons",
+                            name: layer.name, visible: true,
+                            fill_opacity: +opt.fill_opacity || 0.5, width: 1.2,
+                            items: items });
+    }
+    return res;
+  }
+
+  function area(r) {
+    let a = 0;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++)
+      a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]);
+    return a / 2;
+  }
+  function inRing(p, r) {
+    let inside = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const a = r[i], b = r[j];
+      if ((a[1] > p[1]) !== (b[1] > p[1]) &&
+          p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0])
+        inside = !inside;
+    }
+    return inside;
+  }
+  function darker(c) { return c.map(v => Math.round(v * 0.6)); }
+
+  function yRange(layers) {
+    let a = Infinity, b = -Infinity;
+    for (const l of layers) { a = Math.min(a, l.shp.bbox[1]); b = Math.max(b, l.shp.bbox[3]); }
+    return isFinite(a) && b > a ? [a, b] : null;
+  }
+
+  function niceFloor(v, step) { return Math.floor(v / step) * step; }
+  function niceCeil(v, step) { return Math.ceil(v / step) * step; }
+
+  /* -- diálogo ------------------------------------------------------------- */
+  function importDialog(data) {
+    const U = SW.ui;
+    const layers = data.layers, lyrs = data.lyrs;
+    const sec = SW.model.state.sec;
+    const crs = guessCrs(layers);
+    const empty = !(sec.lines || []).length && !(sec.overlays || []).length &&
+                  !(sec.images || []).length;
+    const st = {
+      crs: crs, trace: defaultTrace(layers), proj: null,
+      buffer_km: 0, clip_ends: true, z_unit: "m", z_down: false,
+      correct: true, fit_box: empty, set_labels: !sec.geo_trace,
+      drawMode: false, labels: ["A", "B"], layer: {},
+    };
+    let total = 0;
+    for (const l of layers) if (l.shp.px) total += l.shp.nPoints;
+    // con muchos puntos dispersos (un catálogo), una faja razonable de
+    // entrada; con un corte exportado (todo en el plano), sin límite
+    st.buffer_km = sec.geo_trace && sec.geo_trace.buffer_km !== undefined
+      ? sec.geo_trace.buffer_km : (total > 5000 ? 20 : 0);
+    if (sec.geo_trace) {
+      st.z_unit = sec.geo_trace.z_unit || "m";
+      st.z_down = !!sec.geo_trace.z_down;
+      st.correct = sec.geo_trace.mercator_correction !== false;
+    }
+    for (const l of layers) {
+      const sh = l.shp;
+      const hasDip = l.dbf && l.dbf.field("dip") &&
+                     AZ_FIELDS.some(n => l.dbf.field(n));
+      st.layer[l.name] = { include: true, line_kind: "auto",
+                           z_field: sh.hasZ ? "@geom" : "",
+                           size: "", fill_opacity: 0.5,
+                           dips: !!hasDip && sh.nPoints <= 5000 };
+    }
+
+    let summary, xInputs = [], bufInp, mapApi;
+    function refreshProj() {
+      st.proj = st.trace ? S.makeProjector(st.trace, st.crs,
+                                           { correct: st.correct,
+                                             yRange: yRange(layers) }) : null;
+      if (st.proj) {
+        const az = st.proj.azimuth;
+        st.labels = [S.compass(az + 180), S.compass(az)];
+      }
+    }
+    let statTimer = 0;
+    function refreshStats(now) {
+      clearTimeout(statTimer);
+      const run = function () {
+        if (!summary) return;
+        if (!st.proj) { summary.textContent = "Define a trace first."; return; }
+        const r = project(layers, lyrs, st, true);
+        const c = r.counts;
+        summary.textContent =
+          "Trace " + (st.proj.length / 1000).toFixed(2) + " km, azimuth " +
+          st.proj.azimuth.toFixed(1) + "° (" + st.labels[0] + " → " +
+          st.labels[1] + ")" + ". Will import: " + c.points.toLocaleString() +
+          " points, " + c.lines + " lines, " + c.polygons + " polygons" +
+          (isFinite(r.z0) ? "; Z " + (r.z0 / 1000).toFixed(2) + " to " +
+                            (r.z1 / 1000).toFixed(2) + " km" : "") + "." +
+          (c.points > MAX_POINTS ? "  ⚠ Only the first " +
+            MAX_POINTS.toLocaleString() + " points will be kept — narrow " +
+            "the max distance." : "");
+      };
+      if (now) run(); else statTimer = setTimeout(run, 120);
+    }
+    function syncInputs() {
+      const t = st.trace || {};
+      ["x0", "y0", "x1", "y1"].forEach((k, i) => {
+        if (xInputs[i]) xInputs[i].value = isFinite(t[k]) ? +t[k].toFixed(
+          crs.kind === "geographic" ? 6 : 2) : "";
+      });
+    }
+    refreshProj();
+
+    U.modal({
+      title: "Import shapefile — " + layers.length + " layer" +
+             (layers.length === 1 ? "" : "s"),
+      wide: true,
+      build: function (body) {
+        U.note(body, "Features are projected square onto the section trace: " +
+          "distance along it becomes the section's horizontal axis and the " +
+          "feature's Z its elevation. Coordinates: " + S.crsLabel(crs) + "." +
+          (data.orphans.length ? "  ⚠ No .shp for: " + data.orphans.join(", ") +
+            " — select the .shp together with its .dbf/.prj." : "") +
+          (lyrs.length ? "  Symbology: " + lyrs.map(s => s.name + (s.field
+            ? " (" + s.classes.length + " classes on \"" + s.field + "\")"
+            : "")).join(", ") + "." : ""));
+
+        // capas
+        for (const l of layers) {
+          const sh = l.shp, o = st.layer[l.name];
+          const box = U.el("div");
+          box.style.cssText = "border:1px solid var(--line,#dde);border-radius:6px;" +
+                              "padding:4px 8px;margin:4px 0;";
+          const head = U.el("label");
+          head.style.cssText = "display:flex;gap:6px;align-items:center;font-weight:600;";
+          const chk = document.createElement("input");
+          chk.type = "checkbox"; chk.checked = true;
+          chk.addEventListener("change", () => { o.include = chk.checked; refreshStats(); });
+          head.appendChild(chk);
+          const cnt = sh.px ? sh.nPoints.toLocaleString() + " points"
+                            : sh.features.filter(Boolean).length + " " +
+                              (sh.geom === "line" ? "polylines" : "polygons");
+          const hs = U.el("span");
+          hs.style.cssText = "min-width:0;overflow-wrap:anywhere;";
+          head.appendChild(hs);
+          hs.textContent = (l.name + " — " + cnt +
+            (sh.hasZ ? ", 3D (Z)" : ", 2D") + " · symbology: " +
+            symbolizer(l, lyrs).source);
+          box.appendChild(head);
+          if (sh.px) {
+            const zOpts = [];
+            if (sh.hasZ) zOpts.push({ value: "@geom", label: "geometry Z" });
+            for (const f of numericFields(l)) zOpts.push({ value: f, label: "field " + f });
+            if (!zOpts.length) zOpts.push({ value: "", label: "none (Z = 0)" });
+            const zSel = U.select(zOpts, o.z_field || zOpts[0].value);
+            o.z_field = zSel.value;
+            zSel.addEventListener("change", () => { o.z_field = zSel.value; refreshStats(); });
+            U.row(box, "Elevation from", zSel,
+                  "Geometry Z, or a numeric attribute (depth, elevation…).");
+            const size = U.numberInput(sh.nPoints > 20000 ? 2 : 4, 0.5, 0.5, 30);
+            o.size = size.value;
+            size.addEventListener("input", () => { o.size = size.value; });
+            U.row(box, "Point size (px)", size, "");
+            if (l.dbf && l.dbf.field("dip") && AZ_FIELDS.some(n => l.dbf.field(n))) {
+              const dc = document.createElement("input");
+              dc.type = "checkbox"; dc.checked = o.dips;
+              dc.addEventListener("change", () => { o.dips = dc.checked; });
+              U.row(box, "Dip symbols", dc,
+                    "Also create dip symbols from the dip and dip-direction " +
+                    "(azimuth) fields, with the APPARENT dip in the plane of " +
+                    "the section: tan δa = tan δ · |cos(α − trace azimuth)|.");
+            }
+          } else if (sh.geom === "line") {
+            const ks = U.select([{ value: "auto", label: "Auto (by name)" }]
+              .concat(Object.keys(SW.model.KINDS).map(k => (
+                { value: k, label: SW.model.KINDS[k].label }))), "auto");
+            ks.addEventListener("change", () => { o.line_kind = ks.value; });
+            U.row(box, "Import as", ks,
+                  "Auto: names with fault/falla/thrust → fault, topo/surface " +
+                  "→ topography, the rest → horizon.");
+          } else {
+            const op = U.numberInput(0.5, 0.05, 0, 1);
+            op.addEventListener("input", () => { o.fill_opacity = op.value; });
+            U.row(box, "Fill opacity", op, "");
+          }
+          body.appendChild(box);
+        }
+
+        // traza
+        const tTitle = U.el("div", null, "Section trace");
+        tTitle.style.cssText = "font-weight:600;margin-top:8px;";
+        body.appendChild(tTitle);
+        if (sec.geo_trace)
+          U.note(body, "This section already has a trace (from an earlier " +
+            "import); it is used again so everything shares the same " +
+            "distances. Change it only if you know why.");
+        mapApi = buildMap(body, layers, st, function (live) {
+          refreshProj(); syncInputs(); refreshStats(false);
+        });
+        const grid = U.el("div");
+        grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:4px;";
+        ["Start X", "Start Y", "End X", "End Y"].forEach(function (lab, i) {
+          const cell = U.el("label", null, lab);
+          cell.style.cssText = "font-size:11px;display:flex;flex-direction:column;";
+          const inp = U.numberInput("", "any");
+          inp.style.cssText = "width:100%;box-sizing:border-box;";
+          inp.addEventListener("change", function () {
+            if (!st.trace) st.trace = { x0: 0, y0: 0, x1: 1, y1: 1 };
+            st.trace[["x0", "y0", "x1", "y1"][i]] = +inp.value;
+            refreshProj(); mapApi.draw(); refreshStats();
+          });
+          xInputs.push(inp);
+          cell.appendChild(inp);
+          grid.appendChild(cell);
+        });
+        body.appendChild(grid);
+        syncInputs();
+        const tb = U.el("div", "row");
+        const mk = function (label, title, fn) {
+          const b = U.el("button", "mini", label);
+          b.title = title;
+          b.addEventListener("click", function (e) { e.preventDefault(); fn(); });
+          tb.appendChild(b);
+        };
+        mk("Fit to data", "Principal axis of the lines/polygons (or of the points)",
+           function () {
+             const keep = sec.geo_trace;
+             sec.geo_trace = null;
+             st.trace = defaultTrace(layers);
+             sec.geo_trace = keep;
+             refreshProj(); syncInputs(); mapApi.fit(); refreshStats(true);
+           });
+        mk("Reverse", "Swap the start and end of the trace", function () {
+          const t = st.trace;
+          if (!t) return;
+          st.trace = { x0: t.x1, y0: t.y1, x1: t.x0, y1: t.y0 };
+          refreshProj(); syncInputs(); mapApi.draw(); refreshStats(true);
+        });
+        mk("Draw trace", "Then press and drag on the map from start to end",
+           function () { st.drawMode = true; });
+        body.appendChild(tb);
+
+        bufInp = U.numberInput(st.buffer_km, 1, 0);
+        bufInp.addEventListener("input", function () {
+          st.buffer_km = Math.max(0, +bufInp.value || 0);
+          mapApi.draw(); refreshStats();
+        });
+        U.row(body, "Max distance (km)", bufInp,
+              "Half-width of the swath: features farther than this from the " +
+              "trace are left out (0 = no limit). Points: each one; lines and " +
+              "polygons: at least half of their vertices.");
+        const clip = document.createElement("input");
+        clip.type = "checkbox"; clip.checked = st.clip_ends;
+        clip.addEventListener("change", () => { st.clip_ends = clip.checked; refreshStats(); });
+        U.row(body, "Only between the ends", clip,
+              "Drop points that project beyond the start or end of the trace.");
+
+        if (crs.kind === "mercator" || crs.kind === "geographic") {
+          const cor = document.createElement("input");
+          cor.type = "checkbox"; cor.checked = st.correct;
+          cor.addEventListener("change", function () {
+            st.correct = cor.checked; refreshProj(); mapApi.draw(); refreshStats();
+          });
+          U.row(body, "True distances", cor,
+                "Correct the Mercator scale factor (1/cos φ: ×1.15 at 30°, " +
+                "×1.27 at 38°) so distances along the trace are real metres, " +
+                "in the same scale as Z. Off: raw map units.");
+        }
+        const zu = U.select([{ value: "m", label: "metres" },
+                             { value: "km", label: "kilometres" },
+                             { value: "ft", label: "feet" }], st.z_unit);
+        zu.addEventListener("change", () => { st.z_unit = zu.value; refreshStats(); });
+        U.row(body, "Z units", zu, "");
+        const zd = document.createElement("input");
+        zd.type = "checkbox"; zd.checked = st.z_down;
+        zd.addEventListener("change", () => { st.z_down = zd.checked; refreshStats(); });
+        U.row(body, "Z is depth (positive down)", zd,
+              "For catalogues that give hypocentre depth as a positive number.");
+        const fb = document.createElement("input");
+        fb.type = "checkbox"; fb.checked = st.fit_box;
+        fb.addEventListener("change", () => { st.fit_box = fb.checked; });
+        U.row(body, "Fit section box", fb,
+              "Set the section length to the trace and its top/bottom to the " +
+              "imported data.");
+        const sl = document.createElement("input");
+        sl.type = "checkbox"; sl.checked = st.set_labels;
+        sl.addEventListener("change", () => { st.set_labels = sl.checked; });
+        U.row(body, "End labels from azimuth", sl,
+              "Label the section ends with the trace's compass directions.");
+
+        summary = U.note(body, "");
+        refreshStats(true);
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Import", primary: true, action: function () {
+          if (!st.proj) { SW.view.status("Define a trace first."); return false; }
+          SW.view.status("Projecting onto the section…");
+          setTimeout(function () { doImport(layers, lyrs, st); }, 20);
+        } },
+      ],
+    });
+  }
+
+  function doImport(layers, lyrs, st) {
+    let r;
+    try { r = project(layers, lyrs, st, false); }
+    catch (err) {
+      SW.view.status("Shapefile import: " + (err && err.message ? err.message : err));
+      return;
+    }
+    const sec = SW.model.state.sec;
+    const nothing = !r.lines.length && !r.overlays.length && !r.dips.length;
+    if (nothing) {
+      SW.view.status("Nothing fell within the max distance of the trace — " +
+                     "widen it or move the trace.");
+      return;
+    }
+    const redo = [], undo = [];
+    const trace = { x0: st.trace.x0, y0: st.trace.y0, x1: st.trace.x1,
+                    y1: st.trace.y1, crs: st.crs.text || "", crs_kind: st.crs.kind,
+                    mercator_correction: st.correct, length: st.proj.length,
+                    azimuth: st.proj.azimuth, buffer_km: st.buffer_km,
+                    z_unit: st.z_unit, z_down: st.z_down };
+    redo.push({ op: "set_geo_trace", trace: trace });
+    undo.push({ op: "set_geo_trace", trace: sec.geo_trace || null });
+    for (const l of r.lines) {
+      redo.push({ op: "add_line", line: l });
+      undo.unshift({ op: "delete_line", id: l.id });
+    }
+    for (const d of r.dips) {
+      redo.push({ op: "add_dip", dip: d });
+      undo.unshift({ op: "delete_dip", id: d.id });
+    }
+    for (const o of r.overlays) {
+      redo.push({ op: "add_overlay", overlay: o });
+      undo.unshift({ op: "remove_overlay", id: o.id });
+    }
+    const props = {}, before = {};
+    if (st.fit_box && isFinite(r.z0)) {
+      const span = Math.max(1, r.z1 - r.z0);
+      const step = Math.pow(10, Math.floor(Math.log10(span))) / 2;
+      props.length = Math.max(1, Math.round(st.proj.length));
+      props.z_min = niceFloor(r.z0 - span * 0.03, step);
+      props.z_max = niceCeil(Math.max(r.z1 + span * 0.03, r.z0 + step), step);
+    }
+    if (st.set_labels) { props.label_left = st.labels[0]; props.label_right = st.labels[1]; }
+    if (Object.keys(props).length) {
+      for (const k of Object.keys(props)) before[k] = sec[k];
+      redo.push({ op: "set_section_props", props: props });
+      undo.push({ op: "set_section_props", props: before });
+    }
+    SW.undo.push({ label: "Import shapefile", redo: redo, undo: undo });
+    if (SW.panels.imports) SW.panels.imports.render();
+    SW.view.zoomToExtent();
+    SW.view.requestDraw();
+    const c = r.counts;
+    SW.view.status("Imported " + c.points.toLocaleString() + " points, " +
+      r.lines.length + " lines, " + c.polygons + " polygons" +
+      (r.dips.length ? ", " + r.dips.length + " dips" : "") + " along a " +
+      (st.proj.length / 1000).toFixed(2) + " km trace." +
+      (r.truncated ? "  ⚠ Capped at " + MAX_POINTS.toLocaleString() +
+        " points — narrow the max distance for the rest." : ""));
+  }
+
+  function handleFiles(files) {
+    files = [...(files || [])].filter(f => SHP_EXT.test(f.name));
+    if (!files.length) return;
+    if (!files.some(f => ext(f.name) === "shp")) {
+      SW.view.status("Select the .shp together with its .dbf, .prj (and " +
+                     "optionally a .lyr for the symbology).");
+      return;
+    }
+    SW.view.status("Reading shapefile…");
+    readAll(files).then(function (data) {
+      if (!data.layers.length) { SW.view.status("No readable shapefile."); return; }
+      importDialog(data);
+    }).catch(function (err) {
+      SW.view.status("Shapefile: " + (err && err.message ? err.message : err));
+    });
+  }
+
+  SW.actions.importShapefile = function () {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.multiple = true;
+    inp.accept = ".shp,.shx,.dbf,.prj,.cpg,.lyr";
+    inp.addEventListener("change", () => handleFiles(inp.files));
+    inp.click();
+  };
+  SW.actions.importShapefileFiles = handleFiles;
+
+  /* Un solo botón "Import data": shapefile (+.lyr) o SEG-Y según lo que se
+   * elija; lo mismo al soltar archivos sobre el lienzo. */
+  SW.actions.importDataFiles = function (files) {
+    files = [...(files || [])];
+    const segy = files.find(f => /\.(sgy|segy)$/i.test(f.name));
+    if (segy && SW.actions.importSegyFile) { SW.actions.importSegyFile(segy); return true; }
+    if (files.some(f => SHP_EXT.test(f.name))) { handleFiles(files); return true; }
+    return false;
+  };
+  SW.actions.importData = function () {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.multiple = true;
+    inp.accept = ".shp,.shx,.dbf,.prj,.cpg,.lyr,.sgy,.segy";
+    inp.addEventListener("change", function () {
+      if (!SW.actions.importDataFiles(inp.files))
+        SW.view.status("Choose a shapefile (.shp + .dbf/.prj, optional .lyr) " +
+                       "or a SEG-Y (.sgy/.segy).");
+    });
+    inp.click();
+  };
+
+  SW.shp.project = project;
+  SW.shp.symbolizer = symbolizer;
 })();
 
 /* ==== js/tools/calibrate.js ==== */
@@ -17165,6 +19165,184 @@ SW.panels.images = (function () {
   return { render };
 })();
 
+/* ==== js/panels/imports.js ==== */
+"use strict";
+/* Panel: datos importados (sec.overlays) — nubes de puntos y polígonos de
+ * referencia traídos de un shapefile — y la traza georreferenciada con la
+ * que se proyectaron. Desde acá se importan shapefiles y SEG-Y, se
+ * muestran u ocultan las capas, se cambia el tamaño, la opacidad y el color
+ * (por clase de la simbología o uno solo) y se borran. */
+
+window.SW = window.SW || {};
+SW.panels = SW.panels || {};
+
+SW.panels.imports = (function () {
+  function rgbToHex(c) {
+    return "#" + (c || [40, 40, 50]).map(v => ("0" + Math.max(0, Math.min(255, v | 0))
+      .toString(16)).slice(-2)).join("");
+  }
+  function hexToRgb(h) { return SW.model.hexToRgb(h); }
+
+  function pushProps(o, patch, label) {
+    const before = {};
+    for (const k of Object.keys(patch)) before[k] = SW.model.clone(o[k]);
+    SW.undo.push({ label: label || "Imported layer properties",
+                   redo: [{ op: "set_overlay_props", id: o.id, props: patch }],
+                   undo: [{ op: "set_overlay_props", id: o.id, props: before }] });
+    SW.view.requestDraw();
+  }
+
+  function removeOverlay(o) {
+    const sec = SW.model.state.sec;
+    const i = (sec.overlays || []).indexOf(o);
+    SW.undo.push({ label: "Delete " + (o.name || "imported layer"),
+                   redo: [{ op: "remove_overlay", id: o.id }],
+                   undo: [{ op: "restore_overlay", overlay: SW.model.clone(o),
+                            index: i }] });
+    SW.view.requestDraw();
+  }
+
+  function overlayRow(body, o) {
+    const U = SW.ui;
+    const item = U.el("div", "list-item");
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.checked = o.visible !== false; chk.title = "Visible";
+    chk.addEventListener("change", function () {
+      pushProps(o, { visible: chk.checked }); render();
+    });
+    const span = U.el("span", "grow", o.name || "Imported");
+    const n = o.kind === "points" ? (o.n || (o.xy || []).length / 2) : (o.items || []).length;
+    span.title = (o.name || "") + " — " + n.toLocaleString() +
+                 (o.kind === "points" ? " points" : " polygons");
+    const cnt = U.el("span", null, n.toLocaleString());
+    cnt.style.cssText = "color:var(--ink-3);font-size:10px;";
+    const del = U.el("button", "mini", "×");
+    del.title = "Delete this imported layer";
+    del.addEventListener("click", function (e) {
+      e.stopPropagation(); removeOverlay(o); render();
+    });
+    item.appendChild(chk); item.appendChild(span); item.appendChild(cnt);
+    item.appendChild(del);
+    body.appendChild(item);
+
+    const opts = U.el("div");
+    opts.style.cssText = "padding:0 4px 6px 22px;";
+    if (o.kind === "points") {
+      const size = U.numberInput(o.size || 3, 0.5, 0.5, 30);
+      size.style.width = "56px";
+      size.addEventListener("change", function () {
+        pushProps(o, { size: Math.max(0.5, +size.value || 3) });
+      });
+      U.row(opts, "Size (px)", size, "");
+      const op = U.numberInput(o.opacity === undefined ? 1 : o.opacity, 0.05, 0, 1);
+      op.style.width = "56px";
+      op.addEventListener("change", function () {
+        pushProps(o, { opacity: Math.max(0, Math.min(1, +op.value)) });
+      });
+      U.row(opts, "Opacity", op, "");
+      const hasCls = (o.classes || []).some(c => c.color);
+      if (hasCls) {
+        const uc = document.createElement("input");
+        uc.type = "checkbox"; uc.checked = o.use_classes !== false;
+        uc.addEventListener("change", function () {
+          pushProps(o, { use_classes: uc.checked }); render();
+        });
+        U.row(opts, "Symbology colours", uc,
+              "Colour each class with its symbol (.lyr or colorval); off: one colour");
+      }
+      if (!hasCls || o.use_classes === false) {
+        const col = document.createElement("input");
+        col.type = "color"; col.value = rgbToHex(o.color);
+        col.addEventListener("change", function () {
+          pushProps(o, { color: hexToRgb(col.value) });
+        });
+        U.row(opts, "Colour", col, "");
+      } else {
+        // leyenda: las clases con más puntos primero; cada color se edita
+        const leg = U.el("div");
+        leg.style.cssText = "max-height:140px;overflow:auto;font-size:10px;";
+        const order = o.classes.map((c, i) => i)
+          .sort((a, b) => (o.classes[b].count || 0) - (o.classes[a].count || 0));
+        for (const ci of order) {
+          const c = o.classes[ci];
+          const r = U.el("label");
+          r.style.cssText = "display:flex;align-items:center;gap:4px;";
+          const sw = document.createElement("input");
+          sw.type = "color"; sw.value = rgbToHex(c.color || o.color);
+          sw.style.cssText = "width:18px;height:14px;";
+          sw.addEventListener("change", function () {
+            const classes = SW.model.clone(o.classes);
+            classes[ci].color = hexToRgb(sw.value);
+            pushProps(o, { classes: classes }, "Class colour");
+          });
+          r.appendChild(sw);
+          r.appendChild(U.el("span", "grow", (c.label || "—") + " (" +
+                             (c.count || 0).toLocaleString() + ")"));
+          leg.appendChild(r);
+        }
+        opts.appendChild(leg);
+      }
+    } else {
+      const op = U.numberInput(o.fill_opacity === undefined ? 0.5 : o.fill_opacity,
+                               0.05, 0, 1);
+      op.style.width = "56px";
+      op.addEventListener("change", function () {
+        pushProps(o, { fill_opacity: Math.max(0, Math.min(1, +op.value)) });
+      });
+      U.row(opts, "Fill opacity", op, "");
+      const w = U.numberInput(o.width === undefined ? 1.2 : o.width, 0.2, 0, 10);
+      w.style.width = "56px";
+      w.addEventListener("change", function () {
+        pushProps(o, { width: Math.max(0, +w.value || 0) });
+      });
+      U.row(opts, "Outline (px)", w, "0 = no outline");
+    }
+    body.appendChild(opts);
+  }
+
+  function render() {
+    const body = document.getElementById("panel-imports-body");
+    if (!body) return;
+    const sec = SW.model.state.sec;
+    body.innerHTML = "";
+    const list = sec.overlays || [];
+    for (const o of list) overlayRow(body, o);
+    if (!list.length) {
+      const empty = SW.ui.el("div", null,
+        "No imported data. Import a shapefile (points, polylines and " +
+        "polygons, 2D or 3D, with an optional .lyr for the symbology) or " +
+        "a SEG-Y line.");
+      empty.style.cssText = "color:var(--ink-3);font-size:11px;";
+      body.appendChild(empty);
+    }
+    const t = sec.geo_trace;
+    if (t) {
+      const info = SW.ui.el("div", null,
+        "Trace: " + (t.length / 1000).toFixed(2) + " km, azimuth " +
+        (+t.azimuth || 0).toFixed(1) + "° — from (" + (+t.x0).toFixed(1) + ", " +
+        (+t.y0).toFixed(1) + ") to (" + (+t.x1).toFixed(1) + ", " +
+        (+t.y1).toFixed(1) + ")" + (t.crs_kind === "mercator" &&
+        t.mercator_correction !== false ? ", Mercator scale corrected" : ""));
+      info.style.cssText = "color:var(--ink-3);font-size:10px;margin:6px 0 2px;";
+      info.title = t.crs || "";
+      body.appendChild(info);
+    }
+    const btns = SW.ui.el("div", "row");
+    const shp = SW.ui.el("button", "mini", "Import shapefile…");
+    shp.title = "Select the .shp with its .dbf and .prj (several layers at " +
+                "once are fine) and, optionally, a .lyr with the symbology";
+    shp.addEventListener("click", () => SW.actions.importShapefile());
+    btns.appendChild(shp);
+    const sgy = SW.ui.el("button", "mini", "Import SEG-Y…");
+    sgy.title = "Seismic line (.sgy/.segy) as an image of the section";
+    sgy.addEventListener("click", () => SW.actions.importSegy());
+    btns.appendChild(sgy);
+    body.appendChild(btns);
+  }
+
+  return { render };
+})();
+
 /* ==== js/panels/properties.js ==== */
 "use strict";
 /* Panel: Propiedades de lo que esté seleccionado — líneas, dips, imágenes o
@@ -19594,6 +21772,8 @@ SW.view = (function () {
     $("saveas-btn").addEventListener("click", SW.project.saveFileAs);
     $("import-image-btn").addEventListener("click",
                                            () => SW.actions.importImage());
+    $("import-data-btn").addEventListener("click",
+                                          () => SW.actions.importData());
 
     wireLayoutToggles();
 
@@ -19615,6 +21795,7 @@ SW.view = (function () {
       if (SW.panels.wells) SW.panels.wells.render();
       if (SW.panels.restore) SW.panels.restore.render();
       if (SW.panels.versions) SW.panels.versions.render();
+      if (SW.panels.imports) SW.panels.imports.render();
       if (SW.project) SW.project.touch();
     });
 
@@ -19879,6 +22060,7 @@ SW.view = (function () {
     updateScaleReadout();
     SW.panels.horizons.render();
     SW.panels.images.render();
+    if (SW.panels.imports) SW.panels.imports.render();
     SW.panels.properties.render();
     if (SW.panels.linelength) SW.panels.linelength.render();
     if (SW.panels.polygons) SW.panels.polygons.render();
