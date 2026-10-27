@@ -905,7 +905,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <button id="resample-btn" title="Densify selected lines"><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
           <button id="join-btn" title="Join selected lines"><svg class="ic"><use href="#i-join"/></svg>Join</button>
           <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
-          <button id="tidy-btn" title="Tidy selected lines: snap ends, remove duplicate vertices"><svg class="ic"><use href="#i-tidy"/></svg>Tidy</button>
+          <button id="tidy-btn" title="Tidy selected lines: each end is extended along its direction until it meets the next line (short overshoots are trimmed); duplicate vertices removed"><svg class="ic"><use href="#i-tidy"/></svg>Tidy</button>
           <button id="snapfault-btn" title="Snap to faults: layer ends near a fault are trimmed or extended to end exactly on it (selected lines, or every visible layer if nothing is selected). Uses Tidy max distance."><svg class="ic"><use href="#i-snapfault"/></svg>To faults</button>
         </div>
         <details class="rail-more">
@@ -916,7 +916,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           <label class="rail-field" title="Max segment length (empty = auto)">Resample spacing (m)
             <input id="resample-spacing" type="number" min="0" step="10" placeholder="auto">
           </label>
-          <label class="rail-field" title="Tidy: largest gap (m) an endpoint may jump to snap onto another line's vertex (empty = auto, ~16 px at the current zoom)">Tidy max distance (m)
+          <label class="rail-field" title="Tidy: longest an end may be extended to reach the next line (m). Empty = no limit (up to the first line it meets). To faults: snapping distance (empty = ~24 px)">Tidy max distance (m)
             <input id="tidy-dist" type="number" min="0" step="any" placeholder="auto">
           </label>
         </details>
@@ -1188,7 +1188,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.23.0",
+  version: "0.24.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1200,6 +1200,13 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.24.0", date: "2026-10-27", highlights: [
+      "Tidy rewritten: each end of the selected lines is extended along " +
+        "its own direction until it meets the next visible line (any kind), " +
+        "short overshoots past a line are trimmed at the crossing, and " +
+        "duplicate vertices are removed — one undo step. Tidy max distance " +
+        "now caps the extension (empty = no limit).",
+    ] },
     { version: "0.23.0", date: "2026-10-27", highlights: [
       "Shapefile import: \"Add topography (DEM)\" plots the ground surface " +
         "under the section trace as an editable Topography line, as in " +
@@ -3032,6 +3039,44 @@ SW.topology = (function () {
     return { vertices: v, changed: changed };
   }
 
+  /* Tidy: cada extremo de `verts` termina contra la PRIMERA línea de
+   * `targets` que encuentra. Si la punta ya la toca, se deja; si la cruzó
+   * y la cola sobrante mide menos de `trim`, se recorta en el cruce; si no,
+   * se prolonga por su propia dirección (la de los últimos metros, no la
+   * del último segmento quebrado) hasta el primer cruce, con `reach` como
+   * tope (Infinity = hasta lo que encuentre). Un extremo cuyo rayo no toca
+   * nada queda como está. Devuelve {vertices, extended, trimmed}. */
+  function extendToNext(verts, targets, opts) {
+    opts = opts || {};
+    let v = verts.map(p => [p[0], p[1]]);
+    const ts = (targets || []).filter(t => t && t.length >= 2);
+    const out = { vertices: v, extended: 0, trimmed: 0 };
+    if (v.length < 2 || !ts.length) return out;
+    const box = bbox(ts.concat([v]));
+    const D = box ? box.diag || 1 : 1;
+    const tiny = opts.tiny > 0 ? opts.tiny : D * 1e-9;
+    const reach = opts.reach > 0 && isFinite(opts.reach) ? opts.reach : D * 4;
+    const trim = opts.trim > 0 ? opts.trim : 0;
+    for (const end of [0, 1]) {
+      const tip = end === 0 ? v[0] : v[v.length - 1];
+      const near = nearestOnAny(ts, tip);
+      if (near && near.d <= tiny) continue;
+      if (trim > 0) {
+        const t = trimOvershoot(v, end, ts, trim);
+        if (t && t.length >= 2) { v = t; out.trimmed++; continue; }
+      }
+      const len = geom.polylineLength(v);
+      const ray = endRay(v, end, Math.min(opts.back > 0 ? opts.back : len / 4, len / 4));
+      if (!ray) continue;
+      const hit = rayHit(tip, ray.dir, reach, ts, tiny);
+      if (!hit) continue;
+      if (end === 0) v.unshift(hit.pt.slice()); else v.push(hit.pt.slice());
+      out.extended++;
+    }
+    out.vertices = v;
+    return out;
+  }
+
   /* -- arreglo planar ------------------------------------------------------ */
 
   /* Prolonga los extremos sueltos (para el arreglo, no se escribe en la
@@ -3304,6 +3349,7 @@ SW.topology = (function () {
   }
 
   return { bbox, endRay, rayHit, nearestOnAny, trimOvershoot, seatEnd, seatOnFaults,
+           extendToNext,
            closeEnds, faces, interiorPoint };
 })();
 
@@ -7982,44 +8028,52 @@ window.SW = window.SW || {};
     SW.view.requestDraw();
   };
 
+  /* Tidy: colapsa vértices duplicados y lleva cada extremo de las líneas
+   * seleccionadas hasta la PRIMERA línea visible que encuentra al
+   * prolongarse por su dirección (SW.topology.extendToNext) — o recorta la
+   * cola que la cruzó, si es más corta que ~24 px. "Tidy max distance"
+   * limita cuánto puede crecer un extremo (vacío = sin límite). Las demás
+   * seleccionadas cuentan como blanco con su forma original. Un undo. */
   SW.actions.tidySelected = function () {
-    const lines = SW.view.selectedLines().filter(l => !l.locked);
+    const lines = SW.view.selectedLines()
+      .filter(l => !l.locked && (l.vertices || []).length >= 2);
     if (!lines.length) return;
-    let pending = lines.length;
-    const results = new Array(lines.length);
-    // distancia máxima de enganche: la del riel o, vacía, 16 px de pantalla
-    const tol = SW.view.tolS(8);
+    const all = (SW.model.state.sec.lines || []).filter(l =>
+      l.visible !== false && (l.vertices || []).length >= 2);
     const distEl = document.getElementById("tidy-dist");
     const user = distEl && String(distEl.value).trim() !== "" ? +distEl.value : NaN;
-    const snap = isFinite(user) && user >= 0 ? user : tol * 2.0;
-    const dup = Math.min(tol * 0.5, snap > 0 ? snap : tol * 0.5);
-    lines.forEach(function (line, i) {
-      SW.bridge.call("tidyLine", {
-        id: line.id, eps_dup: dup, eps_snap: snap,
-      }, function (res) {
-        results[i] = (res && res.ok !== false && (res.removed || res.snapped))
-          ? res : null;
-        if (--pending === 0) finish();
-      });
-    });
-    function finish() {
-      const redo = [], undo = [];
-      lines.forEach(function (line, i) {
-        const res = results[i];
-        if (!res) return;
-        redo.push({ op: "replace_vertices", id: line.id,
-                    vertices: res.vertices });
-        undo.push({ op: "replace_vertices", id: line.id,
-                    vertices: line.vertices });
-      });
-      if (!redo.length) { SW.view.status("Nothing to tidy."); return; }
-      SW.undo.push({
-        label: redo.length > 1 ? "Tidy " + redo.length + " lines" : "Tidy line",
-        redo: redo, undo: undo,
-      });
-      SW.view.status("Tidied " + redo.length + " line(s).");
-      SW.view.requestDraw();
+    const reach = isFinite(user) && user > 0 ? user : Infinity;
+    const trim = Math.min(SW.view.tolS(24), reach);
+    const dup = SW.view.tolS(4) * 0.5;
+    const redo = [], undo = [];
+    let ext = 0, cut = 0, removed = 0;
+    for (const line of lines) {
+      const v0 = [line.vertices[0].slice()];
+      for (const p of line.vertices.slice(1))
+        if (SW.geom.dist(p, v0[v0.length - 1]) >= dup) v0.push(p.slice());
+      if (v0.length < 2) continue;
+      const targets = all.filter(o => o.id !== line.id).map(o => o.vertices);
+      const r = SW.topology.extendToNext(v0, targets, { reach: reach, trim: trim });
+      const dropped = line.vertices.length - v0.length;
+      if (!r.extended && !r.trimmed && !dropped) continue;
+      ext += r.extended; cut += r.trimmed; removed += dropped;
+      redo.push({ op: "replace_vertices", id: line.id, vertices: r.vertices });
+      undo.push({ op: "replace_vertices", id: line.id, vertices: line.vertices });
     }
+    if (!redo.length) {
+      SW.view.status("Nothing to tidy: every end already meets a line, or " +
+                     "extending it hits nothing" +
+                     (isFinite(reach) ? " within the max distance." : "."));
+      return;
+    }
+    SW.undo.push({
+      label: redo.length > 1 ? "Tidy " + redo.length + " lines" : "Tidy line",
+      redo: redo, undo: undo,
+    });
+    SW.view.status("Tidied " + redo.length + " line(s): " + ext +
+      " end(s) extended to the next line" + (cut ? ", " + cut + " overshoot(s) trimmed" : "") +
+      (removed ? ", " + removed + " duplicate vertex(es) removed" : "") + ".");
+    SW.view.requestDraw();
   };
 
   /* Topología capa-falla (SW.topology.seatOnFaults): cada extremo de capa a
@@ -8503,7 +8557,7 @@ window.SW = window.SW || {};
         ] },
       { label: "Simplify nodes" + n,
         disabled: !anyEditable, action: () => SW.actions.simplifySelected() },
-      { label: "Tidy (snap/dedupe)" + n,
+      { label: "Tidy (extend ends to next line)" + n,
         disabled: !anyEditable, action: () => SW.actions.tidySelected() },
       { label: "Snap ends to faults" + n,
         disabled: !anyEditable || !group.some(l => l.kind !== "fault"),
@@ -20831,7 +20885,7 @@ SW.panels.properties = (function () {
           () => SW.actions.smoothSelected());
     mkBtn("Bézier", "Bézier curve fitting (Schneider)",
           () => SW.actions.bezierSelected());
-    mkBtn("Tidy", "Collapse duplicate vertices and snap endpoints",
+    mkBtn("Tidy", "Extend each end to the next line it meets; remove duplicate vertices",
           () => SW.actions.tidySelected());
     if (SW.view.selectedLines().some(l => l.kind !== "fault"))
       mkBtn("To faults", "End the layers exactly on the faults they reach " +

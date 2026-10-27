@@ -173,6 +173,13 @@ trace involved:
   or Del to remove one, Shift+drag to draw a new rectangle; the fills are
   rebuilt on every change. Rebuild from the panel after editing the
   horizons.
+- **Tidy** (Edit rail, Properties, context menu) — each end of the
+  selected lines is extended along its own direction until it meets the
+  next visible line (horizon, fault, topography…); an end that already
+  crossed a line by a short overshoot (~24 px) is trimmed at the crossing,
+  and an end that already touches one is left alone. Duplicate vertices
+  are removed. **Tidy max distance** caps how far an end may grow (empty =
+  up to the first line it meets). One undo step.
 - **Layer–fault topology** — forward-modeling cuts end exactly on the
   fault (each piece is carried along its own direction to the trace), and
   every layer end close to the active fault, a backthrust, a splay or a
