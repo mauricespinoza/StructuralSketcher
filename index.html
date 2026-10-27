@@ -419,6 +419,31 @@ canvas.pointer { cursor: default; }
 .modal-note {
   margin: 0 0 10px; font-size: 11px; color: var(--ink-3); line-height: 1.4;
 }
+/* Cuenta de Google y Drive: botón de la barra superior y su cuadro. */
+#google-btn { display: inline-flex; align-items: center; justify-content: center; }
+#google-btn .glogo svg, #google-btn .gavatar { width: 18px; height: 18px; display: block; }
+.gavatar { border-radius: 50%; object-fit: cover; }
+.gavatar-ini {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--accent); color: #fff;
+  font-size: 11px; font-weight: 600; width: 32px; height: 32px; flex: none;
+}
+#google-btn .gavatar-ini { width: 18px; height: 18px; }
+.gacct { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.gacct img { width: 32px; height: 32px; border-radius: 50%; flex: none; }
+.gacct .modal-note { margin: 0; }
+.gbtns { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.gbtn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px;
+  background: #fff; color: #1f1f1f; border: 1px solid #747775;
+  border-radius: 20px; font-weight: 500;
+}
+.gbtn:hover { background: #f2f6fc; }
+.gbtn .glogo svg { display: block; }
+.gcfg { border-top: 1px solid var(--grid); padding-top: 8px; }
+.gcfg summary { cursor: pointer; font-size: 12px; color: var(--ink-2); margin-bottom: 6px; }
+.gcfg code { font-size: 11px; background: var(--ruler-bg); padding: 0 3px; border-radius: 3px; }
+.gcfg .gfield input { flex: 1 1 auto; min-width: 0; font-size: 11px; }
 .shortcut-input {
   width: 150px; text-align: center; font-family: ui-monospace, Consolas,
   monospace; background: var(--ruler-bg); cursor: pointer;
@@ -600,7 +625,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   .doc-name { max-width: 160px; }
 }
 </style>
-<!-- Built from the StructuralSketcher source folder on 2026-08-20. Single self-contained file: no external scripts, styles, fonts or network access of any kind. -->
+<!-- Built from the StructuralSketcher source folder on 2026-08-20. Single self-contained file: no external scripts, styles or fonts. The only network access is the optional Google Drive feature (Google account button), which loads Google's sign-in and picker scripts on demand. -->
 </head>
 <body>
 
@@ -700,6 +725,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
     <button id="open-btn" class="icon-only" title="Open project (Ctrl+O)"><svg class="ic"><use href="#i-open"/></svg></button>
     <button id="save-btn" class="icon-only" title="Save (Ctrl+S)"><svg class="ic"><use href="#i-save"/></svg></button>
     <button id="saveas-btn" class="icon-only" title="Save as… (Ctrl+Shift+S)"><svg class="ic"><use href="#i-save-as"/></svg></button>
+    <button id="google-btn" class="icon-only" title="Google account: open and save projects in Google Drive"></button>
   </div>
   <span class="sep"></span>
   <div class="hgroup">
@@ -1162,7 +1188,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.21.0",
+  version: "0.22.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1174,6 +1200,14 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.22.0", date: "2026-10-27", highlights: [
+      "Google account and Drive (as in GISDraw): sign in with Google and " +
+        "open, import and save projects in Google Drive through its API. " +
+        "Save to Drive picks a folder once and then Save (Ctrl+S) updates " +
+        "that file; Open / import takes a project (.json), an image to " +
+        "trace or a shapefile / SEG-Y. Uses your own Google Cloud OAuth " +
+        "client ID; optional, the rest of the app stays offline.",
+    ] },
     { version: "0.21.0", date: "2026-10-27", highlights: [
       "Ctrl+A selects all visible lines and dips (respects the Select " +
         "filter).",
@@ -22838,6 +22872,9 @@ SW.view = (function () {
     $("open-btn").addEventListener("click", SW.project.openFile);
     $("save-btn").addEventListener("click", SW.project.saveFile);
     $("saveas-btn").addEventListener("click", SW.project.saveFileAs);
+    $("google-btn").addEventListener("click", SW.google.open);
+    SW.google.updateButton();
+    SW.gdrive.preload();
     $("import-image-btn").addEventListener("click",
                                            () => SW.actions.importImage());
     $("import-data-btn").addEventListener("click",
@@ -23198,6 +23235,535 @@ SW.view = (function () {
   };
 })();
 
+/* ==== js/gdrive.js ==== */
+"use strict";
+/* StructuralSketcher — cuenta de Google y Google Drive (igual que en
+ * GISDraw): abrir y guardar proyectos en Drive a través de la API.
+ *
+ * Es lo ÚNICO de la app que usa la red, y sólo si el usuario lo configura y
+ * lo pide: los scripts de Google (inicio de sesión y selector) se cargan
+ * bajo demanda la primera vez que se usan. Sin configurar, la app sigue
+ * funcionando entera sin conexión desde el disco.
+ *
+ * La app no trae claves propias: usa las del proyecto de Google Cloud del
+ * usuario. Un ID de cliente OAuth (tipo «Aplicación web», con el origen de
+ * la app autorizado) y, opcional, una clave de API, del mismo proyecto con
+ * «Google Drive API» y «Google Picker API» activadas. Se pide el permiso
+ * `drive.file`: la app sólo ve los archivos que crea o que se eligen en el
+ * selector. Con sólo la clave de API se pueden abrir archivos compartidos
+ * por enlace («cualquier persona con el enlace»).
+ *
+ * El token de acceso vive en memoria (Google lo da por una hora); lo que se
+ * recuerda en localStorage es la configuración, la última carpeta usada y
+ * quién inició sesión, para ofrecer «Continuar como…» sin volver a elegir
+ * cuenta. Son preferencias de la APLICACIÓN, no del documento. */
+
+window.SW = window.SW || {};
+
+SW.gdrive = (function () {
+  const KEY = "structuralsketcher.google.v1";
+  // drive.file: sólo los archivos que la app crea o que se eligen en el
+  // selector; el resto, para saber quién inició sesión
+  const SCOPE = "https://www.googleapis.com/auth/drive.file openid email profile";
+  const API = "https://www.googleapis.com/drive/v3/files";
+  const UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
+  const GOOGLE_DOCS = "application/vnd.google-apps.";
+  const FOLDER = "application/vnd.google-apps.folder";
+
+  let token = null;     // { value, expires }
+  const loading = {};   // url -> Promise de <script>
+
+  /* -- configuración (localStorage) --------------------------------------- */
+  function cfg() {
+    try {
+      return JSON.parse(window.localStorage.getItem(KEY) || "{}") || {};
+    } catch (e) { return {}; }
+  }
+
+  function setCfg(patch) {
+    const c = Object.assign(cfg(), patch);
+    for (const k in patch) if (patch[k] === null) delete c[k];
+    try {
+      window.localStorage.setItem(KEY, JSON.stringify(c));
+    } catch (e) { /* sin persistencia; la sesión actual igual funciona */ }
+    return c;
+  }
+
+  const clientId = () => (cfg().clientId || "").trim();
+  const apiKey = () => (cfg().apiKey || "").trim();
+  const isConfigured = () => !!(clientId() || apiKey());
+
+  /** Número de proyecto de Google Cloud (prefijo numérico del ID de cliente). */
+  function appIdOf(id) {
+    const m = /^(\d+)-/.exec(id || "");
+    return m ? m[1] : null;
+  }
+
+  /** Id de archivo a partir de un enlace de Drive (o el id tal cual). */
+  function parseDriveId(link) {
+    const s = String(link || "").trim();
+    const m = /\/d\/([\w-]{10,})/.exec(s) || /[?&]id=([\w-]{10,})/.exec(s);
+    if (m) return m[1];
+    return /^[\w-]{10,}$/.test(s) ? s : null;
+  }
+
+  function loadScript(url) {
+    if (!loading[url]) {
+      loading[url] = new Promise(function (resolve, reject) {
+        const s = document.createElement("script");
+        s.src = url;
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = function () {
+          delete loading[url];
+          reject(new Error("Could not load " + url +
+                           " (no internet connection?)"));
+        };
+        document.head.appendChild(s);
+      });
+    }
+    return loading[url];
+  }
+
+  /* -- sesión --------------------------------------------------------------- */
+  const isSignedIn = () => !!(token && token.expires > Date.now() + 60000);
+
+  /** Usuario que inició sesión (o el último que lo hizo en este navegador,
+   *  aunque el permiso haya vencido). */
+  const googleUser = () => cfg().user || null;
+
+  function accessToken(opts) {
+    opts = opts || {};
+    if (isSignedIn()) return Promise.resolve(token.value);
+    const id = clientId();
+    if (!id) return Promise.reject(new Error(
+      "Missing the Google OAuth client ID (Google account → Setup)"));
+    return loadScript("https://accounts.google.com/gsi/client").then(function () {
+      const oauth = window.google && window.google.accounts &&
+                    window.google.accounts.oauth2;
+      if (!oauth) throw new Error("Could not load Google sign-in");
+      return new Promise(function (resolve, reject) {
+        const client = oauth.initTokenClient({
+          client_id: id,
+          scope: SCOPE,
+          hint: opts.hint || undefined,
+          callback: function (r) {
+            if (r.error) {
+              reject(new Error("Google denied access: " +
+                               (r.error_description || r.error)));
+              return;
+            }
+            token = { value: r.access_token,
+                      expires: Date.now() + (Number(r.expires_in) || 3600) * 1000 };
+            resolve(token.value);
+          },
+          error_callback: function (e) {
+            reject(new Error(e && e.type === "popup_closed"
+              ? "The Google window was closed"
+              : "Google sign-in: " + ((e && (e.message || e.type)) || "error")));
+          },
+        });
+        client.requestAccessToken({ prompt: opts.prompt || "" });
+      });
+    });
+  }
+
+  /** Inicio de sesión (ventana de Google): pide el permiso para Drive y trae
+   *  nombre, correo y foto de la cuenta. `account`: dejar elegir otra; si no,
+   *  se reutiliza la última sin volver a preguntar. */
+  function signIn(opts) {
+    opts = opts || {};
+    const last = googleUser();
+    return accessToken(opts.account ? { prompt: "select_account" }
+                                    : { hint: last ? last.email : "" })
+      .then(tok => fetch("https://www.googleapis.com/oauth2/v3/userinfo",
+                         { headers: { Authorization: "Bearer " + tok } }))
+      .then(res => (res.ok ? res.json() : {}))
+      .then(function (info) {
+        const user = { name: info.name || info.email || "Google account",
+                       email: info.email || "", picture: info.picture || "" };
+        setCfg({ user: user });
+        return user;
+      });
+  }
+
+  /** Cierra la sesión: revoca el permiso y olvida la cuenta. */
+  function signOut() {
+    const t = token && token.value;
+    token = null;
+    setCfg({ user: null });
+    const oauth = window.google && window.google.accounts &&
+                  window.google.accounts.oauth2;
+    if (t && oauth && oauth.revoke) oauth.revoke(t, () => null);
+  }
+
+  /** Token vigente, iniciando sesión si hace falta (llamar desde un gesto). */
+  function ensureSignedIn() {
+    return isSignedIn() ? Promise.resolve(token.value)
+                        : signIn().then(() => token.value);
+  }
+
+  /* -- selector de Google (Picker) ------------------------------------------ */
+  function loadPicker() {
+    return loadScript("https://apis.google.com/js/api.js").then(function () {
+      if (!window.gapi) throw new Error("Could not load the Google picker");
+      return new Promise(function (resolve, reject) {
+        window.gapi.load("picker", {
+          callback: resolve,
+          onerror: () => reject(new Error("Could not load the Google picker")),
+        });
+      });
+    });
+  }
+
+  function buildPicker(tok, title, views, onPick) {
+    const P = window.google.picker;
+    let b = new P.PickerBuilder()
+      .setOAuthToken(tok)
+      .setTitle(title)
+      .enableFeature(P.Feature.SUPPORT_DRIVES)
+      .setCallback(function (data) {
+        const action = data[P.Response.ACTION];
+        if (action === P.Action.PICKED)
+          onPick((data[P.Response.DOCUMENTS] || []).map(d => ({
+            id: d[P.Document.ID], name: d[P.Document.NAME],
+            mimeType: d[P.Document.MIME_TYPE],
+          })));
+        else if (action === P.Action.CANCEL) onPick([]);
+      });
+    views.forEach(v => { b = b.addView(v); });
+    if (apiKey()) b = b.setDeveloperKey(apiKey());
+    const appId = appIdOf(clientId());
+    if (appId) b = b.setAppId(appId);
+    return { builder: b, P: P };
+  }
+
+  /* Los scripts de Google se cargan por adelantado (al abrir el cuadro de
+   * la cuenta o al arrancar si ya está configurado): si se cargaran recién
+   * al pulsar «Iniciar sesión», la ventana de Google ya no saldría del gesto
+   * del usuario y el navegador la bloquearía como emergente. */
+  function preload() {
+    if (!clientId() || location.protocol === "file:") return;
+    loadScript("https://accounts.google.com/gsi/client").catch(() => null);
+    loadPicker().catch(() => null);
+  }
+
+  /** Selector de archivos de Drive (Mi unidad, compartidos, unidades
+   *  compartidas). Resuelve [{id, name, mimeType}], vacío si se cancela. */
+  function pickFiles(opts) {
+    opts = opts || {};
+    return Promise.all([ensureSignedIn(), loadPicker()]).then(function (r) {
+      const P = window.google.picker;
+      const mine = new P.DocsView(P.ViewId.DOCS).setIncludeFolders(true)
+        .setSelectFolderEnabled(false).setMode(P.DocsViewMode.LIST);
+      const shared = new P.DocsView(P.ViewId.DOCS).setEnableDrives(true)
+        .setIncludeFolders(true).setSelectFolderEnabled(false);
+      return new Promise(function (resolve) {
+        const p = buildPicker(r[0], opts.title || "Open from Google Drive",
+                              [mine, shared], resolve);
+        let b = p.builder;
+        if (opts.multiple) b = b.enableFeature(P.Feature.MULTISELECT_ENABLED);
+        b.build().setVisible(true);
+      });
+    });
+  }
+
+  /** Selector de carpeta (abre en `startIn`, la última usada).
+   *  Resuelve {id, name} o null. */
+  function pickFolder(startIn) {
+    return Promise.all([ensureSignedIn(), loadPicker()]).then(function (r) {
+      const P = window.google.picker;
+      const folders = () => new P.DocsView(P.ViewId.FOLDERS)
+        .setIncludeFolders(true).setSelectFolderEnabled(true)
+        .setMimeTypes(FOLDER);
+      const views = [];
+      if (startIn) views.push(folders().setParent(startIn));
+      views.push(folders().setParent("root"));
+      views.push(folders().setEnableDrives(true));
+      return new Promise(function (resolve) {
+        buildPicker(r[0], "Choose the Drive folder to save in", views,
+                    docs => resolve(docs[0] || null))
+          .builder.build().setVisible(true);
+      });
+    });
+  }
+
+  /* -- archivos --------------------------------------------------------------- */
+  function errorOf(res, what) {
+    return res.json().catch(() => ({})).then(function (j) {
+      const msg = (j && j.error && j.error.message) || "";
+      let text;
+      if (res.status === 404)
+        text = "Google Drive: " + what + " not found (is it shared with " +
+               "\"anyone with the link\", or did this app create it?)";
+      else if (res.status === 403)
+        text = "Google Drive: no permission for " + what +
+               (msg ? " (" + msg + ")" : "");
+      else
+        text = "Google Drive: error " + res.status + (msg ? " (" + msg + ")" : "");
+      const err = new Error(text);
+      err.status = res.status;
+      throw err;
+    });
+  }
+
+  /* Con sesión iniciada va el token; si no, la clave de API (sólo archivos
+   * compartidos por enlace). */
+  function driveFetch(url) {
+    const headers = {};
+    let u = url;
+    if (isSignedIn()) headers.Authorization = "Bearer " + token.value;
+    else if (apiKey())
+      u += (u.indexOf("?") >= 0 ? "&" : "?") + "key=" + encodeURIComponent(apiKey());
+    else return Promise.reject(new Error("Sign in with Google first"));
+    return fetch(u, { headers: headers }).then(function (res) {
+      return res.ok ? res : errorOf(res, "the file");
+    });
+  }
+
+  /** Baja un archivo de Drive como `File` (con `driveId`, para poder
+   *  guardar de vuelta en el mismo). */
+  function download(meta) {
+    const id = meta.id;
+    const head = meta.name && meta.mimeType ? Promise.resolve(meta)
+      : driveFetch(API + "/" + encodeURIComponent(id) +
+                   "?fields=name,mimeType,size&supportsAllDrives=true")
+          .then(r => r.json());
+    return head.then(function (m) {
+      if ((m.mimeType || "").indexOf(GOOGLE_DOCS) === 0)
+        throw new Error("\"" + m.name + "\" is a Google document, not a " +
+                        "file: download or export it first.");
+      return driveFetch(API + "/" + encodeURIComponent(id) +
+                        "?alt=media&supportsAllDrives=true")
+        .then(r => r.blob())
+        .then(function (blob) {
+          const f = new File([blob], m.name || id, { type: m.mimeType || "" });
+          f.driveId = id;
+          return f;
+        });
+    });
+  }
+
+  /** Sube un archivo: crea uno nuevo (en `parentId`) o, con `fileId`,
+   *  reemplaza el contenido de ése. Resuelve {id, name, webViewLink}. */
+  function upload(o) {
+    if (!isSignedIn()) return Promise.reject(new Error("Sign in with Google first"));
+    const mime = o.mimeType || "application/octet-stream";
+    const boundary = "ss" + Math.random().toString(36).slice(2) +
+                     Date.now().toString(36);
+    const meta = { name: o.name, mimeType: mime };
+    if (o.parentId && !o.fileId) meta.parents = [o.parentId];
+    const body = new Blob([
+      "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" +
+        JSON.stringify(meta) + "\r\n",
+      "--" + boundary + "\r\nContent-Type: " + mime + "\r\n\r\n",
+      o.data,
+      "\r\n--" + boundary + "--",
+    ]);
+    const q = "uploadType=multipart&supportsAllDrives=true&fields=id,name,parents,webViewLink";
+    const url = o.fileId ? UPLOAD + "/" + encodeURIComponent(o.fileId) + "?" + q
+                         : UPLOAD + "?" + q;
+    return fetch(url, {
+      method: o.fileId ? "PATCH" : "POST",
+      headers: { Authorization: "Bearer " + token.value,
+                 "Content-Type": "multipart/related; boundary=" + boundary },
+      body: body,
+    }).then(res => (res.ok ? res.json() : errorOf(res, "the file")));
+  }
+
+  return {
+    cfg, setCfg, clientId, apiKey, isConfigured, parseDriveId,
+    isSignedIn, googleUser, signIn, signOut, ensureSignedIn, preload,
+    pickFiles, pickFolder, download, upload,
+  };
+})();
+
+/* ==== js/ui/google.js ==== */
+"use strict";
+/* Cuadro «Cuenta de Google y Drive»: inicio de sesión, credenciales (ID de
+ * cliente OAuth y clave de API) y atajos para abrir y guardar en Drive.
+ * También mantiene el botón de la barra superior (foto o inicial de la
+ * cuenta cuando hay sesión). */
+
+window.SW = window.SW || {};
+
+SW.google = (function () {
+  const G_LOGO = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>';
+
+  function updateButton() {
+    const b = document.getElementById("google-btn");
+    if (!b) return;
+    const G = SW.gdrive;
+    const u = G.googleUser();
+    const signed = G.isSignedIn();
+    b.classList.toggle("signed", !!(u && signed));
+    b.title = u ? "Google: " + u.name + (u.email ? " (" + u.email + ")" : "") +
+                  (signed ? "" : " · session expired") +
+                  " — open / save in Google Drive"
+                : "Google account: open and save projects in Google Drive";
+    b.textContent = "";
+    if (u && signed && u.picture) {
+      const img = document.createElement("img");
+      img.src = u.picture;
+      img.alt = "";
+      img.referrerPolicy = "no-referrer";
+      img.className = "gavatar";
+      b.appendChild(img);
+    } else if (u && signed) {
+      const s = document.createElement("span");
+      s.className = "gavatar gavatar-ini";
+      s.textContent = (u.name || "?")[0].toUpperCase();
+      b.appendChild(s);
+    } else {
+      const s = document.createElement("span");
+      s.className = "glogo";
+      s.innerHTML = G_LOGO;
+      b.appendChild(s);
+    }
+  }
+
+  function open() {
+    const U = SW.ui;
+    const G = SW.gdrive;
+    G.preload();
+    U.modal({
+      title: "Google account and Drive",
+      build: function (body, api) {
+        function btn(label, cls, onclick) {
+          const b = U.el("button", cls || "", label);
+          b.type = "button";
+          b.addEventListener("click", onclick);
+          return b;
+        }
+        function gbtn(label, onclick) {
+          const b = btn("", "gbtn", onclick);
+          const logo = U.el("span", "glogo");
+          logo.innerHTML = G_LOGO;
+          b.appendChild(logo);
+          b.appendChild(U.el("span", null, label));
+          return b;
+        }
+        function run(f) {
+          return function () {
+            Promise.resolve().then(f).catch(function (err) {
+              SW.view.status("Google: " + err.message);
+            }).then(function () { render(); updateButton(); });
+          };
+        }
+        // las acciones de Drive cierran el cuadro y siguen en la app
+        function act(f) { return function () { api.close(); f(); }; }
+
+        function render() {
+          body.textContent = "";
+          const user = G.googleUser();
+          const signed = G.isSignedIn();
+          const configured = !!G.clientId();
+          if (signed && user) {
+            const acct = U.el("div", "gacct");
+            if (user.picture) {
+              const img = U.el("img");
+              img.src = user.picture;
+              img.alt = "";
+              img.referrerPolicy = "no-referrer";
+              acct.appendChild(img);
+            } else {
+              acct.appendChild(U.el("span", "gavatar-ini",
+                                    (user.name || "?")[0].toUpperCase()));
+            }
+            const who = U.el("div");
+            who.appendChild(U.el("b", null, user.name));
+            who.appendChild(U.el("div", "modal-note",
+                                 (user.email ? user.email + " · " : "") + "signed in"));
+            acct.appendChild(who);
+            body.appendChild(acct);
+            const r1 = U.el("div", "gbtns");
+            r1.appendChild(btn("Switch account", "",
+                               run(() => G.signIn({ account: true }))));
+            r1.appendChild(btn("Sign out", "", run(() => G.signOut())));
+            body.appendChild(r1);
+            const linked = SW.project.driveFile();
+            const r2 = U.el("div", "gbtns");
+            r2.appendChild(btn(linked ? "Save to Drive (update " + linked.name + ")"
+                                      : "Save to Drive…",
+                               "primary", act(() => SW.project.saveToDrive())));
+            r2.appendChild(btn("Save in another folder…", "",
+                               act(() => SW.project.saveToDrive({ choose: true }))));
+            r2.appendChild(btn("Open / import from Drive…", "",
+                               act(() => SW.project.openFromDrive())));
+            body.appendChild(r2);
+          } else if (user && configured) {
+            U.note(body, "This session's permission has expired (Google " +
+                         "renews it every hour).");
+            const r = U.el("div", "gbtns");
+            r.appendChild(gbtn("Continue as " + user.name, run(() => G.signIn())));
+            r.appendChild(btn("Use another account", "",
+                              run(() => G.signIn({ account: true }))));
+            body.appendChild(r);
+          } else if (configured) {
+            U.note(body, "Sign in to open and save projects in your Google " +
+                         "Drive. The app only sees the files it creates or " +
+                         "the ones you pick in the Google picker.");
+            const r = U.el("div", "gbtns");
+            r.appendChild(gbtn("Sign in with Google", run(() => G.signIn())));
+            body.appendChild(r);
+          }
+          if (!signed && G.apiKey()) {
+            const r = U.el("div", "gbtns");
+            r.appendChild(btn("Open a shared Drive link…", "",
+                              act(() => SW.project.openFromDrive({ link: true }))));
+            body.appendChild(r);
+          }
+
+          const det = U.el("details", "gcfg");
+          det.open = !configured;
+          det.appendChild(U.el("summary", null,
+            configured ? "Google setup" : "Setup (needed once)"));
+          const p = U.el("p", "modal-note",
+            "The app ships no keys of its own: it uses those of your own " +
+            "(free) Google Cloud project. At console.cloud.google.com create " +
+            "a project, enable \"Google Drive API\" and \"Google Picker " +
+            "API\", and under Credentials create an \"OAuth client ID\" of " +
+            "type \"Web application\" with this authorized JavaScript " +
+            "origin: ");
+          p.appendChild(U.el("code", null, location.origin));
+          p.appendChild(document.createTextNode(
+            ". The API key (optional) lets you open files shared by link " +
+            "without signing in. Only this optional feature uses the " +
+            "network; everything else keeps working offline."));
+          det.appendChild(p);
+          if (location.protocol === "file:")
+            U.note(det, "Google sign-in does not work from a file opened " +
+                        "from disk (file://): use the online app or serve " +
+                        "the folder with a local web server.");
+          function field(label, key, placeholder) {
+            const i = U.textInput(G.cfg()[key] || "");
+            i.placeholder = placeholder;
+            i.autocomplete = "off";
+            i.spellcheck = false;
+            i.addEventListener("change", function () {
+              G.setCfg({ [key]: i.value.trim() || null });
+              G.preload();
+              render();
+              updateButton();
+            });
+            const r = U.row(det, label, i);
+            r.classList.add("gfield");
+            return i;
+          }
+          field("OAuth client ID", "clientId",
+                "123456789-abc….apps.googleusercontent.com");
+          field("API key (optional)", "apiKey", "AIza…");
+          body.appendChild(det);
+        }
+        render();
+      },
+      buttons: [{ label: "Close" }],
+    });
+  }
+
+  return { open, updateButton };
+})();
+
 /* ==== js/project.js ==== */
 "use strict";
 /* StructuralSketcher — ciclo de vida del proyecto: nuevo, abrir, guardar,
@@ -23228,6 +23794,11 @@ SW.project = (function () {
    * dure la pestaña. No se persiste — al recargar hay que volver a elegir
    * archivo, que es justo lo que el navegador exige por seguridad. */
   let fileHandle = null;
+  /* Archivo de Google Drive ligado al proyecto ({id, name, folderId}): el
+   * último abierto o guardado en Drive. Mientras no haya un fileHandle de
+   * disco, "Save" actualiza ESE archivo en Drive. Como el fileHandle, vive
+   * sólo mientras dure la pestaña. */
+  let drive = null;
 
   /* La API sólo existe en Chromium y sólo en contextos seguros con origen
    * propio; abriendo el HTML como file:// puede estar declarada y aun así
@@ -23301,6 +23872,7 @@ SW.project = (function () {
       label.textContent = name + (dirty ? " •" : "");
       label.title = fileHandle
         ? "File: " + fileName + " — Save overwrites it"
+        : drive ? "Google Drive: " + drive.name + " — Save updates it"
         : fileName ? "Last written as: " + fileName +
                      " — Save cannot overwrite it in place"
                    : "Not saved to a file yet";
@@ -23330,6 +23902,7 @@ SW.project = (function () {
     clearAutosave();
     fileName = null;
     fileHandle = null;
+    drive = null;
     updateTitle();
     SW.view.status("New section.");
   }
@@ -23365,6 +23938,7 @@ SW.project = (function () {
           }
           adopt(doc);
           fileHandle = handle;
+          drive = null;
           fileName = handle.name;
           updateTitle();
           SW.view.status("Opened " + handle.name +
@@ -23398,6 +23972,7 @@ SW.project = (function () {
         }
         adopt(doc);
         fileHandle = null;      // sin manejador no se puede sobrescribir
+        drive = null;
         fileName = f.name;
         updateTitle();
         SW.view.status("Opened " + f.name + ".");
@@ -23441,6 +24016,7 @@ SW.project = (function () {
   /* Guardar: si el proyecto ya tiene archivo, se escribe encima SIN diálogo.
    * Si todavía no tiene, es lo mismo que "Save as". */
   function saveFile() {
+    if (!fileHandle && drive) { saveToDrive(); return; }
     if (!fileHandle) { saveFileAs(); return; }
     writeHandle(fileHandle).then(function () {
       dirty = false;
@@ -23473,6 +24049,7 @@ SW.project = (function () {
     p.then(function (handle) {
       fileHandle = handle;
       return writeHandle(handle).then(function () {
+        drive = null;
         dirty = false;
         fileName = handle.name;
         updateTitle();
@@ -23484,6 +24061,137 @@ SW.project = (function () {
       fileHandle = null;
       downloadCopy();
     });
+  }
+
+  /* -- Google Drive --------------------------------------------------------- */
+  /* Abrir o importar desde Drive (selector de Google con sesión iniciada, o
+   * enlace compartido con la clave de API). Un .json se abre como proyecto y
+   * queda ligado a ese archivo de Drive; una imagen se importa para calcar
+   * encima, y un shapefile (.shp + .dbf/.prj…, varios a la vez) o un SEG-Y
+   * pasa por la misma importación de datos que desde el disco. */
+  function openFromDrive(opts) {
+    opts = opts || {};
+    const G = SW.gdrive;
+    if (!G.isConfigured()) {
+      SW.view.status("Set up your Google account first (Google account → Setup).");
+      SW.google.open();
+      return;
+    }
+    let picked;
+    if (G.clientId() && !opts.link) {
+      picked = G.pickFiles({ multiple: true,
+                             title: "Open or import from Google Drive" });
+    } else {
+      const link = window.prompt("Link of a Google Drive file shared with " +
+                                 "\"anyone with the link\":", "");
+      if (!link) return;
+      const id = G.parseDriveId(link);
+      if (!id) { SW.view.status("That is not a Google Drive link."); return; }
+      picked = Promise.resolve([{ id: id }]);
+    }
+    return picked.then(function (list) {
+      SW.google.updateButton();
+      if (!list || !list.length) return;
+      SW.view.status("Downloading " + (list.length === 1
+        ? (list[0].name || "the file") : list.length + " files") +
+        " from Google Drive…");
+      return Promise.all(list.map(G.download)).then(openDriveFiles);
+    }).catch(function (err) {
+      SW.view.status(err.message);
+    });
+  }
+
+  function openDriveFiles(files) {
+    const proj = files.find(f => /\.json$/i.test(f.name) ||
+                                 f.type === "application/json");
+    if (proj) {
+      if (!confirmDiscard()) { SW.view.status("Open from Drive cancelled."); return; }
+      return proj.text().then(function (text) {
+        let doc;
+        try {
+          doc = JSON.parse(text);
+        } catch (e) {
+          SW.view.status("Could not read " + proj.name + ": not valid JSON.");
+          return;
+        }
+        adopt(doc);
+        fileHandle = null;
+        drive = { id: proj.driveId, name: proj.name, folderId: null };
+        fileName = proj.name;
+        updateTitle();
+        SW.view.status("Opened " + proj.name + " from Google Drive — " +
+                       "\"Save\" updates this file.");
+      });
+    }
+    const img = files.find(f => /^image\//.test(f.type) ||
+                                /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name));
+    if (img) { SW.actions.importImageFile(img); return; }
+    if (SW.actions.importDataFiles && SW.actions.importDataFiles(files)) return;
+    SW.view.status("Google Drive: choose a project (.json), an image, a " +
+                   "shapefile (.shp + .dbf/.prj) or a SEG-Y.");
+  }
+
+  /* Guardar en Drive. Con un archivo de Drive ya ligado lo actualiza; si no
+   * (o con `choose`), se elige carpeta en el selector de Google y nombre, y
+   * los "Save" siguientes actualizan ese archivo. Se sube el mismo JSON
+   * autocontenido que se guarda en disco. */
+  function saveToDrive(opts) {
+    opts = opts || {};
+    const G = SW.gdrive;
+    if (!G.clientId()) {
+      SW.view.status("Set up your Google account first (OAuth client ID).");
+      SW.google.open();
+      return;
+    }
+    return G.ensureSignedIn().then(function () {
+      SW.google.updateButton();
+      if (drive && !opts.choose)
+        return writeDrive({ fileId: drive.id, name: drive.name,
+                            folderId: drive.folderId });
+      const last = G.cfg().folder;
+      return G.pickFolder(last && last.id).then(function (folder) {
+        if (!folder) return;
+        G.setCfg({ folder: { id: folder.id, name: folder.name } });
+        const n = window.prompt("File name in \"" + folder.name + "\":",
+                                (drive && drive.name) ||
+                                suggestedName() + ".sketch.json");
+        if (!n || !n.trim()) return;
+        let name = n.trim();
+        if (!/\.json$/i.test(name)) name += ".sketch.json";
+        return writeDrive({ name: name, folderId: folder.id });
+      });
+    }).catch(function (err) {
+      SW.view.status(err.message);
+    });
+  }
+
+  function writeDrive(t) {
+    const G = SW.gdrive;
+    const data = new Blob([serialize()], { type: "application/json" });
+    const t0 = Date.now();
+    SW.view.status("Saving to Google Drive (" +
+                   (data.size / 1048576).toFixed(2) + " MB)…");
+    const up = o => G.upload(Object.assign({ name: t.name,
+      mimeType: "application/json", data: data }, o));
+    return up({ fileId: t.fileId || null, parentId: t.folderId })
+      .catch(function (err) {
+        // el archivo se borró o esta app ya no tiene acceso: se crea uno
+        // nuevo en la misma carpeta en vez de perder el guardado
+        if (t.fileId && (err.status === 404 || err.status === 403))
+          return up({ parentId: t.folderId });
+        throw err;
+      })
+      .then(function (res) {
+        drive = { id: res.id, name: res.name || t.name,
+                  folderId: (res.parents && res.parents[0]) || t.folderId || null };
+        fileHandle = null;
+        dirty = false;
+        fileName = drive.name;
+        updateTitle();
+        SW.view.status("Saved to Google Drive: " + drive.name + " (" +
+                       ((Date.now() - t0) / 1000).toFixed(1) + " s) — " +
+                       "\"Save\" now updates this file.");
+      });
   }
 
   /* -- diálogo de sección --------------------------------------------------- */
@@ -23625,6 +24333,7 @@ SW.project = (function () {
   }
 
   return { boot, touch, newProject, openFile, saveFile, saveFileAs,
+           openFromDrive, saveToDrive, driveFile: () => drive,
            sectionSetup, adopt,
            clearAutosave, updateTitle, serialize,
            isDirty: () => dirty };
