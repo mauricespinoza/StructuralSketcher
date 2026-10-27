@@ -1162,7 +1162,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.20.0",
+  version: "0.21.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1174,6 +1174,13 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.21.0", date: "2026-10-27", highlights: [
+      "Ctrl+A selects all visible lines and dips (respects the Select " +
+        "filter).",
+      "Properties with several lines selected: Type (all) sets every " +
+        "line to Fault, Horizon, Contact, Topography, Axial trace or " +
+        "Sketch in one undo step.",
+    ] },
     { version: "0.20.0", date: "2026-10-27", highlights: [
       "Copy, cut and paste (Ctrl+C / Ctrl+X / Ctrl+V, ⌘ on Mac) of the " +
         "selected lines and dips through the system clipboard — also " +
@@ -1322,6 +1329,7 @@ SW.settings = (function () {
       scalebarColor: "#0f7a6e",
     },
     shortcuts: {
+      selectAll: "ctrl+a",
       selectAllDips: "ctrl+d",
       selectAllLines: "ctrl+l",
       duplicate: "ctrl+shift+d",
@@ -1348,6 +1356,7 @@ SW.settings = (function () {
   };
 
   const LABELS = {
+    selectAll: "Select all (lines and dips)",
     selectAllDips: "Select all dips",
     selectAllLines: "Select all lines",
     duplicate: "Duplicate selection",
@@ -7805,6 +7814,23 @@ window.SW = window.SW || {};
 
   /* -- acciones compartidas ------------------------------------------------- */
   SW.actions = SW.actions || {};
+
+  /* Ctrl+A: todas las líneas visibles y todos los dips. Con el filtro del
+   * selector (Select: lines / dips) se respeta, igual que el lazo. */
+  SW.actions.selectAll = function () {
+    const filter = SW.view.state.selectFilter || "all";
+    const refs = [];
+    if (filter !== "dips")
+      for (const l of SW.model.state.sec.lines || [])
+        if (l.visible !== false) refs.push({ type: "line", id: l.id });
+    if (filter !== "lines")
+      for (const d of SW.model.dips()) refs.push({ type: "dip", id: d.id });
+    SW.view.setSelection(refs);
+    SW.view.status(refs.length ? "Selected " + refs.length + " item(s) (Ctrl+A)"
+                               : "Nothing to select");
+    if (SW.actions.kinkRefresh) SW.actions.kinkRefresh();
+    SW.view.requestDraw();
+  };
 
   SW.actions.selectAllDips = function () {
     const refs = SW.model.dips().map(d => ({ type: "dip", id: d.id }));
@@ -20814,6 +20840,40 @@ SW.panels.properties = (function () {
     });
     rowEl(body, "Color (all)", color);
 
+    // Tipo común: pasar de golpe todas las seleccionadas a Fault, Horizon…
+    // (p. ej. las polilíneas recién importadas). Las bloqueadas se saltan.
+    const kinds = Array.from(new Set(lines.map(l => l.kind)));
+    const kindSel = document.createElement("select");
+    if (kinds.length > 1) {
+      const mixed = document.createElement("option");
+      mixed.value = ""; mixed.textContent = "— mixed —";
+      kindSel.appendChild(mixed);
+    }
+    for (const k of Object.keys(SW.model.KINDS)) {
+      const o = document.createElement("option");
+      o.value = k; o.textContent = SW.model.KINDS[k].label;
+      kindSel.appendChild(o);
+    }
+    kindSel.value = kinds.length === 1 ? kinds[0] : "";
+    kindSel.addEventListener("change", function () {
+      if (!kindSel.value) return;
+      const targets = lines.filter(l => !l.locked && l.kind !== kindSel.value);
+      if (!targets.length) {
+        SW.view.status("Nothing to change: already " +
+                       SW.model.KINDS[kindSel.value].label + " or locked.");
+        return;
+      }
+      pushPropsMulti(targets, "kind", { kind: kindSel.value },
+                     "Change type to " + SW.model.KINDS[kindSel.value].label);
+      const skipped = lines.filter(l => l.locked).length;
+      SW.view.status(targets.length + " line(s) set to " +
+                     SW.model.KINDS[kindSel.value].label +
+                     (skipped ? "; " + skipped + " locked skipped" : "") + ".");
+    });
+    rowEl(body, "Type (all)", kindSel,
+          "Assign every selected line to Fault, Horizon, Contact, " +
+          "Topography, Axial trace or Sketch");
+
     const width = document.createElement("input");
     width.type = "number"; width.min = "0.4"; width.step = "0.2";
     width.value = (lines[0].style || {}).width || 2;
@@ -22679,6 +22739,7 @@ SW.view = (function () {
       case "redo": SW.undo.redo(); requestDraw(); return true;
       case "duplicate": SW.actions.duplicateSelected(); return true;
       case "deleteSelection": SW.actions.deleteSelected(); return true;
+      case "selectAll": SW.actions.selectAll(); return true;
       case "selectAllDips": SW.actions.selectAllDips(); return true;
       case "selectAllLines": SW.actions.selectAllLines(); return true;
       default: return false;

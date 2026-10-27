@@ -47,6 +47,10 @@ Drawing and editing helpers:
 - **Vertices** (X): drag a vertex; double click, Alt+press or the **Add
   vertices** option inserts one on a segment (press and drag in one
   gesture), and a click past an end extends the line; right click deletes.
+- **Select all** (Ctrl+A): every visible line and dip (the Select filter
+  in the rail restricts it to lines or dips). With several lines selected,
+  Properties offers **Type (all)** to make them all Fault, Horizon,
+  Contact… at once.
 - **Copy / cut / paste** (Ctrl+C / Ctrl+X / Ctrl+V, ⌘ on Mac, or the
   context menu) of the selected lines and dips, through the system
   clipboard, so they can go to another tab or project. A paste lands in
