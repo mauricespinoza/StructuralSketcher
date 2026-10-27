@@ -615,6 +615,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5z"/><path d="M14.5 5.5l4 4"/></symbol>
   <symbol id="i-vertex" viewBox="0 0 24 24"><path d="M4 18l6-9 4 5 6-9"/><rect x="2" y="16" width="4" height="4"/><rect x="8" y="7" width="4" height="4"/><rect x="12" y="12" width="4" height="4"/><rect x="18" y="3" width="4" height="4"/></symbol>
   <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v11m-4-4l4 4 4-4"/><path d="M3 15l4 5h10l4-5"/><circle cx="7" cy="17.2" r=".6"/><circle cx="12" cy="18" r=".6"/><circle cx="16.5" cy="17" r=".6"/></symbol>
+  <symbol id="i-drag" viewBox="0 0 24 24"><path d="M2 18c5 0 6-10 10-10s5 10 10 10"/><circle cx="12" cy="8" r="2.2"/><path d="M12 5.8V2m-2 2l2-2 2 2"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5-5-6 6-2-2-5 5"/></symbol>
   <symbol id="i-split" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M7.8 16.2L18 4M16.2 16.2L6 4"/></symbol>
   <symbol id="i-extend" viewBox="0 0 24 24"><path d="M3 12h13m-4-4l4 4-4 4M20 4v16"/></symbol>
@@ -823,6 +824,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="rail-group-body">
         <div class="tiles">
           <button data-tool="vertex" title="Edit vertices (X)"><svg class="ic"><use href="#i-vertex"/></svg>Vertices</button>
+          <button data-tool="drag" title="Drag: pull a vertex and its neighbours follow smoothly along the line (J)"><svg class="ic"><use href="#i-drag"/></svg>Drag</button>
           <button data-tool="transform" title="Move / scale / rotate (T)"><svg class="ic"><use href="#i-transform"/></svg>Transform</button>
           <button data-tool="split" title="Split lines (C)"><svg class="ic"><use href="#i-split"/></svg>Split</button>
           <button data-tool="extend" title="Extend an endpoint (E)"><svg class="ic"><use href="#i-extend"/></svg>Extend</button>
@@ -838,6 +840,20 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           </label>
           <label class="rail-field" title="Taper reach in m (empty = whole line)">Taper reach (m)
             <input id="vertex-taper-reach" type="number" min="0" step="10" placeholder="auto">
+          </label>
+          <label class="rail-check" title="Add vertices: press on a segment of a selected line to insert a vertex there (and drag it); click beyond an end to extend the line with a new vertex. Alt+press does the same without this option; double click still inserts.">
+            <input id="vertex-add" type="checkbox"> Add vertices
+          </label>
+        </div>
+        <div class="rail-opts" data-for="drag">
+          <label class="rail-field" title="How far along the line the neighbours follow: 100 % reaches the line ends (which stay fixed); less is more local. Keys [ and ].">Reach (%)
+            <input id="drag-reach" type="number" min="5" max="100" step="5" value="100">
+          </label>
+          <label class="rail-check" title="Vertices of other lines at the same place (a layer ending on a fault, joined pieces) move with the dragged ones, so contacts don't open. Off: only the selected lines.">
+            <input id="drag-joined" type="checkbox" checked> Move joined
+          </label>
+          <label class="rail-check" title="Snap the dragged vertex to the nearest vertex of another line (within 12 px)">
+            <input id="drag-snap" type="checkbox" checked> Snap
           </label>
         </div>
         <div class="rail-opts" data-for="split">
@@ -1146,7 +1162,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.18.0",
+  version: "0.19.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1158,6 +1174,19 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.19.0", date: "2026-10-27", highlights: [
+      "Drag tool (J), as in GISDraw: pull a vertex and its neighbours " +
+        "follow smoothly along the line (reach %, [ and ]), coincident " +
+        "vertices of other lines move with it (Move joined), with snap.",
+      "Vertices: \"Add vertices\" option (or Alt+press) inserts a vertex " +
+        "on a segment and drags it in one gesture; a click past an end " +
+        "extends the line.",
+      "Shapefile import: kinked traces that follow the section lines, " +
+        "per-layer reprojection (geographic, Mercator, UTM/TM), per-layer " +
+        "Z units and depth sign (guessed), optional projection azimuth, " +
+        "and per-layer distance/Z diagnostics — fixes points landing " +
+        "shifted from the 3D polylines.",
+    ] },
     { version: "0.18.0", date: "2026-10-27", highlights: [
       "Import shapefiles (2D or 3D points, multipoints, polylines and " +
         "polygons) projected onto a section trace drawn on a map preview, " +
@@ -1299,6 +1328,7 @@ SW.settings = (function () {
       "tool:lasso": "l",
       "tool:digitize": "d",
       "tool:vertex": "x",
+      "tool:drag": "j",
       "tool:image": "i",
       "tool:transform": "t",
       "tool:split": "c",
@@ -1324,6 +1354,7 @@ SW.settings = (function () {
     "tool:lasso": "Tool: Lasso",
     "tool:digitize": "Tool: Add line (current type)",
     "tool:vertex": "Tool: Vertices",
+    "tool:drag": "Tool: Drag",
     "tool:image": "Tool: Image",
     "tool:transform": "Tool: Transform",
     "tool:split": "Tool: Split",
@@ -8745,6 +8776,13 @@ window.SW = window.SW || {};
  * click en un segmento inserta vértice; click derecho sobre un vértice lo
  * elimina.
  *
+ * Con "Add vertices" del riel (o Alt apretado) se agregan vértices con un
+ * solo gesto, sin doble click — que en tablet es incómodo: presionar sobre
+ * un segmento de una línea seleccionada inserta un vértice ahí y lo deja
+ * tomado para arrastrarlo; un click más allá de un extremo prolonga la
+ * línea con un vértice nuevo en ese extremo. Mientras tanto, al pasar sobre
+ * un segmento se marca dónde caería el vértice.
+ *
  * Con VARIAS líneas seleccionadas, el selector "Joint edit" del riel propaga
  * el gesto (mover / insertar / borrar) al resto de la selección para que las
  * capas mantengan su espesor. Son operaciones geológicas distintas:
@@ -8782,6 +8820,65 @@ window.SW = window.SW || {};
 
   let drag = null;       // {line, index, before, joint}
   let snapMark = null;
+  let addMark = null;    // dónde caería el vértice nuevo (modo agregar)
+
+  function addMode(e) {
+    const el = document.getElementById("vertex-add");
+    return !!((el && el.checked) || (e && e.altKey));
+  }
+
+  /* Inserta un vértice en el segmento `hit` de `line` (y en los
+   * acompañantes de la edición conjunta) como un paso de undo. Devuelve el
+   * índice del vértice nuevo. */
+  function insertVertex(line, hit) {
+    const before = line.vertices.map(v => v.slice());
+    const after = before.slice();
+    after.splice(hit[0] + 1, 0, [hit[2][0], hit[2][1]]);
+    const joint = beginJoint(line);
+    line.vertices = after.map(v => v.slice());
+    for (const p of joint.list) {
+      if (joint.mode === "parallel") {
+        p.line.vertices = SW.geom.offsetPolyline(line.vertices, p.d);
+      } else {
+        // mismo segmento y mismo parámetro t: sobre una copia paralela eso
+        // cae en el punto homólogo, así la correspondencia por índice
+        // sobrevive a la inserción
+        const v = p.before.map(x => x.slice());
+        const a = p.before[hit[0]], b = p.before[hit[0] + 1];
+        v.splice(hit[0] + 1, 0, [a[0] + hit[1] * (b[0] - a[0]),
+                                 a[1] + hit[1] * (b[1] - a[1])]);
+        p.line.vertices = v;
+      }
+    }
+    commitJoint("Insert vertex", line, before, after, joint);
+    return hit[0] + 1;
+  }
+
+  /* Prolonga la línea seleccionada más cercana por el extremo más próximo
+   * al click, con un vértice nuevo en el punto (con snap). */
+  function appendVertex(pos) {
+    const V = SW.view;
+    let best = null, bd = Infinity;
+    for (const line of SW.view.selectedLines()) {
+      if (line.locked || line.vertices.length < 1) continue;
+      const vs = line.vertices;
+      for (const end of [0, vs.length - 1]) {
+        const d = Math.hypot(V.sx(vs[end][0]) - pos.x, V.zy(vs[end][1]) - pos.y);
+        if (d < bd) { bd = d; best = { line, end }; }
+      }
+    }
+    if (!best) return false;
+    const q = snappedPoint(pos, new Set([best.line.id]));
+    snapMark = null;
+    const before = best.line.vertices.map(v => v.slice());
+    const after = before.slice();
+    if (best.end === 0) after.unshift(q); else after.push(q);
+    SW.undo.push(SW.undo.replaceVertices(best.line.id, before, after,
+                                         "Add vertex at end"));
+    SW.view.status("Added a vertex at the " + (best.end === 0 ? "start" : "end") +
+                   " of " + (best.line.name || "the line") + ".");
+    return true;
+  }
 
   /* -- edición conjunta ---------------------------------------------------- */
 
@@ -9031,12 +9128,13 @@ window.SW = window.SW || {};
 
   SW.tools.register("vertex", {
     cursor: "pointer",
-    hint: "Drag vertices (snaps to terrain and other lines); double click " +
-          "inserts; right click deletes a vertex. With several lines " +
-          "selected, \"Joint edit\" propagates the change to all of them.",
+    hint: "Drag vertices (snaps to terrain and other lines); double click, " +
+          "Alt+press or \"Add vertices\" inserts (click past an end extends); " +
+          "right click deletes a vertex. With several lines selected, " +
+          "\"Joint edit\" propagates the change to all of them.",
     deactivate: function () {
       if (drag && drag.joint) revertJoint(drag.joint);
-      drag = null; snapMark = null;
+      drag = null; snapMark = null; addMark = null;
     },
     /* onDown SOLO declara captura de arrastre; toda acción de un solo click
      * (borrar vértice, seleccionar línea al azar) vive en onClick para no
@@ -9060,6 +9158,20 @@ window.SW = window.SW || {};
                  before: hit.line.vertices.map(v => v.slice()),
                  joint: beginJoint(hit.line, hit.index) };
         return "capture";
+      }
+      if (addMode(e)) {
+        // agregar: el vértice nace en el segmento y queda tomado, así un
+        // solo gesto lo inserta y lo lleva a su lugar (dos pasos de undo)
+        const target = segmentAt(pos);
+        if (target) {
+          const idx = insertVertex(target.line, target.hit);
+          addMark = null;
+          drag = { line: target.line, index: idx,
+                   before: target.line.vertices.map(v => v.slice()),
+                   joint: beginJoint(target.line, idx) };
+          SW.view.requestDraw();
+          return "capture";
+        }
       }
     },
     onClick: function (e, pos) {
@@ -9086,6 +9198,17 @@ window.SW = window.SW || {};
         return;
       }
       if (e.button !== 0) return;
+      if (addMode(e) && SW.view.selectedLines().length &&
+          !segmentAt(pos) && !vertexAt(pos)) {
+        const lhit = SW.view.hitLine(pos, 8);
+        const selIds = new Set(SW.view.selectedLines().map(l => l.id));
+        // un click sobre OTRA línea la selecciona; en el vacío, prolonga
+        if (!lhit || selIds.has(lhit.line.id)) {
+          appendVertex(pos);
+          SW.view.requestDraw();
+          return;
+        }
+      }
       const lh = SW.view.hitLine(pos, 8);
       // Ctrl/meta acumula, igual que en Seleccionar: es la forma de armar la
       // multiselección con la que después se edita en conjunto.
@@ -9097,7 +9220,17 @@ window.SW = window.SW || {};
         SW.view.setSelection([]);
     },
     onMove: function (e, pos) {
-      if (!drag) return;
+      if (!drag) {
+        // vista previa del vértice que se agregaría
+        const prev = addMark;
+        addMark = null;
+        if (addMode(e) && !vertexAt(pos)) {
+          const target = segmentAt(pos);
+          if (target) addMark = { s: target.hit[2][0], z: target.hit[2][1] };
+        }
+        if (prev || addMark) SW.view.requestDraw();
+        return;
+      }
       const q = snappedPoint(pos, jointIds(drag.line, drag.joint));
       const ds = q[0] - drag.before[drag.index][0];
       const dz = q[1] - drag.before[drag.index][1];
@@ -9129,40 +9262,313 @@ window.SW = window.SW || {};
       SW.view.requestDraw();
     },
     onDblClick: function (e, pos) {
+      // en modo agregar, la primera pulsación ya insertó el vértice
+      if (addMode(e)) return;
       const target = segmentAt(pos);
       if (!target) return;
-      const line = target.line, hit = target.hit;
-      const before = line.vertices.map(v => v.slice());
-      const after = before.slice();
-      after.splice(hit[0] + 1, 0, [hit[2][0], hit[2][1]]);
-      const joint = beginJoint(line);
-      line.vertices = after.map(v => v.slice());
-      for (const p of joint.list) {
-        if (joint.mode === "parallel") {
-          p.line.vertices = SW.geom.offsetPolyline(line.vertices, p.d);
-        } else {
-          // mismo segmento y mismo parámetro t: sobre una copia paralela eso
-          // cae en el punto homólogo, así la correspondencia por índice
-          // sobrevive a la inserción
-          const v = p.before.map(x => x.slice());
-          const a = p.before[hit[0]], b = p.before[hit[0] + 1];
-          v.splice(hit[0] + 1, 0, [a[0] + hit[1] * (b[0] - a[0]),
-                                   a[1] + hit[1] * (b[1] - a[1])]);
-          p.line.vertices = v;
-        }
-      }
-      commitJoint("Insert vertex", line, before, after, joint);
+      insertVertex(target.line, target.hit);
       SW.view.requestDraw();
     },
     drawOverlay: function (ctx) {
-      if (!snapMark) return;
       const V = SW.view;
+      if (addMark) {
+        const x = V.sx(addMark.s), y = V.zy(addMark.z);
+        ctx.save();
+        ctx.fillStyle = "rgba(30,90,200,0.25)";
+        ctx.strokeStyle = SW.render.COLORS.select; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y);
+        ctx.moveTo(x, y - 3); ctx.lineTo(x, y + 3);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (!snapMark) return;
       ctx.strokeStyle = "#e07818"; ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.arc(V.sx(snapMark.s), V.zy(snapMark.z), 6, 0, 7);
       ctx.stroke();
     },
   });
+})();
+
+/* ==== js/tools/drag.js ====
+ * Herramienta: Drag (J) — la misma de GISDraw. Se toma UN vértice de una
+ * línea y se arrastra; sus vecinos lo siguen cada vez menos A LO LARGO DEL
+ * TRAZO (peso ½·(1 + cos πt), 1 en el vértice tomado y 0 al final del
+ * alcance, sin escalón). Con alcance 100 % el gradiente llega justo a los
+ * extremos de la línea, que quedan fijos; con menos (riel, o [ y ]) el
+ * movimiento es más localizado. A diferencia de Vertices, que mueve un solo
+ * nodo, acá se dobla la línea con suavidad: un pliegue que se ajusta, una
+ * falla que se curva, una capa que se acuña.
+ *
+ * Los vértices de OTRAS líneas que coinciden con los que se mueven (una capa
+ * cortada en la falla, dos tramos unidos) se arrastran igual, con el mismo
+ * peso, para no abrir el contacto: los de las líneas seleccionadas siempre
+ * y, con "Move joined", los de cualquiera. Con Snap, el vértice tomado se
+ * engancha al vértice más cercano de otra línea (o de otra parte del trazo).
+ * Un solo deshacer por arrastre. */
+"use strict";
+
+window.SW = window.SW || {};
+
+(function () {
+  const HANDLE_PX = () => SW.view.hitPx(8);
+  const SNAP_PX = () => SW.view.hitPx(12);
+
+  let drag = null;      // {grab:{line,index}, start:[s,z], moves, before}
+  let hover = null;     // vértice bajo el cursor
+  let snapMark = null;
+
+  /* Peso de Drag a la fracción t del alcance. */
+  const dragWeight = t => (t >= 1 ? 0 : t <= 0 ? 1 : 0.5 * (1 + Math.cos(Math.PI * t)));
+
+  function opt(id) { return document.getElementById(id); }
+  function reach() {
+    const v = parseFloat((opt("drag-reach") || {}).value);
+    return isFinite(v) ? Math.max(0.01, Math.min(1, v / 100)) : 1;
+  }
+  function setReach(r) {
+    r = Math.max(0.05, Math.min(1, r));
+    const el = opt("drag-reach");
+    if (el) el.value = Math.round(r * 100);
+    SW.view.status("Drag reach: " + Math.round(r * 100) + " %");
+  }
+  function joinedOn() { const el = opt("drag-joined"); return !el || el.checked; }
+  function snapOn() { const el = opt("drag-snap"); return !el || el.checked; }
+
+  function editable(l) {
+    return l && l.visible !== false && !l.locked && (l.vertices || []).length >= 2;
+  }
+
+  /* Vértice bajo el cursor: primero en las líneas seleccionadas (las que el
+   * usuario cree estar editando cuando dos se cruzan), luego en cualquiera. */
+  function vertexAt(pos) {
+    const V = SW.view;
+    const sel = SW.view.selectedLines().filter(editable);
+    const rest = (SW.model.state.sec.lines || [])
+      .filter(l => editable(l) && sel.indexOf(l) < 0);
+    let best = null, bd = HANDLE_PX();
+    for (const group of [sel, rest]) {
+      for (const line of group)
+        line.vertices.forEach(function (v, i) {
+          const d = Math.hypot(V.sx(v[0]) - pos.x, V.zy(v[1]) - pos.y);
+          if (d <= bd) { bd = d; best = { line, index: i }; }
+        });
+      if (best) return best;
+    }
+    return null;
+  }
+
+  /* Pesos de la línea tomada: hacia cada extremo, normalizado por su propio
+   * largo (el extremo queda fijo). Tomado un extremo, el gradiente recorre
+   * toda la línea hasta el otro. */
+  function lineWeights(verts, index, r) {
+    const n = verts.length;
+    const seg = i => Math.hypot(verts[i + 1][0] - verts[i][0],
+                                verts[i + 1][1] - verts[i][1]);
+    const w = new Array(n).fill(0);
+    w[index] = 1;
+    let total = 0;
+    for (let j = index; j < n - 1; j++) total += seg(j);
+    let acc = 0;
+    for (let j = index + 1; j < n; j++) {
+      acc += seg(j - 1);
+      w[j] = total ? dragWeight(acc / (total * r)) : 0;
+    }
+    total = 0;
+    for (let j = index; j > 0; j--) total += seg(j - 1);
+    acc = 0;
+    for (let j = index - 1; j >= 0; j--) {
+      acc += seg(j);
+      w[j] = total ? dragWeight(acc / (total * r)) : 0;
+    }
+    return w;
+  }
+
+  /* Movimientos del gesto: [{line, i, w, s, z}] — la línea tomada con su
+   * gradiente y los vértices de otras líneas que coinciden con los que se
+   * mueven (mismo peso). */
+  function prepare(grab) {
+    const line = grab.line;
+    const w = lineWeights(line.vertices, grab.index, reach());
+    const moves = [];
+    line.vertices.forEach(function (v, i) {
+      if (w[i] > 1e-4) moves.push({ line, i, w: w[i], s: v[0], z: v[1] });
+    });
+    // nodos compartidos: rejilla para no comparar todo contra todo
+    const tol = Math.max(1e-6, SW.view.tolS(1.5));
+    const cell = tol * 2, grid = new Map();
+    const key = (a, b) => a + "," + b;
+    for (const m of moves) {
+      const k = key(Math.floor(m.s / cell), Math.floor(m.z / cell));
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(m);
+    }
+    function near(s, z) {
+      const cx = Math.floor(s / cell), cz = Math.floor(z / cell);
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dz = -1; dz <= 1; dz++)
+          for (const m of grid.get(key(cx + dx, cz + dz)) || [])
+            if (Math.hypot(m.s - s, m.z - z) <= tol) return m;
+      return null;
+    }
+    const sel = new Set(SW.view.selectedLines().map(l => l.id));
+    const joined = joinedOn();
+    for (const other of SW.model.state.sec.lines || []) {
+      if (other === line || !editable(other)) continue;
+      if (!joined && !sel.has(other.id)) continue;
+      other.vertices.forEach(function (v, i) {
+        const m = near(v[0], v[1]);
+        if (m) moves.push({ line: other, i, w: m.w, s: v[0], z: v[1], joined: true });
+      });
+    }
+    return moves;
+  }
+
+  /* Snap del vértice tomado al vértice más cercano de otra línea o de una
+   * parte de la misma que no se esté moviendo. */
+  function snapTarget(pos, moves) {
+    if (!snapOn()) { snapMark = null; return null; }
+    const moving = new Set(moves.map(m => m.line.id + ":" + m.i));
+    const V = SW.view;
+    let best = null, bd = SNAP_PX();
+    for (const l of SW.model.state.sec.lines || []) {
+      if (l.visible === false) continue;
+      l.vertices.forEach(function (v, i) {
+        if (moving.has(l.id + ":" + i)) return;
+        const d = Math.hypot(V.sx(v[0]) - pos.x, V.zy(v[1]) - pos.y);
+        if (d < bd) { bd = d; best = [v[0], v[1]]; }
+      });
+    }
+    snapMark = best ? { s: best[0], z: best[1] } : null;
+    return best;
+  }
+
+  function cancel() {
+    if (!drag) return;
+    for (const m of drag.moves) m.line.vertices[m.i] = [m.s, m.z];
+    drag = null; snapMark = null;
+    SW.view.requestDraw();
+  }
+
+  SW.tools.register("drag", {
+    cursor: "pointer",
+    hint: "Drag a vertex: its neighbours follow less and less along the " +
+          "line (reach in the rail, [ and ] keys); coincident vertices of " +
+          "other lines move too (Move joined). Click a line to select it.",
+    deactivate: function () { cancel(); hover = null; },
+    onDown: function (e, pos) {
+      if (e.button === 2 && drag) {
+        cancel();
+        SW.view.status("Drag canceled.");
+        return "capture";
+      }
+      if (e.button !== 0) return;
+      const hit = vertexAt(pos);
+      if (!hit) return;
+      const v = hit.line.vertices[hit.index];
+      drag = { grab: hit, start: [v[0], v[1]], moves: prepare(hit) };
+      if (!SW.view.isSelected({ type: "line", id: hit.line.id }))
+        SW.view.setSelection([{ type: "line", id: hit.line.id }]);
+      return "capture";
+    },
+    onMove: function (e, pos) {
+      if (!drag) {
+        const h = vertexAt(pos);
+        const changed = !!h !== !!hover ||
+          (h && hover && (h.line !== hover.line || h.index !== hover.index));
+        hover = h;
+        if (changed) SW.view.requestDraw();
+        return;
+      }
+      const p = SW.view.toSection(pos);
+      const q = snapTarget(pos, drag.moves) || [p.s, p.z];
+      const ds = q[0] - drag.start[0], dz = q[1] - drag.start[1];
+      for (const m of drag.moves)
+        m.line.vertices[m.i] = [m.s + ds * m.w, m.z + dz * m.w];
+      SW.view.requestDraw();
+    },
+    onUp: function () {
+      if (!drag) return;
+      const byLine = new Map();
+      for (const m of drag.moves) {
+        if (!byLine.has(m.line)) byLine.set(m.line, m.line.vertices.map(v => v.slice()));
+      }
+      const entries = [];
+      for (const [line, after] of byLine) {
+        const before = after.map(v => v.slice());
+        for (const m of drag.moves) if (m.line === line) before[m.i] = [m.s, m.z];
+        if (JSON.stringify(before) === JSON.stringify(after)) continue;
+        line.vertices = before;   // push() re-aplica el redo
+        entries.push({ id: line.id, before: before, after: after });
+      }
+      const shared = drag.moves.filter(m => m.joined).length;
+      drag = null; snapMark = null;
+      if (entries.length) {
+        SW.undo.push(SW.undo.replaceVerticesMulti(entries, "Drag"));
+        if (entries.length > 1 || shared)
+          SW.view.status("Drag: " + entries.length + " line(s), " + shared +
+                         " shared vertex/vertices moved with it.");
+      }
+      SW.view.requestDraw();
+    },
+    onClick: function (e, pos) {
+      if (e.button !== 0) return;
+      const lh = SW.view.hitLine(pos, 8);
+      if (lh && (e.ctrlKey || e.metaKey || e.shiftKey))
+        SW.view.toggleSelection({ type: "line", id: lh.line.id });
+      else if (lh) SW.view.setSelection([{ type: "line", id: lh.line.id }]);
+      else SW.view.setSelection([]);
+    },
+    onKey: function (e) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return false;
+      if (e.key === "[" || e.key === "]") {
+        setReach(reach() + (e.key === "]" ? 0.1 : -0.1));
+        return true;
+      }
+      if (e.key === "Escape" && drag) { cancel(); return true; }
+      return false;
+    },
+    drawOverlay: function (ctx) {
+      const V = SW.view;
+      ctx.save();
+      // vértices de la línea bajo el cursor (o de la tomada), con el que se
+      // tomaría resaltado
+      const target = drag ? drag.grab : hover;
+      if (target) {
+        for (const v of target.line.vertices) {
+          ctx.fillStyle = "#fff";
+          ctx.strokeStyle = SW.render.COLORS.select; ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.rect(V.sx(v[0]) - 3, V.zy(v[1]) - 3, 6, 6);
+          ctx.fill(); ctx.stroke();
+        }
+        const g = target.line.vertices[target.index];
+        if (g) {
+          ctx.fillStyle = SW.render.COLORS.select;
+          ctx.beginPath(); ctx.arc(V.sx(g[0]), V.zy(g[1]), 5, 0, 7); ctx.fill();
+        }
+      }
+      // durante el arrastre: cuánto sigue cada vértice
+      if (drag) {
+        for (const m of drag.moves) {
+          if (m.w >= 0.999) continue;
+          const v = m.line.vertices[m.i];
+          ctx.fillStyle = "rgba(30,90,200," + (0.15 + 0.6 * m.w).toFixed(2) + ")";
+          ctx.beginPath(); ctx.arc(V.sx(v[0]), V.zy(v[1]), 2 + 2.5 * m.w, 0, 7);
+          ctx.fill();
+        }
+      }
+      if (snapMark) {
+        ctx.strokeStyle = "#e0479e"; ctx.lineWidth = 1.6;
+        ctx.strokeRect(V.sx(snapMark.s) - 6, V.zy(snapMark.z) - 6, 12, 12);
+      }
+      ctx.restore();
+    },
+  });
+
+  SW.dragTool = { dragWeight, lineWeights };
 })();
 
 /* ==== js/tools/transform.js ==== */
@@ -11395,7 +11801,14 @@ SW.shp = (function () {
     // unidad lineal: el último UNIT del PROJCS
     const units = [...t.matchAll(/UNIT\s*\[\s*"([^"]*)"\s*,\s*([\d.eE+-]+)/gi)];
     if (units.length) out.unit = +units[units.length - 1][2] || 1;
-    if (/mercator/i.test(pname) && !/transverse/i.test(pname)) {
+    out.lon0 = param("central_meridian") || param("longitude_of_center") || 0;
+    out.lat0 = param("latitude_of_origin") || 0;
+    out.fe = param("false_easting") || 0;
+    out.fn = param("false_northing") || 0;
+    if (/transverse_mercator|gauss/i.test(pname)) {
+      out.kind = "tm";
+      out.k0 = param("scale_factor") || 1;
+    } else if (/mercator/i.test(pname)) {
       out.kind = "mercator";
       if (/auxiliary_sphere|pseudo|popular/i.test(pname + " " + out.name))
         out.e = 0;
@@ -11406,7 +11819,6 @@ SW.shp = (function () {
         out.k0 = Math.cos(lat1 * Math.PI / 180) /
                  Math.sqrt(1 - out.e * out.e * s1 * s1);
       } else if (sf) out.k0 = sf;
-      out.fn = param("false_northing") || 0;
     } else {
       out.kind = "projected";
     }
@@ -11417,6 +11829,7 @@ SW.shp = (function () {
     if (!crs || crs.kind === "unknown") return "no .prj (coordinates taken as metres)";
     if (crs.kind === "geographic") return "geographic (lon/lat) " + crs.name;
     if (crs.kind === "mercator") return "Mercator " + crs.name;
+    if (crs.kind === "tm") return "Transverse Mercator " + crs.name;
     return "projected " + crs.name;
   }
 
@@ -11443,6 +11856,93 @@ SW.shp = (function () {
            Math.max(1e-9, Math.cos(phi));
   }
 
+  /* -- reproyección entre capas -------------------------------------------- */
+  /* Cada capa trae su .prj; si no coincide con el de la traza (un catálogo
+   * sísmico en WGS84 geográfico junto a un corte de MOVE en Mercator o
+   * UTM), sus coordenadas pasan por lon/lat al sistema de la traza. Se
+   * cubren geográficas, Mercator y Transversa de Mercator/UTM — sin cambio
+   * de datum (PSAD56 → WGS84 son ~300 m en Chile). */
+  function tmSetup(c) {
+    const e2 = c.e * c.e, e4 = e2 * e2, e6 = e4 * e2;
+    const m1 = 1 - e2 / 4 - 3 * e4 / 64 - 5 * e6 / 256;
+    const m2 = 3 * e2 / 8 + 3 * e4 / 32 + 45 * e6 / 1024;
+    const m3 = 15 * e4 / 256 + 45 * e6 / 1024, m4 = 35 * e6 / 3072;
+    const M = p => c.a * (m1 * p - m2 * Math.sin(2 * p) + m3 * Math.sin(4 * p) -
+                          m4 * Math.sin(6 * p));
+    return { e2, ep2: e2 / (1 - e2), m1, M, M0: M((c.lat0 || 0) * D2R) };
+  }
+  function toLonLat(c) {
+    const u = c.unit || 1;
+    if (c.kind === "geographic") return (x, y) => [x, y];
+    if (c.kind === "mercator")
+      return (x, y) => [(x * u - (c.fe || 0)) / (c.a * (c.k0 || 1)) / D2R + (c.lon0 || 0),
+                        mercLat(y * u, c) / D2R];
+    if (c.kind === "tm") {
+      const s = tmSetup(c), sq = Math.sqrt(1 - s.e2), e1 = (1 - sq) / (1 + sq);
+      return function (x, y) {
+        const mu = (s.M0 + (y * u - (c.fn || 0)) / c.k0) / (c.a * s.m1);
+        const p1 = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) +
+          (21 * e1 * e1 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu) +
+          (151 * e1 ** 3 / 96) * Math.sin(6 * mu) + (1097 * e1 ** 4 / 512) * Math.sin(8 * mu);
+        const sn = Math.sin(p1), cs = Math.cos(p1), tn = Math.tan(p1);
+        const C1 = s.ep2 * cs * cs, T1 = tn * tn;
+        const w = 1 - s.e2 * sn * sn;
+        const N1 = c.a / Math.sqrt(w), R1 = c.a * (1 - s.e2) / Math.pow(w, 1.5);
+        const D = (x * u - (c.fe || 0)) / (N1 * c.k0);
+        const lat = p1 - (N1 * tn / R1) * (D * D / 2 -
+          (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * s.ep2) * D ** 4 / 24 +
+          (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * s.ep2 - 3 * C1 * C1) * D ** 6 / 720);
+        const lon = (D - (1 + 2 * T1 + C1) * D ** 3 / 6 +
+          (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * s.ep2 + 24 * T1 * T1) * D ** 5 / 120) / cs;
+        return [(c.lon0 || 0) + lon / D2R, lat / D2R];
+      };
+    }
+    return null;
+  }
+  function fromLonLat(c) {
+    const u = c.unit || 1;
+    if (c.kind === "geographic") return (lon, lat) => [lon, lat];
+    if (c.kind === "mercator")
+      return function (lon, lat) {
+        const p = Math.max(-89.9, Math.min(89.9, lat)) * D2R, es = (c.e || 0) * Math.sin(p);
+        const k = c.a * (c.k0 || 1);
+        return [(k * (lon - (c.lon0 || 0)) * D2R + (c.fe || 0)) / u,
+                (k * Math.log(Math.tan(Math.PI / 4 + p / 2) *
+                  Math.pow((1 - es) / (1 + es), (c.e || 0) / 2)) + (c.fn || 0)) / u];
+      };
+    if (c.kind === "tm") {
+      const s = tmSetup(c);
+      return function (lon, lat) {
+        const p = lat * D2R, sn = Math.sin(p), cs = Math.cos(p), tn = Math.tan(p);
+        const N = c.a / Math.sqrt(1 - s.e2 * sn * sn), T = tn * tn, C = s.ep2 * cs * cs;
+        const A = (lon - (c.lon0 || 0)) * D2R * cs;
+        const x = c.k0 * N * (A + (1 - T + C) * A ** 3 / 6 +
+          (5 - 18 * T + T * T + 72 * C - 58 * s.ep2) * A ** 5 / 120) + (c.fe || 0);
+        const y = c.k0 * (s.M(p) - s.M0 + N * tn * (A * A / 2 +
+          (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24 +
+          (61 - 58 * T + T * T + 600 * C - 330 * s.ep2) * A ** 6 / 720)) + (c.fn || 0);
+        return [x / u, y / u];
+      };
+    }
+    return null;
+  }
+  function sameCrs(a, b) {
+    if (!a || !b) return true;
+    if (a.kind === "unknown" || b.kind === "unknown") return true;
+    if (a.kind !== b.kind) return false;
+    const k = ["a", "e", "k0", "lon0", "lat0", "fe", "fn", "unit"];
+    return k.every(n => Math.abs((+a[n] || 0) - (+b[n] || 0)) <=
+                        1e-9 * Math.max(1, Math.abs(+a[n] || 0)));
+  }
+  /* Función (x, y) de la capa → (x, y) en el CRS de la traza, o null si no
+   * se sabe convertir (CRS distintos y alguno no soportado). */
+  function layerTransform(from, to) {
+    if (sameCrs(from, to)) return (x, y) => [x, y];
+    const inv = toLonLat(from), fwd = fromLonLat(to);
+    if (!inv || !fwd) return null;
+    return function (x, y) { const g = inv(x, y); return fwd(g[0], g[1]); };
+  }
+
   /* Coordenadas nativas → plano donde la traza es recta. Para geográficas
    * es Mercator esférico (donde una recta es una loxodrómica y los azimuts
    * se conservan, igual que en el Mercator de los datos de MOVE). */
@@ -11457,74 +11957,130 @@ SW.shp = (function () {
     return function (x, y) { return [x, y]; };
   }
 
-  /* trace = {x0, y0, x1, y1} en coordenadas nativas; opts.correct: aplica el
-   * factor de escala de Mercator; opts.yRange: [ymin, ymax] nativos de los
-   * datos (acelera ese factor). Devuelve {length (m reales), azimuth,
-   * project(x, y) → [s, d]} con d con signo (izquierda +). */
+  function tracePath(trace) {
+    return trace.path && trace.path.length >= 2
+      ? trace.path : [[trace.x0, trace.y0], [trace.x1, trace.y1]];
+  }
+
+  /* trace = {x0, y0, x1, y1, path?, proj_az?} en coordenadas del CRS de la
+   * traza. path: la traza como polilínea (un corte de MOVE con
+   * inflexiones); s es entonces la distancia ACUMULADA a lo largo de ella
+   * (chainage) hasta el pie del punto en el tramo más cercano. proj_az:
+   * azimut (°) de proyección oblicua — cada punto viaja en esa dirección
+   * hasta cortar la traza, p. ej. a lo largo del rumbo de la estructura —
+   * en vez de en perpendicular. opts.correct: aplica el factor de escala de
+   * Mercator; opts.yRange: [ymin, ymax] de los datos (acelera ese factor).
+   * Devuelve {length (m reales), azimuth (de la cuerda), project(x, y) →
+   * [s, d]} con d con signo (izquierda +), en metros reales. */
   function makeProjector(trace, crs, opts) {
     crs = crs || { kind: "unknown", unit: 1 };
     opts = opts || {};
     const P = planar(crs);
-    const a = P(trace.x0, trace.y0), b = P(trace.x1, trace.y1);
-    const dx = b[0] - a[0], dy = b[1] - a[1];
-    const L = Math.hypot(dx, dy) || 1;
-    const ux = dx / L, uy = dy / L;
+    const pts = tracePath(trace).map(v => P(v[0], v[1]));
     const merc = (crs.kind === "mercator" || crs.kind === "geographic") &&
                  opts.correct !== false;
     const mcrs = crs.kind === "geographic"
       ? { a: crs.a || 6378137, e: 0, k0: 1, fn: 0 } : crs;
     const unit = crs.kind === "geographic" ? 1 : (crs.unit || 1);
-    const az = (Math.atan2(dx, dy) / D2R + 360) % 360;
-    if (opts.yRange)
-      opts = Object.assign({}, opts, { yRange: [P(0, opts.yRange[0])[1],
-                                                P(0, opts.yRange[1])[1]] });
-    if (!merc) {
-      return { length: L * unit, azimuth: az,
-        project: function (x, y) {
-          const q = P(x, y), ex = q[0] - a[0], ey = q[1] - a[1];
-          return [(ex * ux + ey * uy) * unit, (ux * ey - uy * ex) * unit];
-        } };
+    const A = pts[0], B = pts[pts.length - 1];
+    const az = (Math.atan2(B[0] - A[0], B[1] - A[1]) / D2R + 360) % 360;
+
+    let kAt = () => 1 / unit;      // factor plano → metros reales (inverso)
+    if (merc) {
+      const kExact = y => mercK(mercLat(y, mcrs), mcrs);
+      kAt = kExact;
+      // 1/k tabulado sobre el rango de Y de los datos: con cientos de miles
+      // de puntos, la inversa iterativa por punto es lo que más cuesta
+      if (opts.yRange && opts.yRange[1] > opts.yRange[0]) {
+        const y0 = P(0, opts.yRange[0])[1], y1 = P(0, opts.yRange[1])[1];
+        const M = 8192, dy0 = (y1 - y0) / M;
+        const lut = new Float64Array(M + 1);
+        for (let i = 0; i <= M; i++) lut[i] = kExact(y0 + i * dy0);
+        kAt = function (y) {
+          const f = (y - y0) / dy0;
+          if (!(f >= 0 && f < M)) return kExact(y);
+          const i = f | 0;
+          return lut[i] + (lut[i + 1] - lut[i]) * (f - i);
+        };
+      }
     }
-    // s(t) = ∫ dt / k(φ(y(t))): tabla acumulada a lo largo de la traza
-    const N = 1024, cum = new Float64Array(N + 1);
-    const kExact = y => mercK(mercLat(y, mcrs), mcrs);
-    // 1/k tabulado sobre el rango de Y de los datos (opts.yRange, en el
-    // plano): con cientos de miles de puntos, la inversa iterativa por
-    // punto es lo que más cuesta
-    let kAt = kExact;
-    if (opts.yRange && opts.yRange[1] > opts.yRange[0]) {
-      const M = 8192, y0 = opts.yRange[0], dy0 = (opts.yRange[1] - y0) / M;
-      const lut = new Float64Array(M + 1);
-      for (let i = 0; i <= M; i++) lut[i] = kExact(y0 + i * dy0);
-      kAt = function (y) {
-        const f = (y - y0) / dy0;
-        if (!(f >= 0 && f < M)) return kExact(y);
-        const i = f | 0;
-        return lut[i] + (lut[i + 1] - lut[i]) * (f - i);
-      };
+
+    // tramos: origen, dirección, largo en el plano y chainage real acumulado
+    // (s(t) = ∫ dt / k(φ(y(t))), tabulado en NS pasos por tramo)
+    const NS = merc ? 64 : 1;
+    const segs = [];
+    let chain = 0;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+      if (!(L > 0)) continue;
+      const cum = new Float64Array(NS + 1);
+      for (let k = 1; k <= NS; k++)
+        cum[k] = cum[k - 1] + (L / NS) / kAt(a[1] + dy * (k - 0.5) / NS);
+      segs.push({ ax: a[0], ay: a[1], ux: dx / L, uy: dy / L, L: L,
+                  c0: chain, cum: cum, k0: kAt(a[1]), k1: kAt(b[1]) });
+      chain += cum[NS];
     }
-    for (let i = 1; i <= N; i++) {
-      const ym = a[1] + dy * (i - 0.5) / N;
-      cum[i] = cum[i - 1] + (L / N) / kAt(ym);
+    if (!segs.length) {
+      segs.push({ ax: A[0], ay: A[1], ux: 1, uy: 0, L: 1, c0: 0,
+                  cum: new Float64Array(NS + 1).map((v, k) => k / NS / kAt(A[1])),
+                  k0: kAt(A[1]), k1: kAt(A[1]) });
+      chain = segs[0].cum[NS];
     }
-    const k0 = kAt(a[1]), k1 = kAt(b[1]);
-    function sOf(t) {
-      if (t <= 0) return t / k0;
-      if (t >= L) return cum[N] + (t - L) / k1;
-      const f = t / L * N, i = Math.floor(f);
-      return cum[i] + (cum[Math.min(N, i + 1)] - cum[i]) * (f - i);
+    const last = segs.length - 1;
+    function sAlong(g, t) {
+      if (t <= 0) return g.c0 + t / g.k0;
+      if (t >= g.L) return g.c0 + g.cum[NS] + (t - g.L) / g.k1;
+      const f = t / g.L * NS, i = Math.floor(f);
+      return g.c0 + g.cum[i] + (g.cum[Math.min(NS, i + 1)] - g.cum[i]) * (f - i);
     }
-    return { length: cum[N], azimuth: az,
+
+    const pa = trace.proj_az;
+    const oblique = pa !== null && pa !== undefined && pa !== "" && isFinite(+pa);
+    const vx = oblique ? Math.sin(+pa * D2R) : 0, vy = oblique ? Math.cos(+pa * D2R) : 0;
+
+    function perpendicular(qx, qy) {
+      let best = null, bd = Infinity;
+      for (let i = 0; i < segs.length; i++) {
+        const g = segs[i];
+        const ex = qx - g.ax, ey = qy - g.ay;
+        const t = ex * g.ux + ey * g.uy;
+        // el primer y el último tramo se prolongan más allá de los extremos
+        const tc = Math.max(i === 0 ? -Infinity : 0, Math.min(i === last ? Infinity : g.L, t));
+        const d = Math.hypot(ex - g.ux * tc, ey - g.uy * tc);
+        if (d < bd) { bd = d; best = [g, tc, g.ux * ey - g.uy * ex >= 0 ? 1 : -1]; }
+      }
+      return [sAlong(best[0], best[1]), best[2] * bd];
+    }
+    function alongAzimuth(qx, qy) {
+      let best = null;
+      for (let i = 0; i < segs.length; i++) {
+        const g = segs[i];
+        const den = g.ux * vy - g.uy * vx;           // cross(u, v)
+        if (Math.abs(den) < 1e-9) continue;
+        const ex = qx - g.ax, ey = qy - g.ay;
+        const t = (ex * vy - ey * vx) / den;         // cross(q − a, v) / cross(u, v)
+        if ((i > 0 && t < 0) || (i < last && t > g.L)) continue;
+        const lam = (ex * g.uy - ey * g.ux) / den;   // cross(q − a, u) / cross(u, v)
+        if (!best || Math.abs(lam) < Math.abs(best[2])) best = [g, t, lam];
+      }
+      if (!best) return perpendicular(qx, qy);
+      return [sAlong(best[0], best[1]), -best[2]];
+    }
+    const proj = oblique ? alongAzimuth : perpendicular;
+    return { length: chain, azimuth: az, oblique: oblique,
       project: function (x, y) {
-        const q = P(x, y), ex = q[0] - a[0], ey = q[1] - a[1];
-        return [sOf(ex * ux + ey * uy), (ux * ey - uy * ex) / kAt(q[1])];
+        const q = P(x, y);
+        const r = proj(q[0], q[1]);
+        r[1] = r[1] / kAt(q[1]);
+        return r;
       } };
   }
 
-  /* Traza por defecto: eje principal (PCA) de las coordenadas, con extremos
-   * en la proyección mínima y máxima. Orientada de W a E (o de N a S cuando
-   * corre más N–S que E–W), la convención de la mayoría de los perfiles. */
-  function fitTrace(xs, ys) {
+  /* Eje principal (PCA) de las coordenadas: {mx, my, ux, uy, tmin, tmax},
+   * orientado de W a E (o de N a S cuando corre más N–S que E–W), la
+   * convención de la mayoría de los perfiles. */
+  function principalAxis(xs, ys) {
     const n = xs.length;
     if (!n) return null;
     let mx = 0, my = 0;
@@ -11545,8 +12101,71 @@ SW.shp = (function () {
       if (t > tmax) tmax = t;
     }
     if (!(tmax > tmin)) { tmin = -1; tmax = 1; }
-    return { x0: mx + ux * tmin, y0: my + uy * tmin,
-             x1: mx + ux * tmax, y1: my + uy * tmax };
+    return { mx, my, ux, uy, tmin, tmax };
+  }
+
+  /* Traza recta: el eje principal, con extremos en la proyección mínima y
+   * máxima. */
+  function fitTrace(xs, ys) {
+    const ax = principalAxis(xs, ys);
+    if (!ax) return null;
+    return { x0: ax.mx + ax.ux * ax.tmin, y0: ax.my + ax.uy * ax.tmin,
+             x1: ax.mx + ax.ux * ax.tmax, y1: ax.my + ax.uy * ax.tmax };
+  }
+
+  function douglasPeucker(pts, tol) {
+    if (pts.length < 3) return pts.slice();
+    const keep = new Uint8Array(pts.length);
+    keep[0] = keep[pts.length - 1] = 1;
+    const stack = [[0, pts.length - 1]];
+    while (stack.length) {
+      const [i, j] = stack.pop();
+      const a = pts[i], b = pts[j];
+      const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1e-12;
+      let md = -1, mk = -1;
+      for (let k = i + 1; k < j; k++) {
+        const d = Math.abs((pts[k][0] - a[0]) * dy - (pts[k][1] - a[1]) * dx) / L;
+        if (d > md) { md = d; mk = k; }
+      }
+      if (md > tol) { keep[mk] = 1; stack.push([i, mk], [mk, j]); }
+    }
+    return pts.filter((p, k) => keep[k]);
+  }
+
+  /* Traza que SIGUE las inflexiones: las líneas y polígonos de un corte
+   * exportado de MOVE están en su plano vertical, así que sus coordenadas
+   * en planta dibujan la traza aunque quiebre. Se ordenan a lo largo del eje
+   * principal, se promedian en tramos y se simplifican. Devuelve la traza
+   * con `path` (o sin él si es prácticamente recta) y `bend`: la desviación
+   * máxima respecto de la recta, relativa al largo. */
+  function fitPath(xs, ys) {
+    const ax = principalAxis(xs, ys);
+    if (!ax) return null;
+    const n = xs.length, span = ax.tmax - ax.tmin;
+    const nb = Math.max(2, Math.min(240, Math.floor(n / 3)));
+    const sx = new Float64Array(nb), sy = new Float64Array(nb), cnt = new Uint32Array(nb);
+    let iMin = 0, iMax = 0, tMin = Infinity, tMax = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const t = (xs[i] - ax.mx) * ax.ux + (ys[i] - ax.my) * ax.uy;
+      if (t < tMin) { tMin = t; iMin = i; }
+      if (t > tMax) { tMax = t; iMax = i; }
+      const b = Math.min(nb - 1, Math.floor((t - ax.tmin) / span * nb));
+      sx[b] += xs[i]; sy[b] += ys[i]; cnt[b]++;
+    }
+    const raw = [[xs[iMin], ys[iMin]]];
+    for (let b = 0; b < nb; b++)
+      if (cnt[b]) raw.push([sx[b] / cnt[b], sy[b] / cnt[b]]);
+    raw.push([xs[iMax], ys[iMax]]);
+    const path = douglasPeucker(raw, span * 0.004);
+    const a = path[0], z = path[path.length - 1];
+    const L = Math.hypot(z[0] - a[0], z[1] - a[1]) || 1;
+    let dev = 0;
+    for (const p of path)
+      dev = Math.max(dev, Math.abs((p[0] - a[0]) * (z[1] - a[1]) -
+                                   (p[1] - a[1]) * (z[0] - a[0])) / L);
+    const out = { x0: a[0], y0: a[1], x1: z[0], y1: z[1], bend: dev / L };
+    if (path.length > 2 && dev / L > 0.005) out.path = path;
+    return out;
   }
 
   function compass(az) {
@@ -11821,6 +12440,7 @@ SW.shp = (function () {
   }
 
   return { parseShp, parseDbf, parsePrj, crsLabel, makeProjector, fitTrace,
+           fitPath, layerTransform, sameCrs, toLonLat, fromLonLat,
            planar, compass, parseLyr, cfbStreams, labToRgb, hexColor };
 })();
 
@@ -11890,18 +12510,96 @@ SW.shp = (function () {
       });
   }
 
-  /* Coordenadas sin .prj en rango de grados → geográficas. */
-  function guessCrs(layers) {
-    const withPrj = layers.find(l => l.crs.kind !== "unknown");
+  function inDegrees(l) {
+    const b = l.shp.bbox;
+    return Math.abs(b[0]) <= 180 && Math.abs(b[2]) <= 180 &&
+           Math.abs(b[1]) <= 90 && Math.abs(b[3]) <= 90;
+  }
+
+  /* CRS de la traza: el de una traza anterior de la sección, si la hay; si
+   * no, el de las líneas/polígonos (el corte), el de cualquier capa con
+   * .prj, o geográfico si todo está en rango de grados. */
+  function traceCrs(layers) {
+    const gt = SW.model.state.sec.geo_trace;
+    if (gt) {
+      const c = S.parsePrj(gt.crs || "");
+      if (gt.crs_kind) c.kind = gt.crs_kind;
+      return c;
+    }
+    const withPrj = layers.find(l => !l.shp.px && l.crs.kind !== "unknown") ||
+                    layers.find(l => l.crs.kind !== "unknown");
     if (withPrj) return withPrj.crs;
-    const deg = layers.every(function (l) {
-      const b = l.shp.bbox;
-      return Math.abs(b[0]) <= 180 && Math.abs(b[2]) <= 180 &&
-             Math.abs(b[1]) <= 90 && Math.abs(b[3]) <= 90;
-    });
     const c = S.parsePrj("");
-    if (deg) { c.kind = "geographic"; c.name = "(assumed from the ranges)"; }
+    if (layers.length && layers.every(inDegrees)) {
+      c.kind = "geographic"; c.name = "(assumed from the ranges)";
+    }
     return c;
+  }
+
+  /* Prepara cada capa para la traza: l.tf lleva sus coordenadas al CRS de
+   * la traza (reproyectando si sus .prj difieren), l.note explica lo hecho
+   * y l.bb es su caja ya transformada. Sin .prj se asume el de la traza,
+   * salvo que esté en grados y la traza no. */
+  function prepareLayers(layers, crs) {
+    for (const l of layers) {
+      let from = l.crs;
+      l.note = "";
+      if (from.kind === "unknown" && inDegrees(l) && crs.kind !== "geographic" &&
+          crs.kind !== "unknown") {
+        from = S.parsePrj(""); from.kind = "geographic";
+        l.note = "no .prj, coordinates look like degrees → taken as lon/lat";
+      }
+      const tf = S.layerTransform(from, crs);
+      if (!tf) {
+        l.tf = null;
+        l.note = "⚠ its CRS (" + S.crsLabel(from) + ") differs from the " +
+                 "trace's and can't be converted — taken as is";
+      } else if (!S.sameCrs(from, crs)) {
+        l.tf = tf;
+        l.note = l.note || ("reprojected from " + S.crsLabel(from));
+      } else l.tf = null;
+      const smp = sampleXY([l], null, 20000);
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i < smp.xs.length; i++) {
+        x0 = Math.min(x0, smp.xs[i]); x1 = Math.max(x1, smp.xs[i]);
+        y0 = Math.min(y0, smp.ys[i]); y1 = Math.max(y1, smp.ys[i]);
+      }
+      l.bb = isFinite(x0) ? [x0, y0, x1, y1] : null;
+      // rango de Z de la geometría, para adivinar unidades y sentido
+      let z0 = Infinity, z1 = -Infinity;
+      if (l.shp.hasZ) {
+        const b = l.shp.bbox;
+        if (isFinite(b[4]) && isFinite(b[5]) && b[5] >= b[4]) { z0 = b[4]; z1 = b[5]; }
+      }
+      l.zr = isFinite(z0) ? [z0, z1] : null;
+    }
+  }
+
+  /* Unidades y sentido de Z por capa, adivinados contra el corte: un
+   * catálogo con profundidades en km (0…200) junto a líneas en metros
+   * (−50 000…3 000) iría a dar 1000 veces más arriba; uno con profundidad
+   * positiva, reflejado sobre el nivel del mar. */
+  function guessZ(layers) {
+    const ref = layers.filter(l => !l.shp.px && l.zr);
+    let rz0 = Infinity, rz1 = -Infinity;
+    for (const l of ref) { rz0 = Math.min(rz0, l.zr[0]); rz1 = Math.max(rz1, l.zr[1]); }
+    const refMag = Math.max(Math.abs(rz0), Math.abs(rz1));
+    const out = {};
+    for (const l of layers) {
+      const g = { unit: "m", down: false, why: "" };
+      if (l.shp.px && l.zr && isFinite(refMag)) {
+        const mag = Math.max(Math.abs(l.zr[0]), Math.abs(l.zr[1]));
+        if (mag > 0 && mag <= 1000 && refMag > 5000) {
+          g.unit = "km"; g.why = "Z looks like km next to the section's metres";
+        }
+        if (l.zr[0] >= 0 && l.zr[1] > 0 && rz0 < 0 && Math.abs(rz0) > Math.abs(rz1)) {
+          g.down = true;
+          g.why = (g.why ? g.why + "; " : "") + "positive Z looks like depth";
+        }
+      }
+      out[l.name] = g;
+    }
+    return out;
   }
 
   /* -- simbología de una capa --------------------------------------------- */
@@ -11990,30 +12688,45 @@ SW.shp = (function () {
     const xs = [], ys = [];
     for (const l of layers) {
       if (which && !which(l)) continue;
-      const sh = l.shp;
+      const sh = l.shp, tf = l.tf;
+      const add = function (x, y) {
+        if (tf) { const q = tf(x, y); x = q[0]; y = q[1]; }
+        if (isFinite(x) && isFinite(y)) { xs.push(x); ys.push(y); }
+      };
       if (sh.px) {
         const step = Math.max(1, Math.floor(sh.nPoints / cap));
-        for (let i = 0; i < sh.nPoints; i += step) {
-          if (!isFinite(sh.px[i])) continue;
-          xs.push(sh.px[i]); ys.push(sh.py[i]);
-        }
+        for (let i = 0; i < sh.nPoints; i += step) add(sh.px[i], sh.py[i]);
       } else {
         for (const ft of sh.features || [])
           for (const part of ft || [])
-            for (const v of part) { xs.push(v[0]); ys.push(v[1]); }
+            for (const v of part) add(v[0], v[1]);
       }
     }
     return { xs: xs, ys: ys };
   }
 
+  function cloneTrace(t) {
+    if (!t) return null;
+    const o = { x0: +t.x0, y0: +t.y0, x1: +t.x1, y1: +t.y1 };
+    if (t.path && t.path.length >= 2) o.path = t.path.map(v => [+v[0], +v[1]]);
+    return o;
+  }
+
+  /* Traza ajustada a los datos. Las líneas y polígonos de un corte
+   * exportado (MOVE) están en su plano vertical: sus coordenadas en planta
+   * SON la traza, con sus inflexiones (fitPath). Sólo con puntos, el eje
+   * principal de ellos. */
+  function fitToData(layers) {
+    const smp = sampleXY(layers, l => !l.shp.px, 200000);
+    if (smp.xs.length >= 2) return S.fitPath(smp.xs, smp.ys);
+    const all = sampleXY(layers, null, 200000);
+    return all.xs.length >= 2 ? S.fitTrace(all.xs, all.ys) : null;
+  }
+
   function defaultTrace(layers) {
     const sec = SW.model.state.sec;
-    if (sec.geo_trace) return Object.assign({}, sec.geo_trace);
-    // las líneas y polígonos de un corte exportado (MOVE) están en el plano
-    // vertical: su eje principal ES la traza. Sólo con puntos, el de ellos.
-    let smp = sampleXY(layers, l => !l.shp.px, 200000);
-    if (smp.xs.length < 2) smp = sampleXY(layers, null, 200000);
-    return S.fitTrace(smp.xs, smp.ys);
+    if (sec.geo_trace) return cloneTrace(sec.geo_trace);
+    return cloneTrace(fitToData(layers));
   }
 
   /* -- el mapa del diálogo -------------------------------------------------- */
@@ -12040,28 +12753,32 @@ SW.shp = (function () {
 
     // geográficas: x escalado por cos(lat) para no deformar la planta
     const crs = st.crs;
-    const mid = layers[0] ? (layers[0].shp.bbox[1] + layers[0].shp.bbox[3]) / 2 : 0;
+    const bbs = layers.map(l => l.bb).filter(Boolean);
+    const mid = bbs.length ? (bbs[0][1] + bbs[0][3]) / 2 : 0;
     const ax = crs.kind === "geographic" ? Math.cos(mid * Math.PI / 180) : 1;
 
-    // muestras fijas para dibujar
+    // muestras fijas para dibujar, ya en el CRS de la traza
     const pts = [], lines = [];
     let total = 0;
     for (const l of layers) if (l.shp.px) total += l.shp.nPoints;
     for (const l of layers) {
-      const sh = l.shp;
+      const sh = l.shp, tf = l.tf;
       if (sh.px) {
         const step = Math.max(1, Math.ceil(total / MAP_PTS));
-        for (let i = 0; i < sh.nPoints; i += step)
-          if (isFinite(sh.px[i])) pts.push(sh.px[i], sh.py[i]);
+        for (let i = 0; i < sh.nPoints; i += step) {
+          if (!isFinite(sh.px[i])) continue;
+          const q = tf ? tf(sh.px[i], sh.py[i]) : [sh.px[i], sh.py[i]];
+          pts.push(q[0], q[1]);
+        }
       } else {
         for (const ft of sh.features || [])
           for (const part of ft || [])
-            lines.push({ poly: sh.geom === "polygon", v: part });
+            lines.push({ poly: sh.geom === "polygon",
+                         v: tf ? part.map(v => tf(v[0], v[1])) : part });
       }
     }
     let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
-    for (const l of layers) {
-      const b = l.shp.bbox;
+    for (const b of bbs) {
       bx0 = Math.min(bx0, b[0]); by0 = Math.min(by0, b[1]);
       bx1 = Math.max(bx1, b[2]); by1 = Math.max(by1, b[3]);
     }
@@ -12095,24 +12812,30 @@ SW.shp = (function () {
       const ctx = cv.getContext("2d");
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      // faja de la distancia máxima: medio ancho en unidades del mapa con la
-      // razón (largo de la traza en el mapa) / (largo real)
+      // faja de la distancia máxima, tramo a tramo: medio ancho en
+      // unidades del mapa con la razón (largo de la traza en el mapa) /
+      // (largo real)
       const t = st.trace;
+      const path = t ? (t.path && t.path.length >= 2 ? t.path
+                                                     : [[t.x0, t.y0], [t.x1, t.y1]]) : [];
       if (t && st.buffer_km > 0 && st.proj && st.proj.length > 0) {
-        const dx = (t.x1 - t.x0) * ax, dy = t.y1 - t.y0;
-        const Ld = Math.hypot(dx, dy);
-        if (Ld > 0) {
-          const half = st.buffer_km * 1000 * Ld / st.proj.length * view.k;
-          const nx = -dy / Ld, ny = dx / Ld;     // normal en pantalla (y abajo)
-          ctx.fillStyle = "rgba(30,90,200,0.10)";
-          ctx.strokeStyle = "rgba(30,90,200,0.35)";
-          ctx.lineWidth = 1;
+        let Ld = 0;
+        for (let i = 1; i < path.length; i++)
+          Ld += Math.hypot((path[i][0] - path[i - 1][0]) * ax, path[i][1] - path[i - 1][1]);
+        const half = st.buffer_km * 1000 * Ld / st.proj.length * view.k;
+        ctx.fillStyle = "rgba(30,90,200,0.10)";
+        ctx.strokeStyle = "rgba(30,90,200,0.35)";
+        ctx.lineWidth = 1;
+        for (let i = 1; i < path.length; i++) {
+          const a = path[i - 1], b = path[i];
+          const dx = (b[0] - a[0]) * ax, dy = b[1] - a[1], L = Math.hypot(dx, dy);
+          if (!(L > 0)) continue;
+          const ox = -dy / L * half, oy = -dx / L * half;   // normal en pantalla
           ctx.beginPath();
-          const ox = nx * half, oy = -ny * half;
-          ctx.moveTo(X(t.x0) + ox, Y(t.y0) + oy);
-          ctx.lineTo(X(t.x1) + ox, Y(t.y1) + oy);
-          ctx.lineTo(X(t.x1) - ox, Y(t.y1) - oy);
-          ctx.lineTo(X(t.x0) - ox, Y(t.y0) - oy);
+          ctx.moveTo(X(a[0]) + ox, Y(a[1]) + oy);
+          ctx.lineTo(X(b[0]) + ox, Y(b[1]) + oy);
+          ctx.lineTo(X(b[0]) - ox, Y(b[1]) - oy);
+          ctx.lineTo(X(a[0]) - ox, Y(a[1]) - oy);
           ctx.closePath(); ctx.fill(); ctx.stroke();
         }
       }
@@ -12129,8 +12852,13 @@ SW.shp = (function () {
       }
       if (t) {
         ctx.strokeStyle = "#c81e1e"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(X(t.x0), Y(t.y0)); ctx.lineTo(X(t.x1), Y(t.y1));
+        ctx.beginPath();
+        path.forEach((v, i) => i ? ctx.lineTo(X(v[0]), Y(v[1])) : ctx.moveTo(X(v[0]), Y(v[1])));
         ctx.stroke();
+        ctx.fillStyle = "#c81e1e";
+        for (let i = 1; i + 1 < path.length; i++) {
+          ctx.beginPath(); ctx.arc(X(path[i][0]), Y(path[i][1]), 2.5, 0, Math.PI * 2); ctx.fill();
+        }
         for (const e of [[t.x0, t.y0, st.labels[0]], [t.x1, t.y1, st.labels[1]]]) {
           ctx.fillStyle = "#fff"; ctx.strokeStyle = "#c81e1e"; ctx.lineWidth = 2;
           ctx.beginPath(); ctx.arc(X(e[0]), Y(e[1]), 6, 0, Math.PI * 2);
@@ -12153,6 +12881,7 @@ SW.shp = (function () {
       if (st.drawMode || e.shiftKey) {
         const x = invX(p[0]), y = invY(p[1]);
         st.trace = { x0: x, y0: y, x1: x, y1: y };
+        st.shape = "straight";
         drag = { mode: "end", end: 1 };
         st.drawMode = false;
       } else if (t && Math.hypot(p[0] - X(t.x0), p[1] - Y(t.y0)) < 10) {
@@ -12172,8 +12901,9 @@ SW.shp = (function () {
         view.cy = drag.cy + (p[1] - drag.p[1]) / view.k;
       } else {
         const x = invX(p[0]), y = invY(p[1]);
-        if (drag.end === 0) { st.trace.x0 = x; st.trace.y0 = y; }
-        else { st.trace.x1 = x; st.trace.y1 = y; }
+        const t = st.trace, pth = t.path;
+        if (drag.end === 0) { t.x0 = x; t.y0 = y; if (pth) pth[0] = [x, y]; }
+        else { t.x1 = x; t.y1 = y; if (pth) pth[pth.length - 1] = [x, y]; }
         onEdit(true);
       }
       draw();
@@ -12204,13 +12934,12 @@ SW.shp = (function () {
   function project(layers, lyrs, st, dryRun) {
     const P = st.proj;
     const buf = st.buffer_km > 0 ? st.buffer_km * 1000 : Infinity;
-    const zf = (st.z_down ? -1 : 1) * ({ m: 1, km: 1000, ft: 0.3048 }[st.z_unit] || 1);
     const sMin = st.clip_ends ? -Math.max(1, P.length * 1e-6) : -Infinity;
     const sMax = st.clip_ends ? P.length * (1 + 1e-6) + 1 : Infinity;
     const res = { lines: [], dips: [], overlays: [],
                   counts: { points: 0, lines: 0, polygons: 0, dips: 0 },
                   z0: Infinity, z1: -Infinity, s0: Infinity, s1: -Infinity,
-                  truncated: false };
+                  truncated: false, per: {} };
     const r1 = v => Math.round(v * 10) / 10;
     function grow(s, z) {
       if (s < res.s0) res.s0 = s;
@@ -12224,6 +12953,20 @@ SW.shp = (function () {
       if (!opt || !opt.include) continue;
       const sh = layer.shp;
       const sym = symbolizer(layer, lyrs);
+      const zf = (opt.z_down ? -1 : 1) *
+                 ({ m: 1, km: 1000, ft: 0.3048 }[opt.z_unit] || 1);
+      const tf = layer.tf;
+      const proj = tf ? function (x, y) { const q = tf(x, y); return P.project(q[0], q[1]); }
+                      : P.project;
+      // diagnóstico por capa: cuántos entran, a qué distancia de la traza
+      // (mediana) y en qué rango de Z — lo que delata una capa corrida
+      const per = res.per[layer.name] = { n: 0, ds: [], z0: Infinity, z1: -Infinity };
+      const note = function (d, z) {
+        per.n++;
+        if (per.ds.length < 4000) per.ds.push(Math.abs(d));
+        if (z < per.z0) per.z0 = z;
+        if (z > per.z1) per.z1 = z;
+      };
 
       if (sh.px) {
         const zFld = opt.z_field && opt.z_field !== "@geom" && layer.dbf
@@ -12241,10 +12984,11 @@ SW.shp = (function () {
             if (zFld || sh.hasZ) continue;
             z = 0;
           }
-          const sd = P.project(x, y);
+          const sd = proj(x, y);
           if (Math.abs(sd[1]) > buf || sd[0] < sMin || sd[0] > sMax) continue;
           z *= zf;
           n++;
+          note(sd[1], z);
           if (dryRun) { grow(sd[0], z); continue; }
           if (res.counts.points + n > MAX_POINTS) { res.truncated = true; n--; break; }
           const k = sym.key(rec);
@@ -12301,8 +13045,9 @@ SW.shp = (function () {
           const verts = [];
           let inside = 0;
           for (const v of part) {
-            const sd = P.project(v[0], v[1]);
+            const sd = proj(v[0], v[1]);
             const z = (isFinite(v[2]) ? v[2] : 0) * zf;
+            note(sd[1], z);
             if (Math.abs(sd[1]) <= buf) inside++;
             const q = [r1(sd[0]), r1(z)];
             const last = verts[verts.length - 1];
@@ -12353,6 +13098,12 @@ SW.shp = (function () {
                             fill_opacity: +opt.fill_opacity || 0.5, width: 1.2,
                             items: items });
     }
+    for (const k of Object.keys(res.per)) {
+      const p = res.per[k];
+      p.ds.sort((a, b) => a - b);
+      p.dmed = p.ds.length ? p.ds[p.ds.length >> 1] : NaN;
+      delete p.ds;
+    }
     return res;
   }
 
@@ -12376,8 +13127,8 @@ SW.shp = (function () {
 
   function yRange(layers) {
     let a = Infinity, b = -Infinity;
-    for (const l of layers) { a = Math.min(a, l.shp.bbox[1]); b = Math.max(b, l.shp.bbox[3]); }
-    return isFinite(a) && b > a ? [a, b] : null;
+    for (const l of layers) if (l.bb) { a = Math.min(a, l.bb[1]); b = Math.max(b, l.bb[3]); }
+    return isFinite(a) && b > a ? [a - (b - a) * 0.05, b + (b - a) * 0.05] : null;
   }
 
   function niceFloor(v, step) { return Math.floor(v / step) * step; }
@@ -12388,38 +13139,47 @@ SW.shp = (function () {
     const U = SW.ui;
     const layers = data.layers, lyrs = data.lyrs;
     const sec = SW.model.state.sec;
-    const crs = guessCrs(layers);
+    const crs = traceCrs(layers);
+    prepareLayers(layers, crs);
+    const zGuess = guessZ(layers);
     const empty = !(sec.lines || []).length && !(sec.overlays || []).length &&
                   !(sec.images || []).length;
+    const fitted = fitToData(layers);
     const st = {
       crs: crs, trace: defaultTrace(layers), proj: null,
-      buffer_km: 0, clip_ends: true, z_unit: "m", z_down: false,
+      buffer_km: 0, clip_ends: true,
       correct: true, fit_box: empty, set_labels: !sec.geo_trace,
       drawMode: false, labels: ["A", "B"], layer: {},
+      proj_az: sec.geo_trace && isFinite(sec.geo_trace.proj_az)
+        ? sec.geo_trace.proj_az : null,
     };
+    st.shape = st.trace && st.trace.path ? "path" : "straight";
     let total = 0;
     for (const l of layers) if (l.shp.px) total += l.shp.nPoints;
     // con muchos puntos dispersos (un catálogo), una faja razonable de
     // entrada; con un corte exportado (todo en el plano), sin límite
     st.buffer_km = sec.geo_trace && sec.geo_trace.buffer_km !== undefined
       ? sec.geo_trace.buffer_km : (total > 5000 ? 20 : 0);
-    if (sec.geo_trace) {
-      st.z_unit = sec.geo_trace.z_unit || "m";
-      st.z_down = !!sec.geo_trace.z_down;
-      st.correct = sec.geo_trace.mercator_correction !== false;
-    }
+    if (sec.geo_trace) st.correct = sec.geo_trace.mercator_correction !== false;
     for (const l of layers) {
       const sh = l.shp;
       const hasDip = l.dbf && l.dbf.field("dip") &&
                      AZ_FIELDS.some(n => l.dbf.field(n));
+      const g = zGuess[l.name];
       st.layer[l.name] = { include: true, line_kind: "auto",
                            z_field: sh.hasZ ? "@geom" : "",
+                           z_unit: g.unit, z_down: g.down, z_why: g.why,
                            size: "", fill_opacity: 0.5,
                            dips: !!hasDip && sh.nPoints <= 5000 };
     }
 
-    let summary, xInputs = [], bufInp, mapApi;
+    let summary, xInputs = [], bufInp, mapApi, shapeSel;
+    const diag = {};
     function refreshProj() {
+      if (st.trace) {
+        if (st.shape !== "path") delete st.trace.path;
+        st.trace.proj_az = st.proj_az;
+      }
       st.proj = st.trace ? S.makeProjector(st.trace, st.crs,
                                            { correct: st.correct,
                                              yRange: yRange(layers) }) : null;
@@ -12436,6 +13196,22 @@ SW.shp = (function () {
         if (!st.proj) { summary.textContent = "Define a trace first."; return; }
         const r = project(layers, lyrs, st, true);
         const c = r.counts;
+        for (const l of layers) {
+          const el = diag[l.name], p = r.per[l.name];
+          if (!el) continue;
+          if (!p || !p.n) { el.textContent = st.layer[l.name].include
+            ? "Nothing of this layer falls within the max distance of the trace." : "";
+            el.style.color = ""; continue; }
+          const far = !l.shp.px && p.dmed > Math.max(1000, st.proj.length * 0.01);
+          el.textContent = (l.shp.px ? p.n.toLocaleString() + " points in the swath"
+                                     : "Vertices") +
+            " · median distance to the trace " + (p.dmed / 1000).toFixed(2) + " km" +
+            " · Z " + (p.z0 / 1000).toFixed(2) + " to " + (p.z1 / 1000).toFixed(2) +
+            " km" + (l.note ? " · " + l.note : "") +
+            (far ? "  ⚠ These features are not on the trace: fit the trace to " +
+                   "them (Fit to data) or check the CRS." : "");
+          el.style.color = far || /⚠/.test(l.note) ? "var(--danger, #c0392b)" : "";
+        }
         summary.textContent =
           "Trace " + (st.proj.length / 1000).toFixed(2) + " km, azimuth " +
           st.proj.azimuth.toFixed(1) + "° (" + st.labels[0] + " → " +
@@ -12463,9 +13239,10 @@ SW.shp = (function () {
              (layers.length === 1 ? "" : "s"),
       wide: true,
       build: function (body) {
-        U.note(body, "Features are projected square onto the section trace: " +
+        U.note(body, "Features are projected onto the section trace: " +
           "distance along it becomes the section's horizontal axis and the " +
-          "feature's Z its elevation. Coordinates: " + S.crsLabel(crs) + "." +
+          "feature's Z its elevation. Trace coordinates: " + S.crsLabel(crs) +
+          " — layers with another .prj are reprojected into it." +
           (data.orphans.length ? "  ⚠ No .shp for: " + data.orphans.join(", ") +
             " — select the .shp together with its .dbf/.prj." : "") +
           (lyrs.length ? "  Symbology: " + lyrs.map(s => s.name + (s.field
@@ -12494,6 +13271,28 @@ SW.shp = (function () {
             (sh.hasZ ? ", 3D (Z)" : ", 2D") + " · symbology: " +
             symbolizer(l, lyrs).source);
           box.appendChild(head);
+          const zu = U.select([{ value: "m", label: "metres" },
+                               { value: "km", label: "kilometres" },
+                               { value: "ft", label: "feet" }], o.z_unit);
+          zu.addEventListener("change", () => { o.z_unit = zu.value; refreshStats(); });
+          const zd = document.createElement("input");
+          zd.type = "checkbox"; zd.checked = o.z_down;
+          zd.title = "Z is depth (positive down)";
+          zd.addEventListener("change", () => { o.z_down = zd.checked; refreshStats(); });
+          const zr = U.el("span");
+          zr.style.cssText = "display:flex;gap:6px;align-items:center;";
+          zr.appendChild(zu);
+          const zdl = U.el("label", null, "");
+          zdl.style.cssText = "display:flex;gap:3px;align-items:center;font-size:11px;";
+          zdl.appendChild(zd); zdl.appendChild(document.createTextNode("depth (+ down)"));
+          zr.appendChild(zdl);
+          U.row(box, "Z units", zr,
+                "Units of this layer's Z and whether it is depth positive down " +
+                "(e.g. a catalogue in km). " + (o.z_why ? "Guessed: " + o.z_why + "." : ""));
+          const dg = U.el("div");
+          dg.style.cssText = "font-size:10px;color:var(--ink-3);margin:2px 0;";
+          diag[l.name] = dg;
+          box.appendChild(dg);
           if (sh.px) {
             const zOpts = [];
             if (sh.hasZ) zOpts.push({ value: "@geom", label: "geometry Z" });
@@ -12553,7 +13352,12 @@ SW.shp = (function () {
           inp.style.cssText = "width:100%;box-sizing:border-box;";
           inp.addEventListener("change", function () {
             if (!st.trace) st.trace = { x0: 0, y0: 0, x1: 1, y1: 1 };
-            st.trace[["x0", "y0", "x1", "y1"][i]] = +inp.value;
+            const t = st.trace;
+            t[["x0", "y0", "x1", "y1"][i]] = +inp.value;
+            if (t.path) {
+              t.path[0] = [t.x0, t.y0];
+              t.path[t.path.length - 1] = [t.x1, t.y1];
+            }
             refreshProj(); mapApi.draw(); refreshStats();
           });
           xInputs.push(inp);
@@ -12569,23 +13373,56 @@ SW.shp = (function () {
           b.addEventListener("click", function (e) { e.preventDefault(); fn(); });
           tb.appendChild(b);
         };
-        mk("Fit to data", "Principal axis of the lines/polygons (or of the points)",
+        mk("Fit to data", "The plan trace of the lines/polygons (with its bends), " +
+           "or the principal axis of the points",
            function () {
-             const keep = sec.geo_trace;
-             sec.geo_trace = null;
-             st.trace = defaultTrace(layers);
-             sec.geo_trace = keep;
+             st.trace = cloneTrace(fitToData(layers));
+             st.shape = st.trace && st.trace.path ? "path" : "straight";
+             if (shapeSel) shapeSel.value = st.shape;
              refreshProj(); syncInputs(); mapApi.fit(); refreshStats(true);
            });
         mk("Reverse", "Swap the start and end of the trace", function () {
           const t = st.trace;
           if (!t) return;
           st.trace = { x0: t.x1, y0: t.y1, x1: t.x0, y1: t.y0 };
+          if (t.path) st.trace.path = t.path.slice().reverse();
           refreshProj(); syncInputs(); mapApi.draw(); refreshStats(true);
         });
         mk("Draw trace", "Then press and drag on the map from start to end",
            function () { st.drawMode = true; });
         body.appendChild(tb);
+
+        const canBend = (fitted && fitted.path) || (st.trace && st.trace.path);
+        if (canBend) {
+          shapeSel = U.select([
+            { value: "path", label: "Follow the section lines (bends)" },
+            { value: "straight", label: "Straight, end to end" }], st.shape);
+          shapeSel.addEventListener("change", function () {
+            st.shape = shapeSel.value;
+            if (st.shape === "path" && !(st.trace && st.trace.path)) {
+              st.trace = cloneTrace(fitted);
+            }
+            refreshProj(); syncInputs(); mapApi.draw(); refreshStats(true);
+          });
+          U.row(body, "Trace shape", shapeSel,
+                "The polylines/polygons bend in plan view (" +
+                ((fitted && fitted.bend ? fitted.bend : 0) * 100).toFixed(1) +
+                "% of the length): a section with kinks, as MOVE builds them. " +
+                "Following them, distance is measured along the kinked trace " +
+                "and points are projected onto its nearest segment — on a " +
+                "straight trace, data around the kinks lands shifted.");
+        }
+        const azInp = U.numberInput(st.proj_az === null ? "" : st.proj_az, 1, 0, 360);
+        azInp.placeholder = "perpendicular";
+        azInp.addEventListener("change", function () {
+          const v = azInp.value.trim() === "" ? null : +azInp.value;
+          st.proj_az = v === null || !isFinite(v) ? null : ((v % 180) + 180) % 180;
+          refreshProj(); mapApi.draw(); refreshStats(true);
+        });
+        U.row(body, "Projection azimuth (°)", azInp,
+              "Empty: each point goes square onto the trace. An azimuth (e.g. " +
+              "the strike of the structures): points travel along it until " +
+              "they meet the trace, as in an oblique swath projection.");
 
         bufInp = U.numberInput(st.buffer_km, 1, 0);
         bufInp.addEventListener("input", function () {
@@ -12613,16 +13450,6 @@ SW.shp = (function () {
                 "×1.27 at 38°) so distances along the trace are real metres, " +
                 "in the same scale as Z. Off: raw map units.");
         }
-        const zu = U.select([{ value: "m", label: "metres" },
-                             { value: "km", label: "kilometres" },
-                             { value: "ft", label: "feet" }], st.z_unit);
-        zu.addEventListener("change", () => { st.z_unit = zu.value; refreshStats(); });
-        U.row(body, "Z units", zu, "");
-        const zd = document.createElement("input");
-        zd.type = "checkbox"; zd.checked = st.z_down;
-        zd.addEventListener("change", () => { st.z_down = zd.checked; refreshStats(); });
-        U.row(body, "Z is depth (positive down)", zd,
-              "For catalogues that give hypocentre depth as a positive number.");
         const fb = document.createElement("input");
         fb.type = "checkbox"; fb.checked = st.fit_box;
         fb.addEventListener("change", () => { st.fit_box = fb.checked; });
@@ -12668,7 +13495,8 @@ SW.shp = (function () {
                     y1: st.trace.y1, crs: st.crs.text || "", crs_kind: st.crs.kind,
                     mercator_correction: st.correct, length: st.proj.length,
                     azimuth: st.proj.azimuth, buffer_km: st.buffer_km,
-                    z_unit: st.z_unit, z_down: st.z_down };
+                    proj_az: st.proj_az };
+    if (st.trace.path) trace.path = st.trace.path.map(v => v.slice());
     redo.push({ op: "set_geo_trace", trace: trace });
     undo.push({ op: "set_geo_trace", trace: sec.geo_trace || null });
     for (const l of r.lines) {
@@ -19321,7 +20149,10 @@ SW.panels.imports = (function () {
         "Trace: " + (t.length / 1000).toFixed(2) + " km, azimuth " +
         (+t.azimuth || 0).toFixed(1) + "° — from (" + (+t.x0).toFixed(1) + ", " +
         (+t.y0).toFixed(1) + ") to (" + (+t.x1).toFixed(1) + ", " +
-        (+t.y1).toFixed(1) + ")" + (t.crs_kind === "mercator" &&
+        (+t.y1).toFixed(1) + ")" +
+        (t.path && t.path.length > 2 ? ", " + (t.path.length - 2) + " bend(s)" : "") +
+        (isFinite(t.proj_az) && t.proj_az !== null ? ", projected along " +
+          (+t.proj_az).toFixed(0) + "°" : "") + (t.crs_kind === "mercator" &&
         t.mercator_correction !== false ? ", Mercator scale corrected" : ""));
       info.style.cssText = "color:var(--ink-3);font-size:10px;margin:6px 0 2px;";
       info.title = t.crs || "";

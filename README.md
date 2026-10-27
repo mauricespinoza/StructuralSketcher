@@ -30,7 +30,7 @@ Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
   Create beds (layer cake).
 - **Tool rail** (left, resizable, collapsible groups) — Pan/Select/Lasso;
   **Add** Layer, Fault or Topography (with snapping); **Dip & Kink**;
-  **Edit** (vertices, transform, split, extend, smooth, simplify,
+  **Edit** (vertices, drag, transform, split, extend, smooth, simplify,
   resample, join, duplicate); **Restore** (Fault Parallel Flow and
   flexural-slip unfolding); **Forward modeling** (Parallel flow, Bend fold,
   Propagation, Trishear, Simple shear). Each tool's options appear only
@@ -43,6 +43,16 @@ Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
   measurement, angle, tool hint and last action.
 
 Drawing and editing helpers:
+
+- **Vertices** (X): drag a vertex; double click, Alt+press or the **Add
+  vertices** option inserts one on a segment (press and drag in one
+  gesture), and a click past an end extends the line; right click deletes.
+- **Drag** (J), as in GISDraw: pull one vertex and its neighbours follow
+  less and less along the line (½·(1 + cos πt)); at 100 % reach the
+  gradient ends at the line's ends, which stay fixed — less is more local
+  ([ and ] keys). Coincident vertices of other lines (a layer ending on a
+  fault) move with it (**Move joined**), and the vertex snaps to other
+  lines' vertices. One undo per drag.
 
 - **Shift while drawing** a line constrains the active segment to 0°, 45°,
   90°… (true angles in section space, as the angle readout reports them).
@@ -83,7 +93,14 @@ on the canvas:
   the Imported data panel. Points with `dip` and `azimuth` (dip direction)
   fields can also become dip symbols with the apparent dip in the section.
   The trace is stored with the section, so later imports share its
-  distances.
+  distances. When the polylines/polygons bend in plan view (a kinked
+  section, as MOVE builds them) the trace follows them and distance is
+  the chainage along it, so data around the kinks is not shifted; points
+  can also be projected along a given azimuth instead of square. Each
+  layer is reprojected from its own `.prj` (geographic, Mercator,
+  UTM/Transverse Mercator; no datum shift) and has its own Z units and
+  depth sign (guessed against the section), and the dialog shows each
+  layer's median distance to the trace and Z range to catch mismatches.
 - **Symbology**: unique-value classes of a `.lyr` (e.g. MOVE's
   `MoveSymbologyForESRI.lyr` on the `Type` field) are read from the file's
   serialized ArcObjects (colours, marker sizes); without one, MOVE's
