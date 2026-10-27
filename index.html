@@ -1188,7 +1188,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.25.0",
+  version: "0.25.1",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1200,6 +1200,12 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.25.1", date: "2026-10-27", highlights: [
+      "Autosave: when the project outgrows browser storage, the older " +
+        "autosaved copy is removed so a reload never brings back an " +
+        "out-of-date section; pending changes are also saved when the app " +
+        "goes to the background or closes (iPad included).",
+    ] },
     { version: "0.25.0", date: "2026-10-27", highlights: [
       "Imported data panel: \"Add topography…\" plots the ground surface " +
         "(Terrarium or Copernicus GLO-30 / SRTM) under the trace of an " +
@@ -24250,11 +24256,21 @@ SW.project = (function () {
       autosaveOk = false;
       // El caso realista es QuotaExceededError con imágenes embebidas
       // grandes. Se avisa UNA vez y se sigue trabajando: el proyecto no se
-      // pierde, sólo deja de recuperarse solo al recargar.
+      // pierde, sólo deja de recuperarse solo al recargar. La copia anterior
+      // se borra: si se quedara, al recargar volvería una versión vieja como
+      // si fuera la última, y lo hecho desde entonces se perdería sin aviso.
+      try { window.localStorage.removeItem(KEY); } catch (e2) { /* nada */ }
       if (SW.view && SW.view.status)
         SW.view.status("Autosave off: the project is too large for browser " +
                        "storage. Use \"Save\" to keep a copy on disk.");
     }
+  }
+
+  /* Guarda ya lo pendiente (al pasar a segundo plano o cerrar). */
+  function flushAutosave() {
+    if (!timer) return;
+    clearTimeout(timer);
+    autosave();
   }
 
   function loadAutosaved() {
@@ -24733,6 +24749,13 @@ SW.project = (function () {
       ? "Restored the section autosaved in this browser."
       : "New section — draw with the tools on the left, or import an image " +
         "and calibrate its scale.");
+
+    // En iOS no hay beforeunload: sin esto, lo de los últimos 1,5 s antes
+    // de cerrar la app no llegaba al autoguardado.
+    window.addEventListener("pagehide", flushAutosave);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") flushAutosave();
+    });
 
     window.addEventListener("beforeunload", function (e) {
       if (!dirty) return;
