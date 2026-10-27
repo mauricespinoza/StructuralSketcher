@@ -639,6 +639,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-lasso" viewBox="0 0 24 24"><ellipse cx="12" cy="9" rx="8" ry="5.5"/><path d="M7 13.4c-1 1.6-1 3.4.4 4.3 1.2.8 1.6 2 .8 3.1"/></symbol>
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5z"/><path d="M14.5 5.5l4 4"/></symbol>
   <symbol id="i-vertex" viewBox="0 0 24 24"><path d="M4 18l6-9 4 5 6-9"/><rect x="2" y="16" width="4" height="4"/><rect x="8" y="7" width="4" height="4"/><rect x="12" y="12" width="4" height="4"/><rect x="18" y="3" width="4" height="4"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
   <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v11m-4-4l4 4 4-4"/><path d="M3 15l4 5h10l4-5"/><circle cx="7" cy="17.2" r=".6"/><circle cx="12" cy="18" r=".6"/><circle cx="16.5" cy="17" r=".6"/></symbol>
   <symbol id="i-drag" viewBox="0 0 24 24"><path d="M2 18c5 0 6-10 10-10s5 10 10 10"/><circle cx="12" cy="8" r="2.2"/><path d="M12 5.8V2m-2 2l2-2 2 2"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5-5-6 6-2-2-5 5"/></symbol>
@@ -731,6 +732,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <div class="hgroup">
     <button id="import-image-btn" class="icon-only" title="Import image to trace over"><svg class="ic"><use href="#i-image"/></svg></button>
     <button id="import-data-btn" class="icon-only" title="Import data: shapefile (2D/3D points, polylines, polygons + .lyr symbology) projected onto the section, or a SEG-Y line"><svg class="ic"><use href="#i-import"/></svg></button>
+    <button id="map-btn" title="Map: free Esri basemaps with the section trace; draw a new profile trace on it"><svg class="ic"><use href="#i-map"/></svg>Map</button>
     <button id="setup-btn" class="icon-only" title="Section setup: name, extent, units, end labels"><svg class="ic"><use href="#i-setup"/></svg></button>
   </div>
   <span class="sep"></span>
@@ -797,6 +799,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
         <option value="lines">Select: lines only</option>
         <option value="dips">Select: dips only</option>
       </select>
+      <button id="selectby-btn" class="mini" title="Select by attribute: type, unit, color, name or origin (several values; new, add or within the selection)">Select by…</button>
     </div>
 
     <div class="rail-group">
@@ -1202,7 +1205,21 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
-    { version: "0.26.0", date: "2026-10-27", highlights: [
+    { version: "0.27.0", date: "2026-10-27", highlights: [
+      "Map window (header): free Esri basemaps (World Imagery, Topo, Street, " +
+        "National Geographic, relief) with the section trace on top; draw a " +
+        "new profile trace with clicks (bends allowed) and use it as the " +
+        "section's trace — optionally with its length, end labels and the " +
+        "DEM topography in one go.",
+      "Select by… (tool rail): select lines and dips by type, unit, color, " +
+        "name or origin — several values at once, as a new selection, added " +
+        "to it or within it.",
+      "Fixed \"the trace's coordinate system is unknown\" with a .prj: the " +
+        "reader now takes WKT2 (PROJCRS/GEOGCRS), EPSG codes and UTM names; " +
+        "Topo lets you set the trace's coordinate system when it still " +
+        "can't be read.",
+    ] },
+    { version: "0.27.0", date: "2026-10-27", highlights: [
       "Header: Topo (add topography from a DEM) now sits next to the SVG / " +
         "PNG exports, and a new SHP 3D button exports the drawn lines as 3D " +
         "shapefiles (PolyLineZ, one per line type, zipped with .prj) that " +
@@ -11604,7 +11621,7 @@ SW.actions = SW.actions || {};
     const gt = SW.model.state.sec.geo_trace;
     if (!gt || !data.coords || !SW.shp) return null;
     const crs = SW.shp.parsePrj(gt.crs || "");
-    if (gt.crs_kind) crs.kind = gt.crs_kind;
+    if (gt.crs_kind && crs.kind === "unknown") crs.kind = gt.crs_kind;
     if (data.coord_units === 2 || data.coord_units === 3) {
       if (crs.kind !== "geographic") return null;
     }
@@ -11653,15 +11670,7 @@ SW.actions = SW.actions || {};
   }
 
   /* CRS de un SEG-Y proyectado: huso UTM WGS84, un .prj pegado o ninguno. */
-  function utmWkt(zone, south) {
-    return 'PROJCS["WGS 84 / UTM zone ' + zone + (south ? "S" : "N") + '",' +
-      'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],' +
-      'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],' +
-      'PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],' +
-      'PARAMETER["central_meridian",' + (zone * 6 - 183) + '],' +
-      'PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],' +
-      'PARAMETER["false_northing",' + (south ? 10000000 : 0) + '],UNIT["metre",1]]';
-  }
+  const utmWkt = (zone, south) => SW.shp.utmWkt(zone, south);
 
   function placeSegy(f, data, dataUrl, wPix, hPix, index, cfg) {
     const totalMs = data.n_samples * data.dt_ms;
@@ -12191,53 +12200,124 @@ SW.shp = (function () {
   }
 
   /* -- .prj --------------------------------------------------------------- */
+  /* WKT1 de los EPSG más usados en Chile y alrededores, para un .prj que
+   * trae sólo el código ("EPSG:32719") o un WKT2 que no se sabe leer. */
+  function utmWkt(zone, south, datum) {
+    const d = datum || { name: "WGS 84", sph: "WGS 84", a: 6378137, rf: 298.257223563 };
+    return 'PROJCS["' + d.name + ' / UTM zone ' + zone + (south ? "S" : "N") + '",' +
+      'GEOGCS["' + d.name + '",DATUM["' + d.name + '",SPHEROID["' + d.sph + '",' +
+      d.a + ',' + d.rf + ']],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],' +
+      'PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],' +
+      'PARAMETER["central_meridian",' + (zone * 6 - 183) + '],' +
+      'PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],' +
+      'PARAMETER["false_northing",' + (south ? 10000000 : 0) + '],UNIT["metre",1]]';
+  }
+  const PSAD56 = { name: "PSAD56", sph: "International 1924", a: 6378388, rf: 297 };
+  const SIRGAS = { name: "SIRGAS 2000", sph: "GRS 1980", a: 6378137, rf: 298.257222101 };
+  function epsgWkt(code) {
+    code = +code;
+    if (code === 4326 || code === 4674 || code === 4248 || code === 4190)
+      return 'GEOGCS["EPSG:' + code + '",DATUM["d",SPHEROID["s",' +
+        (code === 4248 ? "6378388,297" : "6378137,298.257223563") + ']],UNIT["degree",0.0174532925199433]]';
+    if (code === 3857 || code === 900913 || code === 102100)
+      return 'PROJCS["WGS 84 / Pseudo-Mercator",GEOGCS["WGS 84",DATUM["WGS_1984",' +
+        'SPHEROID["WGS 84",6378137,298.257223563]]],PROJECTION["Mercator_Auxiliary_Sphere"],' +
+        'PARAMETER["central_meridian",0],PARAMETER["false_easting",0],' +
+        'PARAMETER["false_northing",0],UNIT["metre",1]]';
+    if (code >= 32601 && code <= 32660) return utmWkt(code - 32600, false);
+    if (code >= 32701 && code <= 32760) return utmWkt(code - 32700, true);
+    if (code >= 24877 && code <= 24882) return utmWkt(code - 24860, true, PSAD56);
+    if (code >= 24817 && code <= 24821) return utmWkt(code - 24800, false, PSAD56);
+    if (code >= 31965 && code <= 31976) return utmWkt(code - 31954, false, SIRGAS);
+    if (code >= 31977 && code <= 31985) return utmWkt(code - 31960, true, SIRGAS);
+    if (code === 5361) return utmWkt(19, true, SIRGAS);
+    if (code === 5362) return utmWkt(18, true, SIRGAS);
+    return "";
+  }
+
+  /* .prj → CRS. Lee WKT1 (ESRI u OGC), WKT2 (PROJCRS/GEOGCRS, el que
+   * escriben QGIS y GDAL recientes), un código EPSG suelto, y como último
+   * recurso el nombre ("… UTM zone 19S"). kind: geographic | mercator | tm
+   * (Transversa de Mercator/UTM) | projected (otro, no reproyectable) |
+   * unknown (sin .prj). */
   function parsePrj(text) {
-    const t = String(text || "");
+    const t = String(text || "").trim();
     const out = { text: t, kind: "unknown", name: "", a: 6378137, e: 0,
                   k0: 1, fn: 0, unit: 1 };
-    if (!t.trim()) return out;
-    const nm = /^\s*(PROJCS|GEOGCS)\s*\[\s*"([^"]*)"/i.exec(t);
+    if (!t) return out;
+    const only = /^(?:EPSG\s*:\s*)?(\d{4,6})$/i.exec(t);
+    if (only) {
+      const w = epsgWkt(only[1]);
+      if (w) { const r = parsePrj(w); r.text = w; r.name = "EPSG:" + only[1]; return r; }
+      out.name = "EPSG:" + only[1]; out.kind = "projected";
+      return out;
+    }
+    const nm = /^\s*(PROJCS|GEOGCS|PROJCRS|PROJECTEDCRS|GEOGCRS|GEODCRS|GEOGRAPHICCRS|BOUNDCRS\s*\[\s*SOURCECRS)\s*\[\s*"([^"]*)"/i.exec(t);
     out.name = nm ? nm[2] : "";
-    const sph = /SPHEROID\s*\[\s*"[^"]*"\s*,\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)/i.exec(t);
+    const sph = /(?:SPHEROID|ELLIPSOID)\s*\[\s*"[^"]*"\s*,\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)/i.exec(t);
     if (sph) {
       out.a = +sph[1] || 6378137;
       const invf = +sph[2];
       const f = invf > 0 ? 1 / invf : 0;
       out.e = Math.sqrt(Math.max(0, 2 * f - f * f));
     }
-    const param = function (key) {
-      const m = new RegExp('PARAMETER\\s*\\[\\s*"' + key +
-                           '"\\s*,\\s*([\\d.eE+-]+)', "i").exec(t);
-      return m ? +m[1] : null;
+    // nombres de parámetro con espacios o guiones bajos, y sus sinónimos WKT2
+    const param = function () {
+      for (const key of arguments) {
+        const k = key.replace(/[ _]+/g, "[ _]+");
+        const m = new RegExp('PARAMETER\\s*\\[\\s*"' + k +
+                             '"\\s*,\\s*([\\d.eE+-]+)', "i").exec(t);
+        if (m) return +m[1];
+      }
+      return null;
     };
-    if (/^\s*GEOGCS/i.test(t)) { out.kind = "geographic"; return out; }
-    const proj = /PROJECTION\s*\[\s*"([^"]+)"/i.exec(t);
-    const pname = proj ? proj[1] : "";
-    // unidad lineal: el último UNIT del PROJCS
-    const units = [...t.matchAll(/UNIT\s*\[\s*"([^"]*)"\s*,\s*([\d.eE+-]+)/gi)];
+    const head = nm ? nm[1].toUpperCase() : "";
+    if (/^(GEOGCS|GEOGCRS|GEODCRS|GEOGRAPHICCRS)$/.test(head)) {
+      out.kind = "geographic"; return out;
+    }
+    const proj = /(?:PROJECTION|METHOD)\s*\[\s*"([^"]+)"/i.exec(t);
+    const pname = (proj ? proj[1] : "").replace(/[\s_]+/g, "_");
+    // unidad lineal: el último UNIT/LENGTHUNIT
+    const units = [...t.matchAll(/(?:LENGTHUNIT|UNIT)\s*\[\s*"([^"]*)"\s*,\s*([\d.eE+-]+)/gi)]
+      .filter(u => !/degree|grad|radian/i.test(u[1]));
     if (units.length) out.unit = +units[units.length - 1][2] || 1;
-    out.lon0 = param("central_meridian") || param("longitude_of_center") || 0;
-    out.lat0 = param("latitude_of_origin") || 0;
+    out.lon0 = param("central_meridian", "longitude_of_center", "longitude of natural origin",
+                     "longitude_of_origin") || 0;
+    out.lat0 = param("latitude_of_origin", "latitude of natural origin") || 0;
     out.fe = param("false_easting") || 0;
     out.fn = param("false_northing") || 0;
-    if (/transverse_mercator|gauss/i.test(pname)) {
+    const utm = /UTM[ _]*zone[ _]*(\d{1,2})\s*([NS])?/i.exec(out.name + " " + t);
+    if (/transverse_mercator|gauss|^utm$/i.test(pname)) {
       out.kind = "tm";
-      out.k0 = param("scale_factor") || 1;
+      out.k0 = param("scale_factor", "scale factor at natural origin") || 1;
+      if (/^utm$/i.test(pname) && utm) Object.assign(out, utmParams(utm));
     } else if (/mercator/i.test(pname)) {
       out.kind = "mercator";
       if (/auxiliary_sphere|pseudo|popular/i.test(pname + " " + out.name))
         out.e = 0;
-      const lat1 = param("standard_parallel_1");
-      const sf = param("scale_factor");
+      const lat1 = param("standard_parallel_1", "latitude of 1st standard parallel");
+      const sf = param("scale_factor", "scale factor at natural origin");
       if (lat1) {
         const s1 = Math.sin(lat1 * Math.PI / 180);
         out.k0 = Math.cos(lat1 * Math.PI / 180) /
                  Math.sqrt(1 - out.e * out.e * s1 * s1);
       } else if (sf) out.k0 = sf;
+    } else if (!pname && utm) {
+      out.kind = "tm";
+      Object.assign(out, utmParams(utm));
     } else {
+      // sin método conocido: un AUTHORITY/ID EPSG al final aún puede salvarlo
+      const au = /(?:AUTHORITY|ID)\s*\[\s*"EPSG"\s*,\s*"?(\d{4,6})"?\s*\]\s*\]\s*$/i.exec(t);
+      const w = au ? epsgWkt(au[1]) : "";
+      if (w) { const r = parsePrj(w); r.text = t; r.name = out.name || r.name; return r; }
       out.kind = "projected";
     }
     return out;
+  }
+  function utmParams(m) {
+    const zone = +m[1], south = (m[2] || "N").toUpperCase() === "S";
+    return { k0: 0.9996, lon0: zone * 6 - 183, lat0: 0, fe: 500000,
+             fn: south ? 10000000 : 0 };
   }
 
   function crsLabel(crs) {
@@ -12854,7 +12934,7 @@ SW.shp = (function () {
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
 
-  return { parseShp, parseDbf, parsePrj, crsLabel, makeProjector, fitTrace,
+  return { parseShp, parseDbf, parsePrj, utmWkt, epsgWkt, crsLabel, makeProjector, fitTrace,
            fitPath, layerTransform, sameCrs, toLonLat, fromLonLat,
            planar, compass, parseLyr, cfbStreams, labToRgb, hexColor };
 })();
@@ -12938,7 +13018,7 @@ SW.shp = (function () {
     const gt = SW.model.state.sec.geo_trace;
     if (gt) {
       const c = S.parsePrj(gt.crs || "");
-      if (gt.crs_kind) c.kind = gt.crs_kind;
+      if (gt.crs_kind && c.kind === "unknown") c.kind = gt.crs_kind;
       return c;
     }
     const withPrj = layers.find(l => !l.shp.px && l.crs.kind !== "unknown") ||
@@ -14219,8 +14299,12 @@ SW.shp = (function () {
   /* Perfil de cotas bajo la traza de la importación → [[s, z], …] */
   async function readTopography(st) {
     const toLL = S.toLonLat(st.crs);
-    if (!toLL) throw new Error("the trace's coordinate system is unknown, so " +
-      "it can't be placed on the map — add a .prj");
+    if (!toLL) throw new Error(st.crs.kind === "unknown"
+      ? "the trace has no coordinate system (no .prj), so it can't be placed " +
+        "on the map — set it with the Topo button"
+      : "the trace's coordinate system (" + S.crsLabel(st.crs) + ") can't be " +
+        "converted to lon/lat: only geographic, Mercator and Transverse " +
+        "Mercator/UTM are supported — set it with the Topo button");
     const t = st.trace;
     const path = t.path && t.path.length >= 2 ? t.path : [[t.x0, t.y0], [t.x1, t.y1]];
     // s de un punto SOBRE la traza: perpendicular, sin azimut oblicuo
@@ -14266,19 +14350,58 @@ SW.shp = (function () {
 
   /* Topografía sobre una traza YA importada (sec.geo_trace): mismo muestreo
    * que en la importación, sin volver a cargar el shapefile. */
+  /* Muestrea la topografía bajo `gt` y la agrega a la sección (un undo).
+   * Resuelve true si la agregó. */
+  function runTopography(gt, crs, topo) {
+    const sec = SW.model.state.sec;
+    const st = { crs: crs, trace: cloneTrace(gt), correct: gt.mercator_correction !== false,
+                 topo: topo };
+    SW.view.status("Reading elevations from the DEM…");
+    return readTopography(st).then(function (t) {
+      const line = SW.model.newLine("topography", t.verts, "imported");
+      line.name = "Topography — " + t.label;
+      let z0 = Infinity, z1 = -Infinity;
+      for (const q of t.verts) { z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+      const redo = [{ op: "add_line", line: line }];
+      const undo = [{ op: "delete_line", id: line.id }];
+      // la sección debe llegar a la cota más alta
+      if (isFinite(z1) && z1 > sec.z_max) {
+        const step = Math.pow(10, Math.floor(Math.log10(Math.max(1, z1 - sec.z_min)))) / 2;
+        redo.push({ op: "set_section_props", props: { z_max: niceCeil(z1 + (z1 - z0) * 0.03, step) } });
+        undo.push({ op: "set_section_props", props: { z_max: sec.z_max } });
+      }
+      SW.undo.push({ label: "Add topography", redo: redo, undo: undo });
+      if (SW.panels.imports) SW.panels.imports.render();
+      SW.view.requestDraw();
+      SW.view.status("Topography from " + t.label + " (" + t.verts.length +
+        " vertices" + (t.missing ? ", " + t.missing + " gaps skipped" : "") + ").");
+      return true;
+    }).catch(function (err) {
+      SW.view.status("No topography: " + (err && err.message ? err.message : err));
+      return false;
+    });
+  }
+
   SW.actions.addTopography = function () {
     const sec = SW.model.state.sec, gt = sec.geo_trace, U = SW.ui;
     if (!gt) {
-      SW.view.status("No georeferenced trace yet — import a shapefile first.");
+      SW.view.status("No georeferenced trace yet — import a shapefile, a SEG-Y " +
+                     "with coordinates, or draw a trace in the Map.");
       return;
     }
     const crs = S.parsePrj(gt.crs || "");
-    if (gt.crs_kind) crs.kind = gt.crs_kind;
+    if (gt.crs_kind && crs.kind === "unknown") crs.kind = gt.crs_kind;
+    // un CRS que no se sabe llevar a lon/lat se puede corregir acá mismo
+    const fixable = !S.toLonLat(crs);
     const prefs = demPrefs();
     const topo = { source: prefs.source || "terrarium", key: prefs.key || "" };
-    let tSrc, tKey, keyRow;
+    let tSrc, tKey, keyRow, cSel, zInp, hSel, wInp, utmRow, wRow;
     const sync = function () {
       keyRow.style.display = topo.source !== "terrarium" ? "" : "none";
+      if (cSel) {
+        utmRow.style.display = cSel.value === "utm" ? "" : "none";
+        wRow.style.display = cSel.value === "wkt" ? "" : "none";
+      }
     };
     U.modal({
       title: "Add topography from a DEM",
@@ -14287,6 +14410,28 @@ SW.shp = (function () {
           "(" + (gt.length / 1000).toFixed(2) + " km, " + S.crsLabel(crs) +
           ") and adds it as an editable Topography line, in metres. Needs " +
           "the internet.");
+        if (fixable) {
+          U.note(body, "⚠ The trace's coordinate system " +
+            (crs.kind === "unknown" ? "is not known (no .prj was read)"
+              : "(" + (crs.name || "unnamed") + ") is not supported") +
+            ". Say which one its coordinates are in — it is saved with the trace " +
+            "and also used by SHP 3D." + (gt.x0 !== undefined ? "  Trace start: " +
+              (+gt.x0).toFixed(1) + ", " + (+gt.y0).toFixed(1) + "." : ""));
+          cSel = U.select([{ value: "utm", label: "UTM zone, WGS 84" },
+                           { value: "wkt", label: "Paste .prj / WKT or EPSG code" },
+                           { value: "geo", label: "Geographic lon/lat (WGS 84)" }], "utm");
+          cSel.addEventListener("change", sync);
+          U.row(body, "Trace coordinates", cSel, "");
+          zInp = U.numberInput(19, 1, 1, 60);
+          hSel = U.select([{ value: "S", label: "South" }, { value: "N", label: "North" }], "S");
+          utmRow = U.el("div", "row");
+          utmRow.appendChild(U.el("label", null, "UTM zone / hemisphere"));
+          utmRow.appendChild(zInp); utmRow.appendChild(hSel);
+          body.appendChild(utmRow);
+          wInp = U.textInput("");
+          wInp.placeholder = "PROJCS[…], PROJCRS[…] or EPSG:32719";
+          wRow = U.row(body, ".prj / WKT / EPSG", wInp, "");
+        }
         tSrc = U.select(DEM_SOURCES.map(d => ({ value: d.id, label: d.label })),
                         topo.source);
         tSrc.addEventListener("change", function () {
@@ -14311,30 +14456,31 @@ SW.shp = (function () {
         { label: "Add topography", primary: true, action: function () {
           topo.source = tSrc.value; topo.key = tKey.value.trim();
           saveDemPrefs({ source: topo.source, key: topo.key });
-          const st = { crs: crs, trace: cloneTrace(gt), correct: gt.mercator_correction !== false,
-                       topo: topo };
-          SW.view.status("Reading elevations from the DEM…");
-          readTopography(st).then(function (t) {
-            const line = SW.model.newLine("topography", t.verts, "imported");
-            line.name = "Topography — " + t.label;
-            let z0 = Infinity, z1 = -Infinity;
-            for (const q of t.verts) { z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
-            const redo = [{ op: "add_line", line: line }];
-            const undo = [{ op: "delete_line", id: line.id }];
-            // la sección debe llegar a la cota más alta
-            if (isFinite(z1) && z1 > sec.z_max) {
-              const step = Math.pow(10, Math.floor(Math.log10(Math.max(1, z1 - sec.z_min)))) / 2;
-              redo.push({ op: "set_section_props", props: { z_max: niceCeil(z1 + (z1 - z0) * 0.03, step) } });
-              undo.push({ op: "set_section_props", props: { z_max: sec.z_max } });
+          let useCrs = crs, useGt = gt;
+          if (fixable) {
+            let text;
+            if (cSel.value === "utm") {
+              const z = Math.round(+zInp.value);
+              if (!(z >= 1 && z <= 60)) { SW.view.status("UTM zone must be 1–60."); return false; }
+              text = S.utmWkt(z, hSel.value === "S");
+            } else if (cSel.value === "geo") text = S.epsgWkt(4326);
+            else text = wInp.value.trim();
+            useCrs = S.parsePrj(text);
+            if (!S.toLonLat(useCrs)) {
+              SW.view.status("That coordinate system is not supported (" +
+                S.crsLabel(useCrs) + ") — use UTM, Mercator or lon/lat.");
+              return false;
             }
-            SW.undo.push({ label: "Add topography", redo: redo, undo: undo });
-            if (SW.panels.imports) SW.panels.imports.render();
-            SW.view.requestDraw();
-            SW.view.status("Topography from " + t.label + " (" + t.verts.length +
-              " vertices" + (t.missing ? ", " + t.missing + " gaps skipped" : "") + ").");
-          }).catch(function (err) {
-            SW.view.status("No topography: " + (err && err.message ? err.message : err));
-          });
+            if (/^\s*(EPSG\s*:)?\s*\d+\s*$/i.test(text)) text = useCrs.text;
+            useGt = Object.assign({}, gt, { crs: text, crs_kind: useCrs.kind });
+            const P = S.makeProjector(useGt, useCrs, { correct: useGt.mercator_correction !== false });
+            useGt.length = P.length; useGt.azimuth = P.azimuth;
+            // fija el CRS de la traza (deshacible, aparte de la topografía)
+            SW.undo.push({ label: "Set trace coordinate system",
+              redo: [{ op: "set_geo_trace", trace: useGt }],
+              undo: [{ op: "set_geo_trace", trace: gt }] });
+          }
+          runTopography(useGt, useCrs, topo);
         } },
       ],
     });
@@ -14342,6 +14488,9 @@ SW.shp = (function () {
 
   SW.shp.project = project;
   SW.shp.symbolizer = symbolizer;
+  SW.shp.runTopography = runTopography;
+  SW.shp.demPrefs = demPrefs;
+  SW.shp.DEM_SOURCES = DEM_SOURCES;
 })();
 
 /* ==== js/io/shapefile_export.js ====
@@ -14378,7 +14527,7 @@ SW.actions = SW.actions || {};
 
   function crsOf(gt) {
     const c = S.parsePrj(gt.crs || "");
-    if (gt.crs_kind) c.kind = gt.crs_kind;
+    if (gt.crs_kind && c.kind === "unknown") c.kind = gt.crs_kind;
     return c;
   }
 
@@ -14635,6 +14784,719 @@ SW.actions = SW.actions || {};
   };
 
   SW.shpExport = { build: build, makeLocator: makeLocator, line3D: line3D };
+})();
+
+/* ==== js/panels/map_window.js ====
+ * Ventana de mapa: mapas base gratuitos de Esri (World Imagery, Topo,
+ * Street, relieve…) con la traza georreferenciada de la sección encima, y
+ * dibujo de una traza NUEVA de perfil con clics sobre el mapa.
+ *
+ * Es un visor de teselas propio (Web Mercator, 256 px) en un canvas —
+ * arrastrar mueve, la rueda o el pellizco acercan— para no traer Leaflet a
+ * una app de un solo archivo. Mientras una tesela carga se dibuja la de un
+ * nivel menos, ampliada, en vez de un hueco.
+ *
+ * La traza dibujada se guarda como sec.geo_trace: en el CRS de la traza que
+ * ya tenía la sección si se sabe convertir (así lo importado sigue en su
+ * lugar), si no en UTM WGS 84 del huso de su centro — metros, que es lo que
+ * MOVE espera al exportar con SHP 3D. Las líneas ya dibujadas conservan su
+ * distancia a lo largo del perfil. Sólo esta ventana y Topo salen a la red. */
+"use strict";
+window.SW = window.SW || {};
+SW.actions = SW.actions || {};
+
+SW.mapWindow = (function () {
+  const VIEW_KEY = "structuralsketcher.map.v1";
+  const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+  const BASEMAPS = [
+    { id: "imagery", label: "Esri World Imagery", path: "World_Imagery", max: 19,
+      attr: "Esri, Maxar, Earthstar Geographics, GIS User Community", labels: true },
+    { id: "topo", label: "Esri World Topo", path: "World_Topo_Map", max: 19,
+      attr: "Esri, HERE, Garmin, USGS, NGA, FAO, NPS, GIS User Community" },
+    { id: "street", label: "Esri World Street", path: "World_Street_Map", max: 19,
+      attr: "Esri, HERE, Garmin, USGS, OpenStreetMap contributors" },
+    { id: "natgeo", label: "Esri National Geographic", path: "NatGeo_World_Map", max: 16,
+      attr: "National Geographic, Esri, Garmin, HERE, UNEP-WCMC, USGS, NASA" },
+    { id: "relief", label: "Esri Shaded Relief", path: "World_Shaded_Relief", max: 13,
+      attr: "Esri, USGS, NOAA", labels: true },
+    { id: "terrain", label: "Esri World Terrain", path: "World_Terrain_Base", max: 13,
+      attr: "Esri, USGS, NOAA", labels: true },
+  ];
+  const LABELS = "Reference/World_Boundaries_and_Places";
+  const TS = 256;
+
+  const tiles = new Map();          // url -> {img, ok}
+  function tile(url, onload) {
+    let t = tiles.get(url);
+    if (t) return t;
+    t = { img: new Image(), ok: false };
+    t.img.crossOrigin = "anonymous";
+    t.img.onload = function () { t.ok = true; onload(); };
+    t.img.onerror = function () { t.failed = true; };
+    t.img.src = url;
+    tiles.set(url, t);
+    if (tiles.size > 800) tiles.delete(tiles.keys().next().value);
+    return t;
+  }
+  const urlOf = (path, z, x, y) => ESRI + path + "/MapServer/tile/" + z + "/" + y + "/" + x;
+
+  // lon/lat <-> mundo normalizado [0, 1]
+  function toW(lon, lat) {
+    const la = Math.max(-85.0511, Math.min(85.0511, lat)) * Math.PI / 180;
+    return [(lon + 180) / 360, (1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2];
+  }
+  function fromW(x, y) {
+    const n = Math.PI - 2 * Math.PI * y;
+    return [x * 360 - 180, 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))];
+  }
+  function geodesic(a, b) {        // m, haversine
+    const R = 6371008.8, r = Math.PI / 180;
+    const dLa = (b[1] - a[1]) * r, dLo = (b[0] - a[0]) * r;
+    const h = Math.sin(dLa / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dLo / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function loadView() {
+    try { return JSON.parse(window.localStorage.getItem(VIEW_KEY) || "null"); }
+    catch (e) { return null; }
+  }
+  function saveView(v) {
+    try { window.localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch (e) { /* nada */ }
+  }
+
+  /* traza de la sección en lon/lat (o null) */
+  function traceLonLat() {
+    const gt = SW.model.state.sec.geo_trace;
+    if (!gt) return null;
+    const S = SW.shp;
+    const crs = S.parsePrj(gt.crs || "");
+    if (gt.crs_kind && crs.kind === "unknown") crs.kind = gt.crs_kind;
+    const f = S.toLonLat(crs);
+    if (!f) return { unsupported: true, crs: crs };
+    const path = gt.path && gt.path.length >= 2 ? gt.path : [[gt.x0, gt.y0], [gt.x1, gt.y1]];
+    return { pts: path.map(p => f(+p[0], +p[1])), crs: crs };
+  }
+
+  function open() {
+    const U = SW.ui;
+    const sec = SW.model.state.sec;
+    const saved = loadView() || {};
+    const st = {
+      cx: 0.3, cy: 0.6, zoom: 4,
+      base: BASEMAPS.find(b => b.id === saved.base) ? saved.base : "imagery",
+      labels: saved.labels !== false,
+      drawing: false, draft: [], hover: null, cursor: null,
+    };
+    const existing = traceLonLat();
+    let cv, ctx, W = 0, H = 0, raf = 0, info, foot, drawBtn, applyBox;
+
+    function setView(lon, lat, z) {
+      const w = toW(lon, lat); st.cx = w[0]; st.cy = w[1]; st.zoom = z;
+    }
+    function fit(pts) {
+      if (!pts || !pts.length) return;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const p of pts) {
+        const w = toW(p[0], p[1]);
+        x0 = Math.min(x0, w[0]); x1 = Math.max(x1, w[0]);
+        y0 = Math.min(y0, w[1]); y1 = Math.max(y1, w[1]);
+      }
+      st.cx = (x0 + x1) / 2; st.cy = (y0 + y1) / 2;
+      const span = Math.max(x1 - x0, y1 - y0, 1e-7);
+      const px = Math.max(200, Math.min(W || 800, H || 500) * 0.7);
+      st.zoom = Math.max(1, Math.min(18, Math.log2(px / (span * TS))));
+    }
+    if (existing && existing.pts) st.pendingFit = existing.pts;
+    else if (isFinite(saved.cx)) { st.cx = saved.cx; st.cy = saved.cy; st.zoom = saved.zoom; }
+    else setView(-71.5, -35.5, 5);        // centro-sur de Chile
+
+    const scale = () => TS * Math.pow(2, st.zoom);
+    const toScreen = (w) => [(w[0] - st.cx) * scale() + W / 2, (w[1] - st.cy) * scale() + H / 2];
+    const toWorld = (x, y) => [st.cx + (x - W / 2) / scale(), st.cy + (y - H / 2) / scale()];
+
+    function request() { if (!raf) raf = requestAnimationFrame(draw); }
+
+    function drawLayer(path, maxZ) {
+      const tz = Math.max(0, Math.min(maxZ, Math.round(st.zoom)));
+      const n = Math.pow(2, tz), sz = scale() / n;
+      const a = toWorld(0, 0), b = toWorld(W, H);
+      const i0 = Math.floor(a[0] * n), i1 = Math.floor(b[0] * n);
+      const j0 = Math.max(0, Math.floor(a[1] * n)), j1 = Math.min(n - 1, Math.floor(b[1] * n));
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++) {
+          const xi = ((i % n) + n) % n;
+          const p = toScreen([i / n, j / n]);
+          const t = tile(urlOf(path, tz, xi, j), request);
+          if (t.ok) { ctx.drawImage(t.img, p[0], p[1], sz + 0.5, sz + 0.5); continue; }
+          // mientras carga: un antepasado ya cargado, recortado y ampliado
+          for (let up = 1; up <= 5 && tz - up >= 0; up++) {
+            const f = Math.pow(2, up);
+            const pt = tiles.get(urlOf(path, tz - up, Math.floor(xi / f), Math.floor(j / f)));
+            if (pt && pt.ok) {
+              const ss = TS / f;
+              ctx.drawImage(pt.img, (xi % f) * ss, (j % f) * ss, ss, ss, p[0], p[1], sz + 0.5, sz + 0.5);
+              break;
+            }
+          }
+        }
+    }
+
+    function poly(pts, color, width, dash) {
+      if (!pts || pts.length < 1) return;
+      ctx.save();
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath();
+      pts.forEach(function (p, i) {
+        const q = toScreen(toW(p[0], p[1]));
+        if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]);
+      });
+      ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = width + 3; ctx.setLineDash(dash || []);
+      ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = width;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (const p of pts) {
+        const q = toScreen(toW(p[0], p[1]));
+        ctx.beginPath(); ctx.arc(q[0], q[1], 3.5, 0, 2 * Math.PI);
+        ctx.fillStyle = color; ctx.fill();
+        ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.stroke();
+      }
+      ctx.restore();
+    }
+    function endLabel(p, text, color) {
+      const q = toScreen(toW(p[0], p[1]));
+      ctx.save();
+      ctx.font = "bold 13px system-ui, sans-serif";
+      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.8)";
+      ctx.strokeText(text, q[0] + 7, q[1] - 7);
+      ctx.fillStyle = color; ctx.fillText(text, q[0] + 7, q[1] - 7);
+      ctx.restore();
+    }
+
+    function draw() {
+      raf = 0;
+      if (!cv) return;
+      const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      if (Math.round(r.width * dpr) !== cv.width || Math.round(r.height * dpr) !== cv.height) {
+        cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+      }
+      W = r.width; H = r.height;
+      if (st.pendingFit && W > 0) { fit(st.pendingFit); st.pendingFit = null; }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = "#dfe6ea"; ctx.fillRect(0, 0, W, H);
+      const bm = BASEMAPS.find(b => b.id === st.base);
+      drawLayer(bm.path, bm.max);
+      if (st.labels) drawLayer(LABELS, 19);
+      if (existing && existing.pts) {
+        poly(existing.pts, "#ff3b30", 3);
+        const L = SW.model.state.sec;
+        endLabel(existing.pts[0], L.label_left || "A", "#ff3b30");
+        endLabel(existing.pts[existing.pts.length - 1], L.label_right || "B", "#ff3b30");
+      }
+      if (st.draft.length) {
+        const pts = st.drawing && st.hover ? st.draft.concat([st.hover]) : st.draft;
+        poly(pts, "#ffd60a", 2.5, st.drawing ? [7, 5] : null);
+        endLabel(st.draft[0], "start", "#ffd60a");
+      }
+      saveView({ cx: st.cx, cy: st.cy, zoom: st.zoom, base: st.base, labels: st.labels });
+      updateInfo();
+    }
+
+    function draftLength() {
+      let L = 0;
+      for (let i = 1; i < st.draft.length; i++) L += geodesic(st.draft[i - 1], st.draft[i]);
+      return L;
+    }
+    function updateInfo() {
+      if (!info) return;
+      const c = st.cursor ? "Cursor " + st.cursor[1].toFixed(5) + ", " + st.cursor[0].toFixed(5) : "";
+      let d = "";
+      if (st.draft.length >= 2) {
+        const a = st.draft[0], b = st.draft[st.draft.length - 1];
+        const w0 = toW(a[0], a[1]), w1 = toW(b[0], b[1]);
+        const az = (Math.atan2(w1[0] - w0[0], -(w1[1] - w0[1])) * 180 / Math.PI + 360) % 360;
+        d = " · New trace " + (draftLength() / 1000).toFixed(2) + " km, " + st.draft.length +
+            " points, azimuth " + az.toFixed(0) + "°";
+      } else if (st.drawing) d = " · Click on the map to place the start of the trace";
+      info.textContent = c + d;
+      if (applyBox) applyBox.style.display = !st.drawing && st.draft.length >= 2 ? "" : "none";
+    }
+
+    /* -- interacción --------------------------------------------------------- */
+    const ptrs = new Map();
+    let drag = null, pinch = null;
+    function onDown(e) {
+      cv.setPointerCapture(e.pointerId);
+      ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
+      if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), zoom: st.zoom };
+        drag = null;
+      } else drag = { x: e.offsetX, y: e.offsetY, cx: st.cx, cy: st.cy, moved: 0, t: Date.now() };
+    }
+    function onMove(e) {
+      st.cursor = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
+      if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
+      if (pinch && ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, pinch.zoom + Math.log2(d / pinch.d) - st.zoom);
+        return;
+      }
+      if (drag) {
+        const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y;
+        drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+        if (drag.moved > 4) {
+          st.cx = drag.cx - dx / scale(); st.cy = drag.cy - dy / scale();
+          cv.style.cursor = "grabbing";
+        }
+      }
+      st.hover = st.drawing ? st.cursor : null;
+      request();
+    }
+    function onUp(e) {
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2) pinch = null;
+      const d = drag;
+      drag = null;
+      cv.style.cursor = st.drawing ? "crosshair" : "grab";
+      if (d && d.moved <= 4 && st.drawing) {
+        const p = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
+        const last = st.draft[st.draft.length - 1];
+        // doble clic: el segundo clic cae sobre el mismo punto y termina
+        if (last && Date.now() - (st.lastClick || 0) < 350) { finishDraw(); return; }
+        st.lastClick = Date.now();
+        st.draft.push(p);
+        request();
+      }
+    }
+    function zoomAt(x, y, dz) {
+      const z = Math.max(1, Math.min(19, st.zoom + dz));
+      const before = toWorld(x, y);
+      st.zoom = z;
+      const after = toWorld(x, y);
+      st.cx += before[0] - after[0]; st.cy += before[1] - after[1];
+      request();
+    }
+    function onWheel(e) {
+      e.preventDefault();
+      zoomAt(e.offsetX, e.offsetY, -Math.sign(e.deltaY) * (e.ctrlKey ? 0.25 : 0.5));
+    }
+    function onKey(e) {
+      if (!st.drawing) return;
+      if (e.key === "Enter") { finishDraw(); e.preventDefault(); }
+      else if (e.key === "Backspace") { st.draft.pop(); request(); e.preventDefault(); }
+    }
+
+    function startDraw() {
+      st.drawing = true; st.draft = []; st.hover = null;
+      drawBtn.textContent = "Finish trace";
+      cv.style.cursor = "crosshair";
+      cv.focus();
+      request();
+    }
+    function finishDraw() {
+      st.drawing = false; st.hover = null;
+      // dos clics casi en el mismo punto no hacen un tramo
+      st.draft = st.draft.filter((p, i, a) => !i || geodesic(a[i - 1], p) > 0.5);
+      drawBtn.textContent = "Draw new trace";
+      cv.style.cursor = "grab";
+      if (st.draft.length < 2) {
+        st.draft = [];
+        SW.view.status("A trace needs at least two points.");
+      }
+      request();
+    }
+
+    /* -- aplicar la traza dibujada ------------------------------------------- */
+    function apply(opts) {
+      const S = SW.shp;
+      const pts = st.draft;
+      const gt0 = sec.geo_trace;
+      // CRS: el de la traza actual si se sabe convertir; si no, UTM del centro
+      let crs = null, text = "";
+      if (gt0) {
+        const c = S.parsePrj(gt0.crs || "");
+        if (gt0.crs_kind && c.kind === "unknown") c.kind = gt0.crs_kind;
+        if (S.fromLonLat(c) && S.toLonLat(c)) { crs = c; text = gt0.crs || ""; }
+      }
+      if (!crs) {
+        let lo = 0, la = 0;
+        for (const p of pts) { lo += p[0]; la += p[1]; }
+        lo /= pts.length; la /= pts.length;
+        const zone = Math.max(1, Math.min(60, Math.floor((lo + 180) / 6) + 1));
+        text = S.utmWkt(zone, la < 0);
+        crs = S.parsePrj(text);
+      }
+      const fwd = S.fromLonLat(crs);
+      const path = pts.map(p => fwd(p[0], p[1]));
+      const a = path[0], b = path[path.length - 1];
+      const gt = { x0: a[0], y0: a[1], x1: b[0], y1: b[1], crs: text, crs_kind: crs.kind,
+                   mercator_correction: true, length: 0, azimuth: 0,
+                   buffer_km: gt0 && gt0.buffer_km !== undefined ? gt0.buffer_km : 0,
+                   proj_az: null, origin: "map" };
+      if (path.length > 2) gt.path = path.map(p => [p[0], p[1]]);
+      const P = S.makeProjector(gt, crs, { correct: true });
+      gt.length = P.length; gt.azimuth = P.azimuth;
+      const redo = [{ op: "set_geo_trace", trace: gt }];
+      const undo = [{ op: "set_geo_trace", trace: gt0 || null }];
+      const props = {};
+      if (opts.length) props.length = Math.max(1, Math.round(gt.length));
+      if (opts.labels) {
+        props.label_left = S.compass(gt.azimuth + 180);
+        props.label_right = S.compass(gt.azimuth);
+      }
+      if (opts.name && !sec.lines.length && /^Untitled/.test(sec.name || ""))
+        props.name = "Section " + props.label_left + "–" + props.label_right;
+      if (Object.keys(props).length) {
+        const before = {};
+        for (const k of Object.keys(props)) before[k] = sec[k];
+        redo.push({ op: "set_section_props", props: props });
+        undo.push({ op: "set_section_props", props: before });
+      }
+      SW.undo.push({ label: "Section trace from map", redo: redo, undo: undo });
+      if (SW.panels.imports) SW.panels.imports.render();
+      if (SW.actions.refreshGeoButtons) SW.actions.refreshGeoButtons();
+      SW.view.zoomToExtent();
+      SW.view.requestDraw();
+      SW.view.status("Section trace set from the map: " + (gt.length / 1000).toFixed(2) +
+        " km, azimuth " + gt.azimuth.toFixed(0) + "° (" + S.crsLabel(crs) + ").");
+      if (opts.topo) {
+        const pr = S.demPrefs();
+        S.runTopography(gt, crs, { source: pr.source || "terrarium", key: pr.key || "" })
+          .then(ok => { if (ok) SW.view.zoomToExtent(); });
+      }
+    }
+
+    U.modal({
+      title: "Map — section traces",
+      wide: true,
+      onClose: function () {
+        cancelAnimationFrame(raf); raf = 0; cv = null;
+        window.removeEventListener("resize", request);
+      },
+      build: function (body, api) {
+        const box = api.overlay.querySelector(".modal");
+        box.style.width = "min(1180px, 100%)";
+        box.style.height = "100%";
+        body.style.cssText += "display:flex;flex-direction:column;gap:6px;flex:1;min-height:0;";
+        const bar = U.el("div");
+        bar.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
+        const bmSel = U.select(BASEMAPS.map(b => ({ value: b.id, label: b.label })), st.base);
+        bmSel.addEventListener("change", function () { st.base = bmSel.value; request(); });
+        bar.appendChild(bmSel);
+        const lab = U.el("label");
+        lab.style.cssText = "display:flex;gap:4px;align-items:center;font-size:12px;";
+        const lc = document.createElement("input");
+        lc.type = "checkbox"; lc.checked = st.labels;
+        lc.addEventListener("change", function () { st.labels = lc.checked; request(); });
+        lab.appendChild(lc); lab.appendChild(document.createTextNode("Place names"));
+        bar.appendChild(lab);
+        drawBtn = U.el("button", "primary", "Draw new trace");
+        drawBtn.title = "Click on the map to place the vertices (bends allowed); " +
+                        "double-click or Enter to finish, Backspace removes the last point";
+        drawBtn.addEventListener("click", function () { st.drawing ? finishDraw() : startDraw(); });
+        bar.appendChild(drawBtn);
+        const undoPt = U.el("button", "mini", "Undo point");
+        undoPt.addEventListener("click", function () { st.draft.pop(); request(); });
+        bar.appendChild(undoPt);
+        const clr = U.el("button", "mini", "Clear");
+        clr.addEventListener("click", function () {
+          st.draft = []; st.drawing = false; drawBtn.textContent = "Draw new trace";
+          cv.style.cursor = "grab"; request();
+        });
+        bar.appendChild(clr);
+        const zt = U.el("button", "mini", "Zoom to trace");
+        zt.title = "Zoom to the section trace (red) and the new one (yellow)";
+        zt.disabled = !(existing && existing.pts);
+        zt.addEventListener("click", function () {
+          fit((existing && existing.pts ? existing.pts : []).concat(st.draft)); request();
+        });
+        bar.appendChild(zt);
+        const go = U.textInput("");
+        go.placeholder = "Go to: lat, lon";
+        go.style.width = "150px";
+        go.addEventListener("keydown", function (e) {
+          if (e.key !== "Enter") return;
+          const m = /(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)/.exec(go.value);
+          if (!m) { SW.view.status("Type latitude, longitude (e.g. -36.83, -73.05)."); return; }
+          setView(+m[2], +m[1], Math.max(st.zoom, 11)); request();
+        });
+        bar.appendChild(go);
+        body.appendChild(bar);
+
+        const wrap = U.el("div");
+        wrap.style.cssText = "position:relative;flex:1;min-height:320px;border:1px solid " +
+          "var(--grid,#ccd);border-radius:6px;overflow:hidden;";
+        cv = document.createElement("canvas");
+        cv.tabIndex = 0;
+        cv.style.cssText = "width:100%;height:100%;display:block;cursor:grab;touch-action:none;outline:none;";
+        ctx = cv.getContext("2d");
+        wrap.appendChild(cv);
+        const attr = U.el("div");
+        attr.style.cssText = "position:absolute;right:0;bottom:0;font-size:10px;padding:1px 5px;" +
+          "background:rgba(255,255,255,.75);color:#333;pointer-events:none;max-width:70%;";
+        const setAttr = () => {
+          attr.textContent = "Tiles © Esri — " + BASEMAPS.find(b => b.id === st.base).attr;
+        };
+        setAttr();
+        bmSel.addEventListener("change", setAttr);
+        wrap.appendChild(attr);
+        body.appendChild(wrap);
+        info = U.el("div");
+        info.style.cssText = "font-size:11px;color:var(--ink-3);min-height:14px;";
+        body.appendChild(info);
+        if (existing && existing.unsupported)
+          U.note(body, "⚠ The section's trace is in a coordinate system the map " +
+            "can't place (" + SW.shp.crsLabel(existing.crs) + "). Set it with Topo, " +
+            "or draw a new trace here.");
+        else if (!existing)
+          U.note(body, "This section has no georeferenced trace yet. Draw one: " +
+            "it becomes the section's trace (UTM WGS 84), and Topo / SHP 3D " +
+            "light up.");
+
+        applyBox = U.el("div");
+        applyBox.style.cssText = "display:none;border-top:1px solid var(--grid,#dde);padding-top:6px;";
+        const opts = { length: true, labels: true, topo: true, name: true };
+        const chk = function (key, text, title) {
+          const l = U.el("label");
+          l.style.cssText = "display:inline-flex;gap:4px;align-items:center;margin-right:12px;font-size:12px;";
+          l.title = title;
+          const c = document.createElement("input");
+          c.type = "checkbox"; c.checked = opts[key];
+          c.addEventListener("change", () => { opts[key] = c.checked; });
+          l.appendChild(c); l.appendChild(document.createTextNode(text));
+          applyBox.appendChild(l);
+        };
+        chk("length", "Section length = trace", "Set the section's length to the trace's");
+        chk("labels", "End labels from azimuth", "Label the ends with compass directions");
+        chk("topo", "Add topography", "Sample the DEM (Topo's source) under the new trace");
+        const useBtn = U.el("button", "primary", "Use as section trace");
+        useBtn.title = (sec.geo_trace ? "Replaces the current trace (red). " : "") +
+          "Lines already drawn keep their distance along the section.";
+        useBtn.addEventListener("click", function () {
+          apply(opts);
+          api.close();
+        });
+        applyBox.appendChild(useBtn);
+        if (sec.geo_trace && (sec.lines || []).length)
+          applyBox.appendChild(U.el("div", null, "⚠ Replaces the current trace; " +
+            "what is drawn keeps its distances and is re-georeferenced on the new one."));
+        body.appendChild(applyBox);
+
+        cv.addEventListener("pointerdown", onDown);
+        cv.addEventListener("pointermove", onMove);
+        cv.addEventListener("pointerup", onUp);
+        cv.addEventListener("pointercancel", onUp);
+        cv.addEventListener("pointerleave", function () { st.hover = null; request(); });
+        cv.addEventListener("wheel", onWheel, { passive: false });
+        cv.addEventListener("keydown", onKey);
+        cv.addEventListener("dblclick", e => e.preventDefault());
+        window.addEventListener("resize", request);
+        setTimeout(request, 0);
+      },
+      buttons: [{ label: "Close" }],
+    });
+  }
+
+  SW.actions.openMap = open;
+  return { open: open, toW: toW, fromW: fromW };
+})();
+
+/* ==== js/panels/select_by.js ====
+ * "Select by": selecciona líneas (y dips) por tipo, unidad, color, nombre u
+ * origen — con varios valores a la vez, como selección nueva, sumada a la
+ * actual o dentro de ella. */
+"use strict";
+SW.selectBy = (function () {
+  const FIELDS = [
+    { id: "kind", label: "Type", dips: false },
+    { id: "unit", label: "Unit", dips: true },
+    { id: "color", label: "Color", dips: true },
+    { id: "name", label: "Name contains", dips: false },
+    { id: "origin", label: "Origin (drawn / imported)", dips: false },
+  ];
+
+  function hexOf(css) {
+    let m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(css || "");
+    if (m) return "#" + [m[1], m[2], m[3]].map(v => (+v).toString(16).padStart(2, "0")).join("");
+    m = /^#([0-9a-f]{6})$/i.exec(css || "");
+    return m ? "#" + m[1].toLowerCase() : String(css || "");
+  }
+
+  /* clave y etiqueta de un objeto para un campo */
+  function keyOf(field, o, isDip) {
+    const M = SW.model;
+    switch (field) {
+      case "kind": {
+        const k = o.kind || "sketch";
+        return [k, (M.KINDS[k] && M.KINDS[k].label) || k];
+      }
+      case "unit": {
+        const u = o.unit_id ? M.unitById(o.unit_id) : null;
+        return u ? [u.id, u.name || "Unit"] : ["", "(no unit)"];
+      }
+      case "color": {
+        const c = hexOf(isDip ? SW.render.dipColor(o) : SW.render.lineColor(o));
+        return [c, c];
+      }
+      case "origin": {
+        const g = o.origin || "digitized";
+        return [g, g === "imported" ? "Imported" : g === "digitized" ? "Drawn" : g];
+      }
+    }
+    return ["", ""];
+  }
+  function swatchOf(field, key) {
+    if (field === "color") return key;
+    if (field === "unit" && key) {
+      const u = SW.model.unitById(key);
+      return u && u.color ? "rgb(" + u.color.join(",") + ")" : null;
+    }
+    return null;
+  }
+
+  function open() {
+    const U = SW.ui, V = SW.view, sec = SW.model.state.sec;
+    const st = { field: "kind", picked: new Set(), text: "", mode: "new",
+                 hidden: false, dips: true };
+    let list, countEl, textRow, textInp, dipsRow;
+
+    function pool() {
+      const lines = (sec.lines || []).filter(l => st.hidden || l.visible !== false);
+      const f = FIELDS.find(x => x.id === st.field);
+      const dips = f.dips && st.dips ? (sec.dips || []) : [];
+      return { lines: lines, dips: dips };
+    }
+    function matches() {
+      const p = pool(), out = [];
+      if (st.field === "name") {
+        const q = st.text.trim().toLowerCase();
+        if (!q) return out;
+        for (const l of p.lines)
+          if (String(l.name || "").toLowerCase().indexOf(q) >= 0) out.push({ type: "line", id: l.id });
+        return out;
+      }
+      for (const l of p.lines)
+        if (st.picked.has(keyOf(st.field, l, false)[0])) out.push({ type: "line", id: l.id });
+      for (const d of p.dips)
+        if (st.picked.has(keyOf(st.field, d, true)[0])) out.push({ type: "dip", id: d.id });
+      return out;
+    }
+    function final() {
+      const m = matches();
+      const cur = V.state.selection || [];
+      const k = r => r.type + ":" + r.id;
+      if (st.mode === "add") {
+        const seen = new Set(cur.map(k));
+        return cur.concat(m.filter(r => !seen.has(k(r))));
+      }
+      if (st.mode === "within") {
+        const inM = new Set(m.map(k));
+        return cur.filter(r => inM.has(k(r)));
+      }
+      return m;
+    }
+    function refreshCount() {
+      const n = final().length;
+      countEl.textContent = n + " item" + (n === 1 ? "" : "s") + " will be selected.";
+    }
+    function renderValues() {
+      list.innerHTML = "";
+      st.picked.clear();
+      const isName = st.field === "name";
+      textRow.style.display = isName ? "" : "none";
+      list.style.display = isName ? "none" : "";
+      const f = FIELDS.find(x => x.id === st.field);
+      dipsRow.style.display = f.dips ? "" : "none";
+      if (isName) { refreshCount(); return; }
+      const p = pool(), groups = new Map();
+      const add = function (o, isDip) {
+        const kv = keyOf(st.field, o, isDip);
+        const g = groups.get(kv[0]) || { label: kv[1], lines: 0, dips: 0 };
+        if (isDip) g.dips++; else g.lines++;
+        groups.set(kv[0], g);
+      };
+      p.lines.forEach(l => add(l, false));
+      p.dips.forEach(d => add(d, true));
+      const keys = [...groups.keys()].sort((a, b) =>
+        groups.get(a).label.localeCompare(groups.get(b).label));
+      if (!keys.length) list.appendChild(U.el("div", null, "Nothing to select."));
+      for (const k of keys) {
+        const g = groups.get(k);
+        const row = U.el("label");
+        row.style.cssText = "display:flex;gap:6px;align-items:center;padding:2px 4px;cursor:pointer;";
+        const c = document.createElement("input");
+        c.type = "checkbox";
+        c.addEventListener("change", function () {
+          if (c.checked) st.picked.add(k); else st.picked.delete(k);
+          refreshCount();
+        });
+        row.appendChild(c);
+        const sw = swatchOf(st.field, k);
+        if (sw) {
+          const s = U.el("span");
+          s.style.cssText = "width:14px;height:14px;border-radius:3px;border:1px solid #0003;" +
+                            "flex:none;background:" + sw;
+          row.appendChild(s);
+        }
+        const t = U.el("span", null, g.label);
+        t.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere;";
+        row.appendChild(t);
+        const n = U.el("span", null, g.lines + (g.dips ? " + " + g.dips + " dips" : ""));
+        n.style.cssText = "color:var(--ink-3);font-size:11px;";
+        row.appendChild(n);
+        list.appendChild(row);
+      }
+      refreshCount();
+    }
+
+    U.modal({
+      title: "Select by",
+      build: function (body) {
+        const fSel = U.select(FIELDS.map(f => ({ value: f.id, label: f.label })), st.field);
+        fSel.addEventListener("change", function () { st.field = fSel.value; renderValues(); });
+        U.row(body, "Attribute", fSel, "");
+        textInp = U.textInput("");
+        textInp.placeholder = "e.g. Top K, fault…";
+        textInp.addEventListener("input", function () { st.text = textInp.value; refreshCount(); });
+        textRow = U.row(body, "Name contains", textInp, "Case-insensitive");
+        list = U.el("div");
+        list.style.cssText = "max-height:260px;overflow:auto;border:1px solid var(--grid,#dde);" +
+                             "border-radius:6px;padding:4px;margin:4px 0 8px;";
+        body.appendChild(list);
+        const mSel = U.select([
+          { value: "new", label: "New selection" },
+          { value: "add", label: "Add to the current selection" },
+          { value: "within", label: "Select within the current selection" }], st.mode);
+        mSel.addEventListener("change", function () { st.mode = mSel.value; refreshCount(); });
+        U.row(body, "Mode", mSel, "");
+        const hc = document.createElement("input");
+        hc.type = "checkbox"; hc.checked = st.hidden;
+        hc.addEventListener("change", function () { st.hidden = hc.checked; renderValues(); });
+        U.row(body, "Include hidden lines", hc, "");
+        const dc = document.createElement("input");
+        dc.type = "checkbox"; dc.checked = st.dips;
+        dc.addEventListener("change", function () { st.dips = dc.checked; renderValues(); });
+        dipsRow = U.row(body, "Include dips", dc, "Dip symbols with that unit or color");
+        countEl = U.note(body, "");
+        renderValues();
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Select", primary: true, action: function () {
+          const refs = final();
+          if (SW.tools && SW.tools.activeToolName && SW.tools.activeToolName() !== "select" &&
+              SW.tools.activeToolName() !== "lasso") SW.tools.activate("select");
+          V.setSelection(refs);
+          V.requestDraw();
+          V.status("Selected " + refs.length + " item(s).");
+        } },
+      ],
+    });
+  }
+
+  SW.actions.selectBy = open;
+  return { open: open };
 })();
 
 /* ==== js/tools/calibrate.js ==== */
@@ -23719,6 +24581,8 @@ SW.view = (function () {
     $("export-png").addEventListener("click", SW.exporter.exportPNG);
     $("add-topo-btn").addEventListener("click", () => SW.actions.addTopography());
     $("export-shp3d-btn").addEventListener("click", () => SW.actions.exportShapefile3D());
+    $("map-btn").addEventListener("click", () => SW.actions.openMap());
+    $("selectby-btn").addEventListener("click", () => SW.actions.selectBy());
     SW.actions.refreshGeoButtons();
 
     const dipClear = $("dip-clear");

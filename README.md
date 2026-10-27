@@ -400,3 +400,32 @@ is reopened).
   the trace's bends inserted so the 3D line stays in the section plane.
   Attributes: `NAME`, `TYPE`, `ID`, `COLORVAL` (hex). Unzip and open it in
   MOVE (or QGIS/ArcGIS). Dip symbols and reference layers are not exported.
+
+## Map window and profile traces
+
+**Map** (header) opens a map with free Esri basemaps — World Imagery, World
+Topo, World Street, National Geographic, Shaded Relief, World Terrain, with
+optional place names — and the section's georeferenced trace on top (red,
+with its end labels). **Draw new trace**: click the vertices (bends are
+fine), double-click or Enter to finish, Backspace / *Undo point* to step
+back; *Go to* takes "lat, lon". **Use as section trace** makes it the
+section's trace — in the CRS of the previous trace when it can be
+converted, otherwise UTM WGS 84 of its zone — and can also set the
+section length, the end labels from the azimuth and add the DEM topography.
+Lines already drawn keep their distance along the section. Needs the
+internet (tiles © Esri and its data providers).
+
+Coordinate systems read from a `.prj`: WKT1 (ESRI/OGC) and WKT2
+(`PROJCRS`/`GEOGCRS`, as written by recent QGIS/GDAL), a bare EPSG code
+(WGS 84, PSAD56 and SIRGAS UTM zones, Web Mercator) or a "UTM zone 19S"
+name. Geographic, Mercator and Transverse Mercator/UTM can be reprojected;
+if the trace's CRS still can't be read, **Topo** asks for it (UTM zone, a
+pasted `.prj`/EPSG code or lon/lat) and saves it with the trace.
+
+## Select by
+
+**Select by…** (tool rail, under the selection filter) selects lines — and
+dips, for unit and color — by **type**, **unit**, **color**, **name**
+(contains) or **origin** (drawn / imported). Tick one or several values;
+the selection can be new, added to the current one, or made within it.
+Hidden lines are left out unless asked.
