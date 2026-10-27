@@ -21,7 +21,7 @@ python3 -m http.server 8080   # then open http://localhost:8080
 Oriented for both desktop (mouse + keyboard) and tablet (touch + pencil):
 
 - **Header** — logo, document name, file (new/open/save/save as), image
-  import, section setup, SVG/PNG export, **Versions** (drop-down list of
+  import, data import (shapefile/SEG-Y), section setup, SVG/PNG export, **Versions** (drop-down list of
   saved snapshots), and toggles for the tool rail, side panels, fullscreen
   and settings.
 - **Second bar** — vertical exaggeration, zoom, zoom-to-extent, icon
@@ -61,6 +61,39 @@ collapses to icon-only buttons so it still fits in one row.
 Projects save as `.sketch.json` (Save / Save as…, Ctrl+S / Ctrl+Shift+S);
 `Open` loads one back. Dip data exports to CSV. The section exports as a
 vector SVG or a PNG image of the current view, including unit-polygon fills.
+
+### Importing georeferenced data
+
+**Import data** (header) or the **Imported data** panel — or drop the files
+on the canvas:
+
+- **Shapefiles**, 2D or 3D (PointZ, MultiPointZ, PolyLineZ, PolygonZ and
+  their M variants): select the `.shp` with its `.dbf` and `.prj` — several
+  layers at once — and optionally an ArcGIS `.lyr` for the symbology. Every
+  feature is projected square onto a **section trace** set on a map preview
+  (fitted automatically to the polylines/polygons of an exported section,
+  or drawn with Shift+drag, its ends dragged or typed): distance along the
+  trace becomes the section's horizontal axis and Z (or a numeric attribute
+  such as depth) its elevation. A max-distance swath filters scattered
+  data (e.g. a seismic catalogue); with a Mercator or geographic `.prj`
+  distances are corrected for the scale factor so they are true metres, in
+  the same scale as Z. Polylines become editable lines (horizon, fault,
+  topography… by name or by choice); points and polygons become reference
+  layers drawn under the lines, with size, opacity and per-class colours in
+  the Imported data panel. Points with `dip` and `azimuth` (dip direction)
+  fields can also become dip symbols with the apparent dip in the section.
+  The trace is stored with the section, so later imports share its
+  distances.
+- **Symbology**: unique-value classes of a `.lyr` (e.g. MOVE's
+  `MoveSymbologyForESRI.lyr` on the `Type` field) are read from the file's
+  serialized ArcObjects (colours, marker sizes); without one, MOVE's
+  `colorval` attribute colours each feature.
+- **SEG-Y** (`.sgy`/`.segy`, rev 0/1/2, big- or little-endian, IBM/IEEE
+  float, int32/int16/int8 samples) becomes an image of the section with the
+  StructuralWorks palettes, clip and gain. Trace spacing comes from the
+  trace-header coordinates; if the section has a trace, the line can be
+  placed on it by those coordinates. The vertical axis is two-way time,
+  depth converted with a constant velocity, or depth.
 
 ## Structural algorithms
 
