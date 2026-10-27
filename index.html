@@ -1188,7 +1188,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.22.0",
+  version: "0.23.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1200,6 +1200,13 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.23.0", date: "2026-10-27", highlights: [
+      "Shapefile import: \"Add topography (DEM)\" plots the ground surface " +
+        "under the section trace as an editable Topography line, as in " +
+        "FieldDraw — Terrarium tiles (Mapzen/AWS, no key) or Copernicus " +
+        "GLO-30 / SRTM through OpenTopography (free API key). Optional; the " +
+        "rest of the app stays offline.",
+    ] },
     { version: "0.22.0", date: "2026-10-27", highlights: [
       "Google account and Drive (as in GISDraw): sign in with Google and " +
         "open, import and save projects in Google Drive through its API. " +
@@ -13388,6 +13395,8 @@ SW.shp = (function () {
       drawMode: false, labels: ["A", "B"], layer: {},
       proj_az: sec.geo_trace && isFinite(sec.geo_trace.proj_az)
         ? sec.geo_trace.proj_az : null,
+      topo: { on: false, source: demPrefs().source || "terrarium",
+              key: demPrefs().key || "" },
     };
     st.shape = st.trace && st.trace.path ? "path" : "straight";
     let total = 0;
@@ -13698,6 +13707,39 @@ SW.shp = (function () {
         U.row(body, "End labels from azimuth", sl,
               "Label the section ends with the trace's compass directions.");
 
+        // topografía desde un DEM libre
+        const tp = document.createElement("input");
+        tp.type = "checkbox"; tp.checked = st.topo.on;
+        const tSrc = U.select(DEM_SOURCES.map(d => ({ value: d.id, label: d.label })),
+                              st.topo.source);
+        const tKey = U.textInput(st.topo.key);
+        tKey.placeholder = "OpenTopography API key";
+        tKey.autocomplete = "off";
+        const syncTopo = function () {
+          tSrc.disabled = !st.topo.on;
+          tKeyRow.style.display = st.topo.on && st.topo.source !== "terrarium" ? "" : "none";
+        };
+        tp.addEventListener("change", function () { st.topo.on = tp.checked; syncTopo(); });
+        tSrc.addEventListener("change", function () {
+          st.topo.source = tSrc.value; saveDemPrefs({ source: tSrc.value }); syncTopo();
+        });
+        tKey.addEventListener("change", function () {
+          st.topo.key = tKey.value.trim(); saveDemPrefs({ key: st.topo.key });
+        });
+        U.row(body, "Add topography (DEM)", tp,
+              "Plot the ground surface under the trace as an editable " +
+              "Topography line, sampled from a free global DEM — as in " +
+              "FieldDraw. Needs the internet and a trace with a known " +
+              "coordinate system (.prj). Elevations are in metres.");
+        U.row(body, "DEM source", tSrc,
+              "Terrarium: Mapzen/AWS Terrain tiles, public domain, no key. " +
+              "Copernicus GLO-30 / SRTM: through OpenTopography, with a free " +
+              "API key (portal.opentopography.org/myopentopo).");
+        const tKeyRow = U.row(body, "OpenTopography key", tKey,
+              "Free key from portal.opentopography.org/myopentopo. Stored " +
+              "only in this browser.");
+        syncTopo();
+
         summary = U.note(body, "");
         refreshStats(true);
       },
@@ -13713,6 +13755,17 @@ SW.shp = (function () {
   }
 
   function doImport(layers, lyrs, st) {
+    if (!st.topo || !st.topo.on) { finishImport(layers, lyrs, st, null, ""); return; }
+    SW.view.status("Reading elevations from the DEM…");
+    readTopography(st).then(function (topo) {
+      finishImport(layers, lyrs, st, topo, "");
+    }).catch(function (err) {
+      finishImport(layers, lyrs, st, null, "  ⚠ No topography: " +
+                   (err && err.message ? err.message : err));
+    });
+  }
+
+  function finishImport(layers, lyrs, st, topo, topoWarn) {
     let r;
     try { r = project(layers, lyrs, st, false); }
     catch (err) {
@@ -13720,11 +13773,20 @@ SW.shp = (function () {
       return;
     }
     const sec = SW.model.state.sec;
-    const nothing = !r.lines.length && !r.overlays.length && !r.dips.length;
+    const nothing = !r.lines.length && !r.overlays.length && !r.dips.length && !topo;
     if (nothing) {
       SW.view.status("Nothing fell within the max distance of the trace — " +
-                     "widen it or move the trace.");
+                     "widen it or move the trace." + topoWarn);
       return;
+    }
+    if (topo) {
+      const tl = SW.model.newLine("topography", topo.verts, "imported");
+      tl.name = "Topography — " + topo.label;
+      r.lines.push(tl);
+      for (const q of topo.verts) {
+        if (q[1] < r.z0) r.z0 = q[1];
+        if (q[1] > r.z1) r.z1 = q[1];
+      }
     }
     const redo = [], undo = [];
     const trace = { x0: st.trace.x0, y0: st.trace.y0, x1: st.trace.x1,
@@ -13770,6 +13832,9 @@ SW.shp = (function () {
       r.lines.length + " lines, " + c.polygons + " polygons" +
       (r.dips.length ? ", " + r.dips.length + " dips" : "") + " along a " +
       (st.proj.length / 1000).toFixed(2) + " km trace." +
+      (topo ? "  Topography from " + topo.label + " (" + topo.verts.length +
+        " vertices" + (topo.missing ? ", " + topo.missing + " gaps skipped" : "") + ")." : "") +
+      topoWarn +
       (r.truncated ? "  ⚠ Capped at " + MAX_POINTS.toLocaleString() +
         " points — narrow the max distance for the rest." : ""));
   }
@@ -13822,6 +13887,210 @@ SW.shp = (function () {
     });
     inp.click();
   };
+
+
+  /* -- topografía desde un DEM libre ----------------------------------------
+   * Igual que en FieldDraw: teselas Terrarium (Mapzen / AWS, dominio público,
+   * CORS abierto, ~30 m) o Copernicus GLO-30 (COP30) por la API de
+   * OpenTopography (ASCII grid; pide una clave gratuita). La traza se
+   * muestrea en lon/lat, cada muestra se proyecta con el mismo proyector de
+   * la importación para obtener su s, y la cota pasa a ser una línea
+   * "topography" editable. Es lo único de la app que sale a la red, y sólo
+   * cuando se pide. */
+  const DEM_KEY = "structuralsketcher.dem.v1";
+  const TERRARIUM_URL =
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+  const OPENTOPO_URL = "https://portal.opentopography.org/API/globaldem";
+  const DEM_SOURCES = [
+    { id: "terrarium", label: "Terrarium (Mapzen / AWS, ~30 m)", nominal: 30 },
+    { id: "COP30", label: "Copernicus GLO-30 (OpenTopography, key)", nominal: 30 },
+    { id: "SRTMGL1", label: "SRTM GL1 (OpenTopography, key)", nominal: 30 },
+  ];
+  const r1 = v => Math.round(v * 10) / 10;
+  function demPrefs() {
+    try { return JSON.parse(window.localStorage.getItem(DEM_KEY) || "{}") || {}; }
+    catch (e) { return {}; }
+  }
+  function saveDemPrefs(p) {
+    try {
+      window.localStorage.setItem(DEM_KEY, JSON.stringify(Object.assign(demPrefs(), p)));
+    } catch (e) { /* sin persistencia: la sesión igual funciona */ }
+  }
+  function withTimeout(promise, ms, msg) {
+    let t;
+    return Promise.race([promise, new Promise((_, rej) => {
+      t = setTimeout(() => rej(new Error(msg)), ms);
+    })]).finally(() => clearTimeout(t));
+  }
+
+  function terrariumSampler(zoom) {
+    const tiles = new Map();
+    function load(z, x, y) {
+      const k = z + "/" + x + "/" + y;
+      if (tiles.has(k)) return tiles.get(k);
+      const pr = new Promise(function (resolve) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        const to = setTimeout(function () { img.src = ""; resolve(null); }, 12000);
+        img.onload = function () {
+          clearTimeout(to);
+          try {
+            const cv = document.createElement("canvas");
+            cv.width = cv.height = 256;
+            const cx = cv.getContext("2d", { willReadFrequently: true });
+            cx.drawImage(img, 0, 0, 256, 256);
+            const d = cx.getImageData(0, 0, 256, 256).data;
+            const out = new Float32Array(65536);
+            for (let i = 0, j = 0; i < d.length; i += 4, j++)
+              out[j] = d[i] * 256 + d[i + 1] + d[i + 2] / 256 - 32768;
+            resolve(out);
+          } catch (e) { resolve(null); }
+        };
+        img.onerror = function () { clearTimeout(to); resolve(null); };
+        img.src = TERRARIUM_URL.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+      });
+      tiles.set(k, pr);
+      return pr;
+    }
+    return {
+      prepare: function () { return Promise.resolve(); },
+      at: async function (lng, lat) {
+        const n = Math.pow(2, zoom);
+        const la = Math.max(-85.05, Math.min(85.05, lat)) * Math.PI / 180;
+        const fx = (lng + 180) / 360 * n;
+        const fy = (1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2 * n;
+        const x = Math.floor(fx), y = Math.floor(fy);
+        const t = await load(zoom, ((x % n) + n) % n, Math.min(Math.max(y, 0), n - 1));
+        if (!t) return null;
+        const px = Math.min(255, Math.max(0, Math.floor((fx - x) * 256)));
+        const py = Math.min(255, Math.max(0, Math.floor((fy - y) * 256)));
+        const v = t[py * 256 + px];
+        return isFinite(v) && v > -12000 ? v : null;
+      },
+    };
+  }
+
+  /* ASCII grid de ESRI → {ncols, nrows, xll, yll, cell, data} (fila 0 = norte) */
+  function parseAAIGrid(text) {
+    const tk = String(text).trim().split(/\s+/);
+    const KEYS = ["ncols", "nrows", "xllcorner", "yllcorner", "xllcenter",
+                  "yllcenter", "cellsize", "dx", "dy", "nodata_value"];
+    const h = {};
+    let i = 0;
+    while (i + 1 < tk.length && KEYS.indexOf(tk[i].toLowerCase()) >= 0) {
+      h[tk[i].toLowerCase()] = Number(tk[i + 1]); i += 2;
+    }
+    const cell = isFinite(h.cellsize) ? h.cellsize : h.dx;
+    if (!(h.ncols > 0) || !(h.nrows > 0) || !(cell > 0))
+      throw new Error("OpenTopography returned an unreadable grid.");
+    const xll = isFinite(h.xllcorner) ? h.xllcorner : h.xllcenter - cell / 2;
+    const yll = isFinite(h.yllcorner) ? h.yllcorner : h.yllcenter - cell / 2;
+    const nod = isFinite(h.nodata_value) ? h.nodata_value : -9999;
+    const data = new Float32Array(h.ncols * h.nrows);
+    for (let k = 0; k < data.length; k++) {
+      const v = Number(tk[i + k]);
+      data[k] = isFinite(v) && v !== nod ? v : NaN;
+    }
+    return { ncols: h.ncols, nrows: h.nrows, xll: xll, yll: yll, cell: cell, data: data };
+  }
+  function sampleGrid(g, lng, lat) {
+    const fx = (lng - g.xll) / g.cell - 0.5;
+    const fy = (g.yll + g.nrows * g.cell - lat) / g.cell - 0.5;
+    if (fx < -0.5 || fy < -0.5 || fx > g.ncols - 0.5 || fy > g.nrows - 0.5) return null;
+    const x0 = Math.min(g.ncols - 1, Math.max(0, Math.floor(fx)));
+    const y0 = Math.min(g.nrows - 1, Math.max(0, Math.floor(fy)));
+    const x1 = Math.min(g.ncols - 1, x0 + 1), y1 = Math.min(g.nrows - 1, y0 + 1);
+    const tx = Math.min(1, Math.max(0, fx - x0)), ty = Math.min(1, Math.max(0, fy - y0));
+    const a = g.data[y0 * g.ncols + x0], b = g.data[y0 * g.ncols + x1];
+    const c = g.data[y1 * g.ncols + x0], d = g.data[y1 * g.ncols + x1];
+    if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return null;
+    return a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
+  }
+  function openTopoSampler(demtype, key, lonlat) {
+    let grid = null;
+    return {
+      prepare: async function () {
+        if (!key) throw new Error("OpenTopography needs a free API key " +
+          "(portal.opentopography.org/myopentopo).");
+        let w = Infinity, e = -Infinity, s = Infinity, n = -Infinity;
+        for (const p of lonlat) {
+          w = Math.min(w, p[0]); e = Math.max(e, p[0]);
+          s = Math.min(s, p[1]); n = Math.max(n, p[1]);
+        }
+        const pad = 0.005;
+        const u = new URL(OPENTOPO_URL);
+        u.searchParams.set("demtype", demtype);
+        u.searchParams.set("south", Math.max(-90, s - pad));
+        u.searchParams.set("north", Math.min(90, n + pad));
+        u.searchParams.set("west", Math.max(-180, w - pad));
+        u.searchParams.set("east", Math.min(180, e + pad));
+        u.searchParams.set("outputFormat", "AAIGrid");
+        u.searchParams.set("API_Key", key);
+        let res;
+        try {
+          res = await withTimeout(fetch(u.toString()), 45000,
+            "OpenTopography did not answer in 45 s — use Terrarium instead.");
+        } catch (err) {
+          throw new Error(err.message && /OpenTopography/.test(err.message)
+            ? err.message : "Could not reach OpenTopography: " + err.message);
+        }
+        if (!res.ok)
+          throw new Error(res.status === 401 ? "OpenTopography rejected the API key (401)."
+            : res.status === 429 ? "OpenTopography quota exceeded (429)."
+            : "OpenTopography answered HTTP " + res.status + ".");
+        grid = parseAAIGrid(await res.text());
+      },
+      at: async function (lng, lat) { return grid ? sampleGrid(grid, lng, lat) : null; },
+    };
+  }
+
+  /* Perfil de cotas bajo la traza de la importación → [[s, z], …] */
+  async function readTopography(st) {
+    const toLL = S.toLonLat(st.crs);
+    if (!toLL) throw new Error("the trace's coordinate system is unknown, so " +
+      "it can't be placed on the map — add a .prj");
+    const t = st.trace;
+    const path = t.path && t.path.length >= 2 ? t.path : [[t.x0, t.y0], [t.x1, t.y1]];
+    // s de un punto SOBRE la traza: perpendicular, sin azimut oblicuo
+    const flat = Object.assign({}, t, { proj_az: null });
+    const P = S.makeProjector(flat, st.crs, { correct: st.correct });
+    const L = P.length;
+    const n = Math.max(40, Math.min(700, Math.ceil(L / 30)));
+    // longitud en el plano de cada tramo, para repartir las muestras parejo
+    const seg = [];
+    let tot = 0;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const d = Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]);
+      seg.push(d); tot += d;
+    }
+    if (!(tot > 0)) throw new Error("the trace has no length");
+    const pts = [];
+    for (let k = 0; k < n; k++) {
+      let f = k / (n - 1) * tot, i = 0;
+      while (i < seg.length - 1 && f > seg[i]) { f -= seg[i]; i++; }
+      const u = seg[i] > 0 ? Math.min(1, f / seg[i]) : 0;
+      const x = path[i][0] + (path[i + 1][0] - path[i][0]) * u;
+      const y = path[i][1] + (path[i + 1][1] - path[i][1]) * u;
+      pts.push({ ll: toLL(x, y), s: P.project(x, y)[0] });
+    }
+    const src = st.topo.source;
+    const sampler = src === "terrarium"
+      ? terrariumSampler(L / n > 30 ? 12 : 13)
+      : openTopoSampler(src, (st.topo.key || "").trim(), pts.map(p => p.ll));
+    await sampler.prepare();
+    const zs = await Promise.all(pts.map(p => sampler.at(p.ll[0], p.ll[1])));
+    const verts = [];
+    let missing = 0;
+    pts.forEach(function (p, i) {
+      if (zs[i] === null || !isFinite(zs[i])) { missing++; return; }
+      verts.push([r1(p.s), r1(zs[i])]);
+    });
+    if (verts.length < 2)
+      throw new Error("the DEM has no elevations along the trace" +
+        (src === "terrarium" ? " (no signal, or outside coverage)" : ""));
+    const info = DEM_SOURCES.find(d => d.id === src);
+    return { verts: verts, missing: missing, label: info ? info.label : src };
+  }
 
   SW.shp.project = project;
   SW.shp.symbolizer = symbolizer;

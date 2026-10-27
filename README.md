@@ -9,8 +9,8 @@ measure, split, extend, transform and export the section.
 ## Running it
 
 Single self-contained `index.html` — no build step, no dependencies, no
-network access except the optional Google Drive feature (below), which
-loads Google's sign-in and picker scripts only once it is set up. Open it directly from disk (double-click) or
+network access except two optional features: Google Drive (below), which
+loads Google's sign-in and picker scripts only once it is set up, and the DEM topography of the shapefile import (below). Open it directly from disk (double-click) or
 serve it with any static file server:
 
 ```bash
@@ -354,3 +354,18 @@ carries the earlier ones.
 **Follow line** (fault lines, Properties panel or context menu): where the
 fault crosses — or, extended, reaches — another line, it continues along
 that line up to its end.
+
+## Topography from a free DEM (shapefile import)
+
+In the shapefile import dialog, **Add topography (DEM)** samples the ground
+surface along the section trace and adds it as an editable *Topography*
+line (distances share the trace's scale, elevations in metres). Sources, as
+in FieldDraw:
+
+- **Terrarium** (Mapzen / AWS Open Data, ~30 m, no key) — the default.
+- **Copernicus GLO-30** or **SRTM GL1** through OpenTopography — needs a
+  free API key (portal.opentopography.org/myopentopo), kept only in the
+  browser.
+
+The trace needs a known coordinate system (a `.prj`, or coordinates that
+are plain lon/lat). Only this option goes online.
