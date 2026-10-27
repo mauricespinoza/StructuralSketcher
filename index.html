@@ -740,7 +740,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
     <button id="export-svg" title="Export view as SVG"><svg class="ic"><use href="#i-export-img"/></svg>SVG</button>
     <button id="export-png" title="Export view as PNG"><svg class="ic"><use href="#i-export-img"/></svg>PNG</button>
     <button id="add-topo-btn" disabled title="Add topography from a free DEM (Terrarium / Copernicus GLO-30) under the section trace. Available once the section is georeferenced: a 3D shapefile or a SEG-Y with coordinates has been imported."><svg class="ic"><use href="#i-add-topo"/></svg>Topo</button>
-    <button id="export-shp3d-btn" disabled title="Export the drawn lines as 3D shapefiles (PolyLineZ, one per type, zipped with .prj) that MOVE can open. Available once the section is georeferenced: a 3D shapefile or a SEG-Y with coordinates has been imported."><svg class="ic"><use href="#i-export-img"/></svg>SHP 3D</button>
+    <button id="export-shp3d-btn" disabled title="Export the drawn lines as 3D shapefiles (PolyLineZ, one per type, zipped with .prj). Available once the section is georeferenced: a 3D shapefile or a SEG-Y with coordinates has been imported."><svg class="ic"><use href="#i-export-img"/></svg>SHP 3D</button>
   </div>
   <span class="sep"></span>
   <div class="versions-wrap">
@@ -1193,7 +1193,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.25.1",
+  version: "0.27.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1219,11 +1219,11 @@ SW.APP = {
         "Topo lets you set the trace's coordinate system when it still " +
         "can't be read.",
     ] },
-    { version: "0.27.0", date: "2026-10-27", highlights: [
+    { version: "0.26.0", date: "2026-10-27", highlights: [
       "Header: Topo (add topography from a DEM) now sits next to the SVG / " +
         "PNG exports, and a new SHP 3D button exports the drawn lines as 3D " +
-        "shapefiles (PolyLineZ, one per line type, zipped with .prj) that " +
-        "MOVE opens. Both light up only when the section is georeferenced — " +
+        "shapefiles (PolyLineZ, one per line type, zipped with .prj). Both " +
+        "light up only when the section is georeferenced — " +
         "a 3D shapefile or a SEG-Y with coordinates has been imported.",
       "SEG-Y with header coordinates and no trace yet: new placement " +
         "\"Georeference from header coordinates\" creates the section trace " +
@@ -1236,7 +1236,7 @@ SW.APP = {
         "out-of-date section; pending changes are also saved when the app " +
         "goes to the background or closes (iPad included).",
     ] },
-    { version: "0.26.0", date: "2026-10-27", highlights: [
+    { version: "0.25.0", date: "2026-10-27", highlights: [
       "Imported data panel: \"Add topography…\" plots the ground surface " +
         "(Terrarium or Copernicus GLO-30 / SRTM) under the trace of an " +
         "already imported shapefile, without importing it again.",
@@ -14779,7 +14779,7 @@ SW.actions = SW.actions || {};
       SW.view.status("Exported 3D shapefiles (" + Object.keys(r.counts)
         .map(k => r.counts[k] + " " + k).join(", ") + ") as .zip" +
         (r.crsKnown ? "." : " — ⚠ the trace has no .prj: coordinates are in the " +
-          "SEG-Y/shapefile's own system, set it when opening in MOVE."));
+          "SEG-Y/shapefile's own system, set it when opening the files."));
     });
   };
 
