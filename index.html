@@ -1162,7 +1162,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.19.0",
+  version: "0.20.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1174,6 +1174,11 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.20.0", date: "2026-10-27", highlights: [
+      "Copy, cut and paste (Ctrl+C / Ctrl+X / Ctrl+V, ⌘ on Mac) of the " +
+        "selected lines and dips through the system clipboard — also " +
+        "between tabs and projects; one undo per paste, units kept.",
+    ] },
     { version: "0.19.0", date: "2026-10-27", highlights: [
       "Drag tool (J), as in GISDraw: pull a vertex and its neighbours " +
         "follow smoothly along the line (reach %, [ and ]), coincident " +
@@ -8445,6 +8450,8 @@ window.SW = window.SW || {};
     if (dips.length) items.push({ sep: true }, kinkItem(dips));
     items.push(
       { sep: true },
+      { label: "Copy (Ctrl+C)", action: () => SW.actions.copySelection() },
+      { label: "Paste (Ctrl+V)", action: () => SW.actions.pasteClipboard() },
       { label: "Duplicate" + n, action: () => SW.actions.duplicateSelected() },
       { label: "Delete" + (dips.length ? " selection" : "") +
                (multi || dips.length ? " (" + (group.length + dips.length) + ")" : ""),
@@ -9987,6 +9994,175 @@ window.SW = window.SW || {};
     SW.view.status("Duplicated " + lines.length +
                    " line(s). Drag to move them.");
     SW.view.requestDraw();
+  };
+})();
+
+/* ==== js/clipboard.js ====
+ * Copiar / cortar / pegar (Ctrl+C, Ctrl+X, Ctrl+V; ⌘ en Mac) de la
+ * selección: líneas (con su estilo, simbología de falla y unidad) y dips.
+ *
+ * Se usa el portapapeles del sistema por los eventos nativos copy/cut/paste
+ * — no la API asíncrona, que pide permiso — con un JSON marcado, así lo
+ * copiado se puede pegar en otra pestaña u otro proyecto. Si el foco está
+ * en un campo de texto, en un diálogo o hay texto seleccionado en la
+ * página, los atajos hacen lo de siempre.
+ *
+ * Pegar deja las copias en las MISMAS coordenadas de sección (útil entre
+ * proyectos con la misma traza); pegar de nuevo lo copiado en este mismo
+ * documento las corre un poco cada vez para que no queden tapando al
+ * original. Todo lo pegado es un solo paso de undo y queda seleccionado. */
+"use strict";
+
+window.SW = window.SW || {};
+SW.actions = SW.actions || {};
+
+(function () {
+  const MARK = "StructuralSketcher/clipboard";
+  let lastText = null;     // lo último que copiamos nosotros
+  let pasteCount = 0;      // pegadas seguidas de ese mismo contenido
+
+  function editableTarget(t) {
+    return t && (/INPUT|SELECT|TEXTAREA/.test(t.tagName) || t.isContentEditable);
+  }
+  function blocked(e) {
+    if (editableTarget(e.target) || editableTarget(document.activeElement)) return true;
+    if (SW.ui && SW.ui.isOpen && SW.ui.isOpen()) return true;
+    if (SW.settings && SW.settings.isOpen && SW.settings.isOpen()) return true;
+    const s = window.getSelection && window.getSelection();
+    return !!(s && !s.isCollapsed && String(s).trim());
+  }
+
+  function payload() {
+    const lines = SW.view.selectedLines();
+    const dips = SW.view.selectedDips ? SW.view.selectedDips() : [];
+    if (!lines.length && !dips.length) return null;
+    return { app: MARK, version: 1, lines: SW.model.clone(lines),
+             dips: SW.model.clone(dips) };
+  }
+
+  function copy(cut) {
+    const data = payload();
+    if (!data) return null;
+    const text = JSON.stringify(data);
+    lastText = text; pasteCount = 0;
+    const n = data.lines.length + data.dips.length;
+    if (cut) SW.actions.deleteSelected();
+    SW.view.status((cut ? "Cut " : "Copied ") + describe(data) +
+                   (cut ? "" : " — Ctrl+V to paste.") );
+    return n ? text : null;
+  }
+
+  function describe(d) {
+    const p = [];
+    if (d.lines.length) p.push(d.lines.length + " line" + (d.lines.length > 1 ? "s" : ""));
+    if (d.dips.length) p.push(d.dips.length + " dip" + (d.dips.length > 1 ? "s" : ""));
+    return p.join(" and ");
+  }
+
+  function paste(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { return false; }
+    if (!data || data.app !== MARK) return false;
+    const sec = SW.model.state.sec;
+    if (text === lastText) pasteCount++; else { lastText = text; pasteCount = 1; }
+    // pegar en el mismo documento: corrido para no tapar al original
+    const own = (data.lines || []).some(l => SW.model.getLine(l.id)) ||
+                (data.dips || []).some(d => SW.model.getDip(d.id));
+    const k = own ? pasteCount : pasteCount - 1;
+    const offS = SW.view.tolS(14) * k;
+    const offZ = offS / Math.max(0.05, SW.view.state.ve || 1);
+    const unitOk = id => id && SW.model.unitById(id) ? id : null;
+    let highest = 0;
+    for (const line of sec.lines || []) {
+      const m = /^L(\d+)\b/.exec(line.name || "");
+      if (m) highest = Math.max(highest, +m[1]);
+    }
+    const redo = [], undo = [], refs = [];
+    (data.lines || []).forEach(function (l) {
+      if (!l || !(l.vertices || []).length) return;
+      const nl = SW.model.clone(l);
+      nl.id = SW.model.genId();
+      nl.vertices = l.vertices.map(v => [+v[0] + offS, +v[1] + offZ]);
+      nl.locked = false; nl.visible = true;
+      nl.origin = "pasted";
+      nl.unit_id = unitOk(l.unit_id);
+      // nombre propio si era automático (L7 Horizon → L12 Horizon); un
+      // nombre puesto a mano se conserva
+      if (/^L\d+\b/.test(l.name || "") || !l.name) {
+        const kind = String(l.kind || "sketch");
+        nl.name = "L" + (++highest) + " " + kind.charAt(0).toUpperCase() + kind.slice(1);
+      }
+      redo.push({ op: "add_line", line: nl });
+      undo.unshift({ op: "delete_line", id: nl.id });
+      refs.push({ type: "line", id: nl.id });
+    });
+    (data.dips || []).forEach(function (d) {
+      if (!d || !isFinite(d.s) || !isFinite(d.z)) return;
+      const nd = SW.model.clone(d);
+      nd.id = SW.model.genId();
+      nd.s = +d.s + offS; nd.z = +d.z + offZ;
+      nd.unit_id = unitOk(d.unit_id);
+      redo.push({ op: "add_dip", dip: nd });
+      undo.unshift({ op: "delete_dip", id: nd.id });
+      refs.push({ type: "dip", id: nd.id });
+    });
+    if (!redo.length) return false;
+    // la pertenencia a una unidad vive del otro lado (horizons[].line_ids):
+    // las copias de una línea con unidad entran también a esa unidad
+    const withUnit = redo.filter(op => op.line && op.line.unit_id);
+    if (withUnit.length) {
+      const before = SW.model.clone(sec.horizons || []);
+      const after = SW.model.clone(before);
+      for (const op of withUnit) {
+        const u = after.find(h => h.id === op.line.unit_id);
+        if (u) (u.line_ids = u.line_ids || []).push(op.line.id);
+      }
+      redo.push({ op: "set_horizons", horizons: after });
+      undo.unshift({ op: "set_horizons", horizons: before });
+    }
+    SW.undo.push({ label: "Paste " + describe(data), redo: redo, undo: undo });
+    SW.view.setSelection(refs);
+    SW.view.status("Pasted " + describe(data) + (offS ? " (offset to stay " +
+                   "visible; Transform or drag to place them)." : " in place."));
+    SW.view.requestDraw();
+    return true;
+  }
+
+  document.addEventListener("copy", function (e) {
+    if (blocked(e)) return;
+    const text = copy(false);
+    if (!text || !e.clipboardData) return;
+    e.clipboardData.setData("text/plain", text);
+    e.preventDefault();
+  });
+  document.addEventListener("cut", function (e) {
+    if (blocked(e)) return;
+    const data = payload();
+    if (!data || !e.clipboardData) return;
+    const text = copy(true);
+    if (!text) return;
+    e.clipboardData.setData("text/plain", text);
+    e.preventDefault();
+  });
+  document.addEventListener("paste", function (e) {
+    if (blocked(e)) return;
+    const text = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
+    // si el sistema no entrega nada nuestro, lo último copiado en esta página
+    if (paste(text) || (lastText && !text && paste(lastText))) e.preventDefault();
+  });
+
+  /* Para el menú contextual y pruebas: mismas acciones sin evento. */
+  SW.actions.copySelection = function () {
+    const text = copy(false);
+    if (text && navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).catch(function () {});
+    return !!text;
+  };
+  SW.actions.pasteClipboard = function () {
+    if (navigator.clipboard && navigator.clipboard.readText)
+      return navigator.clipboard.readText().then(t => paste(t) || (lastText && paste(lastText)))
+        .catch(() => lastText && paste(lastText));
+    return Promise.resolve(lastText ? paste(lastText) : false);
   };
 })();
 
