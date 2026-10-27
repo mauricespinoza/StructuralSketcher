@@ -47,6 +47,11 @@ Drawing and editing helpers:
 - **Vertices** (X): drag a vertex; double click, Alt+press or the **Add
   vertices** option inserts one on a segment (press and drag in one
   gesture), and a click past an end extends the line; right click deletes.
+- **Copy / cut / paste** (Ctrl+C / Ctrl+X / Ctrl+V, ⌘ on Mac, or the
+  context menu) of the selected lines and dips, through the system
+  clipboard, so they can go to another tab or project. A paste lands in
+  the same section coordinates; pasting again in the same document offsets
+  the copies so they don't hide the original. One undo per paste.
 - **Drag** (J), as in GISDraw: pull one vertex and its neighbours follow
   less and less along the line (½·(1 + cos πt)); at 100 % reach the
   gradient ends at the line's ends, which stay fixed — less is more local
