@@ -1188,7 +1188,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.24.0",
+  version: "0.25.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1200,6 +1200,11 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.25.0", date: "2026-10-27", highlights: [
+      "Imported data panel: \"Add topography…\" plots the ground surface " +
+        "(Terrarium or Copernicus GLO-30 / SRTM) under the trace of an " +
+        "already imported shapefile, without importing it again.",
+    ] },
     { version: "0.24.0", date: "2026-10-27", highlights: [
       "Tidy rewritten: each end of the selected lines is extended along " +
         "its own direction until it meets the next visible line (any kind), " +
@@ -14146,6 +14151,82 @@ SW.shp = (function () {
     return { verts: verts, missing: missing, label: info ? info.label : src };
   }
 
+  /* Topografía sobre una traza YA importada (sec.geo_trace): mismo muestreo
+   * que en la importación, sin volver a cargar el shapefile. */
+  SW.actions.addTopography = function () {
+    const sec = SW.model.state.sec, gt = sec.geo_trace, U = SW.ui;
+    if (!gt) {
+      SW.view.status("No georeferenced trace yet — import a shapefile first.");
+      return;
+    }
+    const crs = S.parsePrj(gt.crs || "");
+    if (gt.crs_kind) crs.kind = gt.crs_kind;
+    const prefs = demPrefs();
+    const topo = { source: prefs.source || "terrarium", key: prefs.key || "" };
+    let tSrc, tKey, keyRow;
+    const sync = function () {
+      keyRow.style.display = topo.source !== "terrarium" ? "" : "none";
+    };
+    U.modal({
+      title: "Add topography from a DEM",
+      build: function (body) {
+        U.note(body, "Samples the ground surface under the section's trace " +
+          "(" + (gt.length / 1000).toFixed(2) + " km, " + S.crsLabel(crs) +
+          ") and adds it as an editable Topography line, in metres. Needs " +
+          "the internet.");
+        tSrc = U.select(DEM_SOURCES.map(d => ({ value: d.id, label: d.label })),
+                        topo.source);
+        tSrc.addEventListener("change", function () {
+          topo.source = tSrc.value; saveDemPrefs({ source: topo.source }); sync();
+        });
+        U.row(body, "DEM source", tSrc,
+              "Terrarium: Mapzen/AWS tiles, no key. Copernicus GLO-30 / SRTM: " +
+              "OpenTopography, free API key.");
+        tKey = U.textInput(topo.key);
+        tKey.placeholder = "OpenTopography API key";
+        tKey.autocomplete = "off";
+        tKey.addEventListener("change", function () {
+          topo.key = tKey.value.trim(); saveDemPrefs({ key: topo.key });
+        });
+        keyRow = U.row(body, "OpenTopography key", tKey,
+              "Free key from portal.opentopography.org/myopentopo. Stored " +
+              "only in this browser.");
+        sync();
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Add topography", primary: true, action: function () {
+          topo.source = tSrc.value; topo.key = tKey.value.trim();
+          saveDemPrefs({ source: topo.source, key: topo.key });
+          const st = { crs: crs, trace: cloneTrace(gt), correct: gt.mercator_correction !== false,
+                       topo: topo };
+          SW.view.status("Reading elevations from the DEM…");
+          readTopography(st).then(function (t) {
+            const line = SW.model.newLine("topography", t.verts, "imported");
+            line.name = "Topography — " + t.label;
+            let z0 = Infinity, z1 = -Infinity;
+            for (const q of t.verts) { z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+            const redo = [{ op: "add_line", line: line }];
+            const undo = [{ op: "delete_line", id: line.id }];
+            // la sección debe llegar a la cota más alta
+            if (isFinite(z1) && z1 > sec.z_max) {
+              const step = Math.pow(10, Math.floor(Math.log10(Math.max(1, z1 - sec.z_min)))) / 2;
+              redo.push({ op: "set_section_props", props: { z_max: niceCeil(z1 + (z1 - z0) * 0.03, step) } });
+              undo.push({ op: "set_section_props", props: { z_max: sec.z_max } });
+            }
+            SW.undo.push({ label: "Add topography", redo: redo, undo: undo });
+            if (SW.panels.imports) SW.panels.imports.render();
+            SW.view.requestDraw();
+            SW.view.status("Topography from " + t.label + " (" + t.verts.length +
+              " vertices" + (t.missing ? ", " + t.missing + " gaps skipped" : "") + ").");
+          }).catch(function (err) {
+            SW.view.status("No topography: " + (err && err.message ? err.message : err));
+          });
+        } },
+      ],
+    });
+  };
+
   SW.shp.project = project;
   SW.shp.symbolizer = symbolizer;
 })();
@@ -20727,6 +20808,11 @@ SW.panels.imports = (function () {
     sgy.title = "Seismic line (.sgy/.segy) as an image of the section";
     sgy.addEventListener("click", () => SW.actions.importSegy());
     btns.appendChild(sgy);
+    const tp = SW.ui.el("button", "mini", "Add topography…");
+    tp.title = "Plot the ground surface under the trace of the imported data " +
+               "from a free DEM (Terrarium or Copernicus GLO-30)";
+    tp.addEventListener("click", () => SW.actions.addTopography());
+    btns.appendChild(tp);
     body.appendChild(btns);
   }
 

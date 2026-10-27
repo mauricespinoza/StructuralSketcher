@@ -374,5 +374,8 @@ in FieldDraw:
   free API key (portal.opentopography.org/myopentopo), kept only in the
   browser.
 
+If the shapefile was imported without it, **Add topography…** in the
+*Imported data* panel does the same on the existing trace.
+
 The trace needs a known coordinate system (a `.prj`, or coordinates that
 are plain lon/lat). Only this option goes online.
