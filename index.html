@@ -737,6 +737,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <div class="hgroup">
     <button id="export-svg" title="Export view as SVG"><svg class="ic"><use href="#i-export-img"/></svg>SVG</button>
     <button id="export-png" title="Export view as PNG"><svg class="ic"><use href="#i-export-img"/></svg>PNG</button>
+    <button id="add-topo-btn" disabled title="Add topography from a free DEM (Terrarium / Copernicus GLO-30) under the section trace. Available once the section is georeferenced: a 3D shapefile or a SEG-Y with coordinates has been imported."><svg class="ic"><use href="#i-add-topo"/></svg>Topo</button>
+    <button id="export-shp3d-btn" disabled title="Export the drawn lines as 3D shapefiles (PolyLineZ, one per type, zipped with .prj) that MOVE can open. Available once the section is georeferenced: a 3D shapefile or a SEG-Y with coordinates has been imported."><svg class="ic"><use href="#i-export-img"/></svg>SHP 3D</button>
   </div>
   <span class="sep"></span>
   <div class="versions-wrap">
@@ -1200,13 +1202,24 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.26.0", date: "2026-10-27", highlights: [
+      "Header: Topo (add topography from a DEM) now sits next to the SVG / " +
+        "PNG exports, and a new SHP 3D button exports the drawn lines as 3D " +
+        "shapefiles (PolyLineZ, one per line type, zipped with .prj) that " +
+        "MOVE opens. Both light up only when the section is georeferenced — " +
+        "a 3D shapefile or a SEG-Y with coordinates has been imported.",
+      "SEG-Y with header coordinates and no trace yet: new placement " +
+        "\"Georeference from header coordinates\" creates the section trace " +
+        "(lon/lat, UTM zone or pasted .prj), so what you draw over it is " +
+        "georeferenced and exportable.",
+    ] },
     { version: "0.25.1", date: "2026-10-27", highlights: [
       "Autosave: when the project outgrows browser storage, the older " +
         "autosaved copy is removed so a reload never brings back an " +
         "out-of-date section; pending changes are also saved when the app " +
         "goes to the background or closes (iPad included).",
     ] },
-    { version: "0.25.0", date: "2026-10-27", highlights: [
+    { version: "0.26.0", date: "2026-10-27", highlights: [
       "Imported data panel: \"Add topography…\" plots the ground surface " +
         "(Terrarium or Copernicus GLO-30 / SRTM) under the trace of an " +
         "already imported shapefile, without importing it again.",
@@ -7301,6 +7314,9 @@ SW.bridge = (function () {
       let url = null;
       if (p.format === "png") {
         a.href = p.data;
+      } else if (p.format === "zip") {
+        url = URL.createObjectURL(new Blob([p.data], { type: "application/zip" }));
+        a.href = url;
       } else {
         const type = p.format === "svg" ? "image/svg+xml"
                    : p.format === "csv" ? "text/csv"
@@ -11603,6 +11619,50 @@ SW.actions = SW.actions || {};
     return { s0: a[0], s1: b[0], offset: off };
   }
 
+  /* Traza georreferenciada a partir de las coordenadas de las cabeceras, para
+   * un SEG-Y que llega a una sección sin traza: lo que se dibuje encima
+   * queda georreferenciado (y exportable a shapefile 3D). crsText: .prj/WKT
+   * del CRS de las cabeceras ("" = desconocido); con unidades de arco
+   * (coord_units 2/3) son grados WGS84. */
+  function traceFromHeaders(data, crsText) {
+    const c = data.coords, n = data.n_traces;
+    let crs;
+    if (data.coord_units === 2 || data.coord_units === 3) {
+      crs = SW.shp.parsePrj(""); crs.kind = "geographic";
+      crsText = "";
+    } else crs = SW.shp.parsePrj(crsText || "");
+    const pts = [];
+    for (let i = 0; i < n; i++)
+      if (isFinite(c[2 * i]) && isFinite(c[2 * i + 1])) pts.push([c[2 * i], c[2 * i + 1]]);
+    if (pts.length < 2) throw new Error("the trace headers have no usable coordinates");
+    let len = 0;
+    for (let i = 1; i < pts.length; i++)
+      len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    // poligonal con los quiebres de la línea (una adquisición no es recta)
+    let path = SW.geom.simplifyDP(pts, len * 0.002);
+    if (path.length > 200) path = SW.geom.simplifyDP(pts, len * 0.01);
+    const a = path[0], b = path[path.length - 1];
+    const gt = { x0: a[0], y0: a[1], x1: b[0], y1: b[1],
+                 crs: crsText || "",
+                 crs_kind: crs.kind, mercator_correction: true,
+                 length: 0, azimuth: 0, buffer_km: 0, proj_az: null };
+    if (path.length > 2) gt.path = path.map(v => [v[0], v[1]]);
+    const P = SW.shp.makeProjector(gt, crs, { correct: true });
+    gt.length = P.length; gt.azimuth = P.azimuth;
+    return gt;
+  }
+
+  /* CRS de un SEG-Y proyectado: huso UTM WGS84, un .prj pegado o ninguno. */
+  function utmWkt(zone, south) {
+    return 'PROJCS["WGS 84 / UTM zone ' + zone + (south ? "S" : "N") + '",' +
+      'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],' +
+      'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],' +
+      'PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],' +
+      'PARAMETER["central_meridian",' + (zone * 6 - 183) + '],' +
+      'PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],' +
+      'PARAMETER["false_northing",' + (south ? 10000000 : 0) + '],UNIT["metre",1]]';
+  }
+
   function placeSegy(f, data, dataUrl, wPix, hPix, index, cfg) {
     const totalMs = data.n_samples * data.dt_ms;
     const t0 = cfg.delay ? data.delay_ms : 0;
@@ -11643,7 +11703,9 @@ SW.actions = SW.actions || {};
     };
     // No-undoable, igual que el plugin (importar crea una sección nueva sin
     // pila de undo); se borra con Delete image.
+    if (cfg.new_trace) SW.model.state.sec.geo_trace = cfg.new_trace;
     SW.model.state.sec.images.push(img);
+    if (SW.actions.refreshGeoButtons) SW.actions.refreshGeoButtons();
     if (SW.panels.images) SW.panels.images.render();
     SW.view.setSelection([{ type: "image", id: img.id }]);
     SW.tools.activate("image");
@@ -11681,7 +11743,7 @@ SW.actions = SW.actions || {};
     const totalMs = data.n_samples * data.dt_ms;
     const onTrace = placeOnTrace(data);
     let paletteSel, clipInp, gainInp, spaceInp, placeSel, domSel, velInp,
-        datumInp, delayChk;
+        datumInp, delayChk, crsSel, zoneInp, hemiSel, wktInp, syncCrs;
     const names = paletteNames();
     U.modal({
       title: "Import SEG-Y — " + String(f.name || "seismic line"),
@@ -11718,11 +11780,44 @@ SW.actions = SW.actions || {};
         const pOpts = [{ value: "spacing", label: "From 0, by trace spacing" }];
         if (onTrace) pOpts.unshift({ value: "trace",
           label: "On the section trace (header coordinates)" });
+        const canGeo = !SW.model.state.sec.geo_trace && !!data.coords;
+        if (canGeo) pOpts.unshift({ value: "georef",
+          label: "Georeference from header coordinates (creates the trace)" });
         placeSel = U.select(pOpts, pOpts[0].value);
         U.row(body, "Horizontal placement", placeSel,
               "On the section trace: the first and last trace are projected " +
               "onto the trace of the imported shapefile data (same CRS " +
               "assumed), so the line sits under them at the right distance.");
+        // CRS de las cabeceras, sólo si se va a crear la traza
+        const geoDeg = data.coord_units === 2 || data.coord_units === 3;
+        crsSel = U.select([
+          { value: "none", label: "Unknown (no .prj on export)" },
+          { value: "utm", label: "UTM zone, WGS 84" },
+          { value: "wkt", label: "Paste .prj / WKT" }], "utm");
+        zoneInp = U.numberInput(19, 1, 1, 60);
+        hemiSel = U.select([{ value: "S", label: "South" }, { value: "N", label: "North" }], "S");
+        wktInp = U.textInput("");
+        wktInp.placeholder = "PROJCS[…] or GEOGCS[…]";
+        const crsBox = U.el("div");
+        U.row(crsBox, "Header coordinates", crsSel,
+              geoDeg ? "Headers are lon/lat degrees (WGS 84)." :
+              "The coordinate system of the trace-header X/Y, needed to export " +
+              "to MOVE and to reproject. UTM zone or the .prj text of the " +
+              "survey; Unknown keeps the raw numbers.");
+        const utmRow = U.el("div", "row");
+        utmRow.appendChild(U.el("label", null, "UTM zone / hemisphere"));
+        utmRow.appendChild(zoneInp); utmRow.appendChild(hemiSel);
+        crsBox.appendChild(utmRow);
+        U.row(crsBox, ".prj / WKT", wktInp, "");
+        crsBox.style.display = "none";
+        body.appendChild(crsBox);
+        syncCrs = function () {
+          const on = placeSel.value === "georef" && !geoDeg;
+          crsBox.style.display = on ? "" : "none";
+          utmRow.style.display = crsSel.value === "utm" ? "" : "none";
+          wktInp.parentNode.style.display = crsSel.value === "wkt" ? "" : "none";
+        };
+        crsSel.addEventListener("change", syncCrs);
         if (onTrace)
           U.note(body, "On the trace: " + (onTrace.s0 / 1000).toFixed(2) +
             " → " + (onTrace.s1 / 1000).toFixed(2) + " km; the line runs up " +
@@ -11760,7 +11855,8 @@ SW.actions = SW.actions || {};
           const v = domSel.value;
           velInp.disabled = v !== "velocity";
           datumInp.disabled = v === "time";
-          spaceInp.disabled = placeSel.value === "trace";
+          spaceInp.disabled = placeSel.value === "trace" || placeSel.value === "georef";
+          if (syncCrs) syncCrs();
         };
         domSel.addEventListener("change", sync);
         placeSel.addEventListener("change", sync);
@@ -11771,8 +11867,19 @@ SW.actions = SW.actions || {};
         { label: "Import", primary: true, action: function () {
           const spacing = Math.max(0.1, +spaceInp.value || 25);
           let s0 = 0, s1 = data.n_traces * spacing, placement = "spacing";
+          let newTrace = null;
           if (placeSel.value === "trace" && onTrace) {
             s0 = onTrace.s0; s1 = onTrace.s1; placement = "trace";
+          } else if (placeSel.value === "georef") {
+            let text = "";
+            if (crsSel.value === "utm") {
+              const z = Math.round(+zoneInp.value);
+              if (!(z >= 1 && z <= 60)) { SW.view.status("UTM zone must be 1–60."); return false; }
+              text = utmWkt(z, hemiSel.value === "S");
+            } else if (crsSel.value === "wkt") text = wktInp.value.trim();
+            try { newTrace = traceFromHeaders(data, text); }
+            catch (err) { SW.view.status("SEG-Y: " + err.message); return false; }
+            s0 = 0; s1 = newTrace.length; placement = "trace";
           }
           doRender(f, data, {
             palette: paletteSel.value,
@@ -11780,7 +11887,7 @@ SW.actions = SW.actions || {};
             gain: Math.max(0.1, +gainInp.value || 1),
             spacing: spacing,
             s_left: Math.min(s0, s1), s_right: Math.max(s0, s1),
-            reverse: s1 < s0, placement: placement,
+            reverse: s1 < s0, placement: placement, new_trace: newTrace,
             domain: domSel.value,
             velocity: Math.max(1, +velInp.value || 3000),
             datum: +datumInp.value || 0,
@@ -14235,6 +14342,299 @@ SW.shp = (function () {
 
   SW.shp.project = project;
   SW.shp.symbolizer = symbolizer;
+})();
+
+/* ==== js/io/shapefile_export.js ====
+ * Exportación a shapefile 3D (PolyLineZ) para abrir en MOVE y otros SIG.
+ *
+ * Es la inversa de la importación: las líneas de la sección viven en (s, z)
+ * y la traza georreferenciada (sec.geo_trace — de un shapefile 3D o de un
+ * SEG-Y con coordenadas) dice sobre qué recta o poligonal del mapa corre el
+ * perfil. Cada vértice (s, z) vuelve a (x, y, z) en el CRS de la traza: x, y
+ * es el punto de la traza a distancia s (con la misma corrección de escala
+ * de Mercator de la importación) y z la cota. Donde la traza se quiebra
+ * entre dos vértices se intercalan los quiebres, para que la línea 3D siga
+ * el plano vertical y no corte la esquina.
+ *
+ * Sale un .zip con un shapefile por tipo de línea (horizon, fault,
+ * topography…) — .shp .shx .dbf .cpg y el .prj si el CRS se conoce — con
+ * los campos NAME, TYPE, ID y COLORVAL (el hex que MOVE y la importación de
+ * esta app usan como color). */
+"use strict";
+window.SW = window.SW || {};
+SW.actions = SW.actions || {};
+
+(function () {
+  const S = SW.shp;
+
+  /* La sección está georreferenciada si tiene traza. */
+  SW.actions.refreshGeoButtons = function () {
+    const on = !!(SW.model && SW.model.state.sec && SW.model.state.sec.geo_trace);
+    for (const id of ["add-topo-btn", "export-shp3d-btn"]) {
+      const b = document.getElementById(id);
+      if (b) b.disabled = !on;
+    }
+  };
+
+  function crsOf(gt) {
+    const c = S.parsePrj(gt.crs || "");
+    if (gt.crs_kind) c.kind = gt.crs_kind;
+    return c;
+  }
+
+  /* s (m reales a lo largo de la traza) → [x, y] en el CRS de la traza. */
+  function makeLocator(gt, crs) {
+    const flat = Object.assign({}, gt, { proj_az: null });
+    const P = S.makeProjector(flat, crs, { correct: gt.mercator_correction !== false });
+    const path = gt.path && gt.path.length >= 2 ? gt.path
+      : [[gt.x0, gt.y0], [gt.x1, gt.y1]];
+    const NS = 64;
+    const tab = [], bends = [];
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i], b = path[i + 1];
+      for (let k = i === 0 ? 0 : 1; k <= NS; k++) {
+        const x = a[0] + (b[0] - a[0]) * k / NS, y = a[1] + (b[1] - a[1]) * k / NS;
+        let sv = P.project(x, y)[0];
+        if (tab.length && sv < tab[tab.length - 1][0]) sv = tab[tab.length - 1][0];
+        tab.push([sv, x, y]);
+        if (k === NS && i + 2 < path.length) bends.push(sv);
+      }
+    }
+    const n = tab.length;
+    function at(sv) {
+      if (n < 2) return [tab[0][1], tab[0][2]];
+      let lo = 0, hi = n - 1;
+      if (sv <= tab[0][0]) hi = 1;
+      else if (sv >= tab[n - 1][0]) lo = n - 2;
+      else
+        while (hi - lo > 1) {
+          const m = (lo + hi) >> 1;
+          if (tab[m][0] <= sv) lo = m; else hi = m;
+        }
+      const a = tab[lo], b = tab[hi], ds = b[0] - a[0];
+      const t = ds > 0 ? (sv - a[0]) / ds : 0;     // fuera de los extremos: se prolonga
+      return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    }
+    return { at: at, bends: bends, length: P.length };
+  }
+
+  /* [[s, z]…] → [[x, y, z]…] con los quiebres de la traza intercalados. */
+  function line3D(verts, loc) {
+    const out = [];
+    const push = (sv, z) => { const q = loc.at(sv); out.push([q[0], q[1], z]); };
+    for (let i = 0; i < verts.length; i++) {
+      const a = verts[i];
+      if (i > 0) {
+        const p = verts[i - 1];
+        const lo = Math.min(p[0], a[0]), hi = Math.max(p[0], a[0]);
+        const mid = loc.bends.filter(b => b > lo + 1e-6 && b < hi - 1e-6);
+        if (p[0] > a[0]) mid.reverse();
+        for (const b of mid) push(b, p[1] + (a[1] - p[1]) * (b - p[0]) / (a[0] - p[0]));
+      }
+      push(a[0], a[1]);
+    }
+    return out;
+  }
+
+  /* -- escritores de formato ------------------------------------------------ */
+  function shpFiles(lines) {      // lines: [{pts:[[x,y,z]…]}]
+    const NO_M = -1e38;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity,
+        z0 = Infinity, z1 = -Infinity;
+    const recs = lines.map(function (l) {
+      const pts = l.pts, n = pts.length;
+      const bx = [Infinity, Infinity, -Infinity, -Infinity];
+      let rz0 = Infinity, rz1 = -Infinity;
+      for (const p of pts) {
+        bx[0] = Math.min(bx[0], p[0]); bx[1] = Math.min(bx[1], p[1]);
+        bx[2] = Math.max(bx[2], p[0]); bx[3] = Math.max(bx[3], p[1]);
+        rz0 = Math.min(rz0, p[2]); rz1 = Math.max(rz1, p[2]);
+      }
+      x0 = Math.min(x0, bx[0]); y0 = Math.min(y0, bx[1]);
+      x1 = Math.max(x1, bx[2]); y1 = Math.max(y1, bx[3]);
+      z0 = Math.min(z0, rz0); z1 = Math.max(z1, rz1);
+      return { pts: pts, n: n, box: bx, z0: rz0, z1: rz1,
+               bytes: 44 + 4 + 16 * n + 16 + 8 * n + 16 + 8 * n };
+    });
+    let total = 100;
+    for (const r of recs) total += 8 + r.bytes;
+    const shp = new DataView(new ArrayBuffer(total));
+    const shx = new DataView(new ArrayBuffer(100 + 8 * recs.length));
+    for (const v of [shp, shx]) {
+      v.setInt32(0, 9994);
+      v.setInt32(28, 1000, true); v.setInt32(32, 13, true);
+      [x0, y0, x1, y1].forEach((d, i) => v.setFloat64(36 + i * 8, d, true));
+      v.setFloat64(68, z0, true); v.setFloat64(76, z1, true);
+      v.setFloat64(84, NO_M, true); v.setFloat64(92, NO_M, true);
+    }
+    shp.setInt32(24, total / 2); shx.setInt32(24, (100 + 8 * recs.length) / 2);
+    let o = 100;
+    recs.forEach(function (r, i) {
+      shx.setInt32(100 + i * 8, o / 2); shx.setInt32(104 + i * 8, r.bytes / 2);
+      shp.setInt32(o, i + 1); shp.setInt32(o + 4, r.bytes / 2); o += 8;
+      shp.setInt32(o, 13, true); o += 4;
+      r.box.forEach(d => { shp.setFloat64(o, d, true); o += 8; });
+      shp.setInt32(o, 1, true); o += 4;
+      shp.setInt32(o, r.n, true); o += 4;
+      shp.setInt32(o, 0, true); o += 4;
+      for (const p of r.pts) { shp.setFloat64(o, p[0], true); shp.setFloat64(o + 8, p[1], true); o += 16; }
+      shp.setFloat64(o, r.z0, true); shp.setFloat64(o + 8, r.z1, true); o += 16;
+      for (const p of r.pts) { shp.setFloat64(o, p[2], true); o += 8; }
+      shp.setFloat64(o, NO_M, true); shp.setFloat64(o + 8, NO_M, true); o += 16;
+      for (let k = 0; k < r.n; k++) { shp.setFloat64(o, NO_M, true); o += 8; }
+    });
+    return { shp: new Uint8Array(shp.buffer), shx: new Uint8Array(shx.buffer) };
+  }
+
+  function dbfFile(rows, fields) {  // fields: [[name, len]]
+    const enc = new TextEncoder();
+    const recLen = 1 + fields.reduce((t, f) => t + f[1], 0);
+    const hdrLen = 32 + 32 * fields.length + 1;
+    const buf = new Uint8Array(hdrLen + recLen * rows.length + 1);
+    const dv = new DataView(buf.buffer);
+    const d = new Date();
+    buf[0] = 3; buf[1] = d.getFullYear() - 1900; buf[2] = d.getMonth() + 1; buf[3] = d.getDate();
+    dv.setUint32(4, rows.length, true);
+    dv.setUint16(8, hdrLen, true); dv.setUint16(10, recLen, true);
+    fields.forEach(function (f, i) {
+      const o = 32 + i * 32;
+      buf.set(enc.encode(f[0]).slice(0, 10), o);
+      buf[o + 11] = 67; buf[o + 16] = f[1];
+    });
+    buf[hdrLen - 1] = 13;
+    rows.forEach(function (r, i) {
+      let o = hdrLen + i * recLen;
+      buf[o++] = 32;
+      fields.forEach(function (f, k) {
+        buf.fill(32, o, o + f[1]);
+        // recorta por bytes sin partir un carácter UTF-8
+        let b = enc.encode(String(r[k] === undefined ? "" : r[k]));
+        if (b.length > f[1]) {
+          let e = f[1];
+          while (e > 0 && (b[e] & 0xC0) === 0x80) e--;
+          b = b.slice(0, e);
+        }
+        buf.set(b, o); o += f[1];
+      });
+    });
+    buf[buf.length - 1] = 26;
+    return buf;
+  }
+
+  const CRC = (function () {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return function (u8) {
+      let c = 0xFFFFFFFF;
+      for (let i = 0; i < u8.length; i++) c = t[(c ^ u8[i]) & 255] ^ (c >>> 8);
+      return (c ^ 0xFFFFFFFF) >>> 0;
+    };
+  })();
+
+  /* .zip sin compresión: files = [[nombre, Uint8Array]] */
+  function zip(files) {
+    const enc = new TextEncoder();
+    const parts = [], central = [];
+    let off = 0;
+    const d = new Date();
+    const dosT = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosD = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    for (const [name, data] of files) {
+      const nb = enc.encode(name), crc = CRC(data);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+      h.setUint16(10, dosT, true); h.setUint16(12, dosD, true);
+      h.setUint32(14, crc, true); h.setUint32(18, data.length, true);
+      h.setUint32(22, data.length, true); h.setUint16(26, nb.length, true);
+      parts.push(new Uint8Array(h.buffer), nb, data);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true);
+      c.setUint16(8, 0x0800, true); c.setUint16(12, dosT, true); c.setUint16(14, dosD, true);
+      c.setUint32(16, crc, true); c.setUint32(20, data.length, true);
+      c.setUint32(24, data.length, true); c.setUint16(28, nb.length, true);
+      c.setUint32(42, off, true);
+      central.push(new Uint8Array(c.buffer), nb);
+      off += 30 + nb.length + data.length;
+    }
+    let cs = 0;
+    for (const c of central) cs += c.length;
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true);
+    e.setUint16(10, files.length, true); e.setUint32(12, cs, true); e.setUint32(16, off, true);
+    const all = parts.concat(central, [new Uint8Array(e.buffer)]);
+    const out = new Uint8Array(off + cs + 22);
+    let o = 0;
+    for (const a of all) { out.set(a, o); o += a.length; }
+    return out;
+  }
+
+  function hexOf(css) {
+    let m = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(css || "");
+    if (m) return "#" + [m[1], m[2], m[3]].map(v => (+v).toString(16).padStart(2, "0")).join("");
+    m = /^#([0-9a-f]{6})$/i.exec(css || "");
+    return m ? "#" + m[1].toLowerCase() : "";
+  }
+
+  const fileSafe = t => String(t || "section").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "section";
+
+  /* Arma el .zip. Devuelve {zip, counts:{tipo:n}, crsKnown} o lanza. */
+  function build() {
+    const sec = SW.model.state.sec, gt = sec.geo_trace;
+    if (!gt) throw new Error("the section has no georeferenced trace");
+    const crs = crsOf(gt);
+    const loc = makeLocator(gt, crs);
+    const byKind = {};
+    for (const l of sec.lines || []) {
+      if (l.visible === false || (l.vertices || []).length < 2) continue;
+      const pts = line3D(l.vertices, loc);
+      if (pts.some(p => !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2]))) continue;
+      const color = SW.render && SW.render.lineColor ? hexOf(SW.render.lineColor(l)) : "";
+      (byKind[l.kind || "sketch"] = byKind[l.kind || "sketch"] || []).push({
+        pts: pts, row: [l.name || l.kind || "line", l.kind || "sketch", l.id || "", color],
+      });
+    }
+    const kinds = Object.keys(byKind);
+    if (!kinds.length) throw new Error("there are no visible lines to export");
+    const base = fileSafe(sec.name), files = [], counts = {};
+    const prj = (gt.crs || "").trim();
+    for (const k of kinds) {
+      const stem = base + "_" + fileSafe(k);
+      const f = shpFiles(byKind[k]);
+      files.push([stem + ".shp", f.shp], [stem + ".shx", f.shx],
+        [stem + ".dbf", dbfFile(byKind[k].map(x => x.row),
+          [["NAME", 60], ["TYPE", 16], ["ID", 20], ["COLORVAL", 8]])],
+        [stem + ".cpg", new TextEncoder().encode("UTF-8")]);
+      if (prj) files.push([stem + ".prj", new TextEncoder().encode(prj)]);
+      counts[k] = byKind[k].length;
+    }
+    return { zip: zip(files), counts: counts, crsKnown: !!prj, crs: crs };
+  }
+
+  SW.actions.exportShapefile3D = function () {
+    const sec = SW.model.state.sec;
+    if (!sec.geo_trace) {
+      SW.view.status("Not georeferenced — import a 3D shapefile or a SEG-Y with coordinates first.");
+      return;
+    }
+    let r;
+    try { r = build(); }
+    catch (err) { SW.view.status("Shapefile export: " + (err && err.message ? err.message : err)); return; }
+    SW.bridge.call("saveExport", {
+      format: "zip", data: r.zip, suggested_name: fileSafe(sec.name) + "_3D",
+    }, function (res) {
+      if (res && res.ok === false) { SW.view.status("Export failed: " + res.error); return; }
+      SW.view.status("Exported 3D shapefiles (" + Object.keys(r.counts)
+        .map(k => r.counts[k] + " " + k).join(", ") + ") as .zip" +
+        (r.crsKnown ? "." : " — ⚠ the trace has no .prj: coordinates are in the " +
+          "SEG-Y/shapefile's own system, set it when opening in MOVE."));
+    });
+  };
+
+  SW.shpExport = { build: build, makeLocator: makeLocator, line3D: line3D };
 })();
 
 /* ==== js/tools/calibrate.js ==== */
@@ -20775,6 +21175,7 @@ SW.panels.imports = (function () {
   }
 
   function render() {
+    if (SW.actions.refreshGeoButtons) SW.actions.refreshGeoButtons();
     const body = document.getElementById("panel-imports-body");
     if (!body) return;
     const sec = SW.model.state.sec;
@@ -20814,11 +21215,6 @@ SW.panels.imports = (function () {
     sgy.title = "Seismic line (.sgy/.segy) as an image of the section";
     sgy.addEventListener("click", () => SW.actions.importSegy());
     btns.appendChild(sgy);
-    const tp = SW.ui.el("button", "mini", "Add topography…");
-    tp.title = "Plot the ground surface under the trace of the imported data " +
-               "from a free DEM (Terrarium or Copernicus GLO-30)";
-    tp.addEventListener("click", () => SW.actions.addTopography());
-    btns.appendChild(tp);
     body.appendChild(btns);
   }
 
@@ -23321,6 +23717,9 @@ SW.view = (function () {
 
     $("export-svg").addEventListener("click", SW.exporter.exportSVG);
     $("export-png").addEventListener("click", SW.exporter.exportPNG);
+    $("add-topo-btn").addEventListener("click", () => SW.actions.addTopography());
+    $("export-shp3d-btn").addEventListener("click", () => SW.actions.exportShapefile3D());
+    SW.actions.refreshGeoButtons();
 
     const dipClear = $("dip-clear");
     if (dipClear) dipClear.addEventListener("click", SW.actions.clearDips);

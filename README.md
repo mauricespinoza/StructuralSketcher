@@ -374,8 +374,29 @@ in FieldDraw:
   free API key (portal.opentopography.org/myopentopo), kept only in the
   browser.
 
-If the shapefile was imported without it, **Add topography…** in the
-*Imported data* panel does the same on the existing trace.
+If the shapefile was imported without it, the **Topo** button in the header
+(next to SVG / PNG) does the same on the existing trace.
 
 The trace needs a known coordinate system (a `.prj`, or coordinates that
 are plain lon/lat). Only this option goes online.
+
+## Georeferenced section: Topo and SHP 3D (header)
+
+**Topo** and **SHP 3D** sit next to the SVG / PNG exports and are enabled
+only when the section is georeferenced — it has a trace from an imported 3D
+shapefile or from a SEG-Y with header coordinates (also when such a project
+is reopened).
+
+- **SEG-Y with coordinates on a section without a trace**: choose
+  *Georeference from header coordinates* in the import dialog. It creates
+  the trace (with its bends) from the trace headers; give the coordinate
+  system — lon/lat headers are taken as WGS 84, otherwise a UTM zone, a
+  pasted `.prj`, or unknown. What you then draw over the seismic line is
+  georeferenced.
+- **SHP 3D** exports the visible lines as 3D shapefiles (PolyLineZ) in a
+  `.zip` — one shapefile per line type (horizon, fault, topography…) with
+  `.shp .shx .dbf .cpg` and the `.prj` when the CRS is known. Each
+  vertex (distance, elevation) goes back to (x, y, z) along the trace, with
+  the trace's bends inserted so the 3D line stays in the section plane.
+  Attributes: `NAME`, `TYPE`, `ID`, `COLORVAL` (hex). Unzip and open it in
+  MOVE (or QGIS/ArcGIS). Dip symbols and reference layers are not exported.
