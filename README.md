@@ -9,7 +9,8 @@ measure, split, extend, transform and export the section.
 ## Running it
 
 Single self-contained `index.html` — no build step, no dependencies, no
-network access of any kind. Open it directly from disk (double-click) or
+network access except the optional Google Drive feature (below), which
+loads Google's sign-in and picker scripts only once it is set up. Open it directly from disk (double-click) or
 serve it with any static file server:
 
 ```bash
@@ -78,7 +79,35 @@ collapses to icon-only buttons so it still fits in one row.
 ## Data
 
 Projects save as `.sketch.json` (Save / Save as…, Ctrl+S / Ctrl+Shift+S);
-`Open` loads one back. Dip data exports to CSV. The section exports as a
+`Open` loads one back. Dip data exports to CSV.
+
+### Google account and Drive
+
+As in GISDraw, the **Google** button in the header (next to Save as) signs
+in with a Google account and opens, imports and saves projects in Google
+Drive through the Drive API:
+
+- **Save to Drive…** — the first time, pick a folder (My Drive or a shared
+  drive) in the Google picker and a file name; from then on **Save**
+  (Ctrl+S) updates that Drive file. **Save in another folder…** makes a new
+  copy elsewhere. The file is the same self-contained `.sketch.json`.
+- **Open / import from Drive…** — a project (`.json`) opens and stays
+  linked to its Drive file; an image is imported to trace over; a
+  shapefile (`.shp` + `.dbf`/`.prj`…, several files at once) or a SEG-Y
+  goes through the usual data import.
+
+Setup (once): the app ships no keys of its own. In
+[Google Cloud Console](https://console.cloud.google.com) create a project,
+enable **Google Drive API** and **Google Picker API**, and create an
+**OAuth client ID** of type *Web application* whose authorized JavaScript
+origin is the app's origin (e.g. `https://mauricespinoza.github.io`). Paste
+it in *Google account → Setup*. An optional **API key** lets you open files
+shared with "anyone with the link" without signing in. The app requests
+the `drive.file` scope: it only sees the files it creates or that you pick.
+Sign-in needs the app served over http(s) — it does not work from a
+`file://` copy opened by double click. The access token lives in memory
+(Google renews it hourly); only the setup, the last folder and the account
+name are remembered in the browser. The section exports as a
 vector SVG or a PNG image of the current view, including unit-polygon fills.
 
 ### Importing georeferenced data
