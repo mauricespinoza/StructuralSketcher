@@ -282,6 +282,52 @@ header button.active { background: rgba(37,99,235,.35); color: #fff;
 #toolrail-resize:hover, #toolrail-resize.dragging { background: var(--accent); opacity: .35; }
 
 #wrap { flex: 1; position: relative; min-height: 0; }
+
+/* -- vista de mapa: acoplada sobre la sección o en su propia ventana ----- */
+#center { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#map-dock { flex: none; display: flex; min-height: 0; position: relative; }
+#map-dock.hidden, #map-split.hidden { display: none; }
+#map-split {
+  flex: none; height: 6px; cursor: row-resize; touch-action: none;
+  background: var(--grid-strong); border-top: 1px solid var(--grid);
+}
+#map-split:hover, #map-split.dragging { background: var(--accent); opacity: .55; }
+body.map-popup { background: var(--surface); }
+.map-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--surface); }
+.map-bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  padding: 4px 6px; border-bottom: 1px solid var(--grid); }
+.map-bar select { font-size: 12px; max-width: 190px; }
+.map-check { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; }
+.map-sep { width: 1px; height: 18px; background: var(--grid-strong); margin: 0 2px; }
+.map-grow { flex: 1; }
+.map-go { width: 110px; font-size: 12px; }
+.map-canvas-wrap { position: relative; flex: 1; min-height: 60px; overflow: hidden; }
+.map-canvas { cursor: grab; outline: none; }
+.map-attr { position: absolute; right: 0; bottom: 0; font-size: 10px; padding: 1px 5px;
+  background: rgba(255,255,255,.75); color: #333; pointer-events: none; max-width: 70%; }
+.map-info { font-size: 11px; color: var(--ink-2); padding: 2px 8px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; border-top: 1px solid var(--grid); }
+.map-apply { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 4px 8px; border-top: 1px solid var(--grid); }
+.map-layers { position: absolute; top: 6px; left: 6px; width: 300px; max-width: calc(100% - 12px);
+  max-height: calc(100% - 12px); overflow-y: auto; background: var(--surface);
+  border: 1px solid var(--grid-strong); border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0,0,0,.18); padding: 8px; display: flex;
+  flex-direction: column; gap: 6px; z-index: 3; }
+.map-layers.hidden { display: none; }
+.map-layers-head { font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--ink-3); }
+.map-layers-empty { font-size: 11px; color: var(--ink-3); }
+.map-layer { border: 1px solid var(--grid); border-radius: 4px; padding: 4px 6px;
+  display: flex; flex-direction: column; gap: 3px; }
+.map-layer-top, .map-layer-bot { display: flex; gap: 4px; align-items: center; }
+.map-layer-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 12px; }
+.map-layer-fmt { flex: 1; min-width: 0; font-size: 10px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-layer-bot input[type="range"] { width: 80px; }
+.map-layer-bot select { font-size: 11px; }
 canvas {
   position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab;
   /* El navegador no debe interpretar por su cuenta los gestos sobre el
@@ -732,7 +778,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <div class="hgroup">
     <button id="import-image-btn" class="icon-only" title="Import image to trace over"><svg class="ic"><use href="#i-image"/></svg></button>
     <button id="import-data-btn" class="icon-only" title="Import data: shapefile (2D/3D points, polylines, polygons + .lyr symbology) projected onto the section, or a SEG-Y line"><svg class="ic"><use href="#i-import"/></svg></button>
-    <button id="map-btn" title="Map: free Esri basemaps with the section trace; draw a new profile trace on it"><svg class="ic"><use href="#i-map"/></svg>Map</button>
+    <button id="map-btn" title="Map view above the section (⧉ moves it to its own window, e.g. another screen): Esri basemaps, your GeoTIFF / MBTiles / PMTiles rasters and the section trace, which follows the cursor on the section; draw a new profile trace on it"><svg class="ic"><use href="#i-map"/></svg>Map</button>
     <button id="setup-btn" class="icon-only" title="Section setup: name, extent, units, end labels"><svg class="ic"><use href="#i-setup"/></svg></button>
   </div>
   <span class="sep"></span>
@@ -1127,6 +1173,11 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
     <div id="toolrail-resize" title="Drag to resize"></div>
   </div>
 
+  <!-- Columna central: vista de mapa acoplada (arriba, opcional) y la
+       sección. El mapa puede irse a su propia ventana (map_window.js). -->
+  <div id="center">
+  <div id="map-dock" class="hidden"></div>
+  <div id="map-split" class="hidden" title="Drag to resize the map; double-click resets"></div>
   <div id="wrap">
     <canvas id="cv"></canvas>
     <!-- Columna flotante sobre el lienzo: Deshacer/Rehacer y las acciones
@@ -1140,6 +1191,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <button id="edit-discard" title="Discard (Esc)"><svg class="ic"><use href="#i-cancel"/></svg></button>
       <button id="edit-delete" title="Delete selection (Del)"><svg class="ic"><use href="#i-delete"/></svg></button>
     </div>
+  </div>
   </div>
 
   <div id="panels">
@@ -1193,7 +1245,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.27.0",
+  version: "0.28.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1205,6 +1257,19 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.28.0", date: "2026-10-28", highlights: [
+      "Map view docked above the section (split screen, drag the divider) " +
+        "or, with ⧉, in its own window to take to another screen. The " +
+        "cursor on the section shows up on the trace (cyan, with its " +
+        "distance) and the visible stretch of the section is highlighted; " +
+        "Follow pans the map to keep it in view. The cursor on the map is " +
+        "projected onto the trace and marked on the section.",
+      "Your own rasters on the map, read from disk without uploading " +
+        "anything: GeoTIFF (with its .tfw / .prj if any; LZW, Deflate, " +
+        "PackBits, JPEG; internal overviews; a DEM as hillshade, color " +
+        "relief or gray), MBTiles and PMTiles (raster tiles). Add them with " +
+        "+ Raster or drop them on the map or the section.",
+    ] },
     { version: "0.27.0", date: "2026-10-27", highlights: [
       "Map window (header): free Esri basemaps (World Imagery, Topo, Street, " +
         "National Geographic, relief) with the section trace on top; draw a " +
@@ -10823,11 +10888,18 @@ window.SW = window.SW || {};
       const files = e.dataTransfer && e.dataTransfer.files;
       if (!files || !files.length) return;
       e.preventDefault();
+      // rasters georreferenciados y teselas: a la vista de mapa (el
+      // navegador no sabe mostrar un TIFF como imagen de la sección)
+      if ([...files].some(f => /\.(tiff?|mbtiles|pmtiles)$/i.test(f.name)) && SW.actions.addMapRasters) {
+        SW.actions.addMapRasters(files);
+        return;
+      }
       const img = [...files].find(f => /^image\//.test(f.type));
       if (img) SW.actions.importImageFile(img);
       else if (SW.actions.importDataFiles && SW.actions.importDataFiles(files)) return;
       else SW.view.status("Drop an image to trace over, a shapefile " +
-                          "(.shp + .dbf/.prj, optional .lyr) or a SEG-Y.");
+                          "(.shp + .dbf/.prj, optional .lyr), a SEG-Y, or a GeoTIFF / " +
+                          "MBTiles / PMTiles for the map.");
     });
   };
 
@@ -14786,10 +14858,1143 @@ SW.actions = SW.actions || {};
   SW.shpExport = { build: build, makeLocator: makeLocator, line3D: line3D };
 })();
 
+/* ==== js/io/rasters.js ====
+ * Rasters para la vista de mapa: GeoTIFF, MBTiles y PMTiles, leídos con
+ * código propio — nada de geotiff.js, sql.js ni pmtiles.js, para que la app
+ * siga siendo un único archivo que abre sin red.
+ *
+ * - GeoTIFF (clásico o BigTIFF, strips o tiles, sin compresión, LZW,
+ *   Deflate, PackBits, JPEG o WebP; predictores 2 y 3; 8/16/32/64 bits,
+ *   enteros o flotantes): se decodifica UNA vez a una imagen de a lo más
+ *   ~4096 px, eligiendo el overview interno más chico que alcance, y se
+ *   lee por partes (File.slice), así que un archivo de varios GB no se
+ *   carga entero. Una banda flotante o de 16 bits (un DEM) se pinta como
+ *   sombreado, relieve en color o gris estirado. El CRS sale de las GeoKeys
+ *   (EPSG o Transversa de Mercator definida por el usuario) o de un .prj
+ *   al lado; la georreferencia, de los tags del GeoTIFF o de un .tfw.
+ * - PMTiles v3: está hecho para leer por rangos — encabezado, directorio
+ *   raíz, hojas y teselas salen con File.slice, nada más.
+ * - MBTiles: es SQLite. Un lector de B-trees de sólo lectura busca cada
+ *   tesela por el índice (zoom_level, tile_column, tile_row) — en el
+ *   esquema simple (tabla tiles) y en el normalizado (map + images) —
+ *   leyendo sólo las páginas que necesita; sin índice, recorre la tabla
+ *   una vez y arma uno en memoria.
+ *
+ * Las teselas tienen que ser raster (PNG, JPEG, WebP): las vectoriales
+ * (MVT/pbf) se rechazan con un mensaje claro. */
+"use strict";
+window.SW = window.SW || {};
+
+SW.rasters = (function () {
+  const D2R = Math.PI / 180;
+
+  function reader(blob) {
+    return function (off, len) {
+      return blob.slice(off, off + len).arrayBuffer().then(b => new Uint8Array(b));
+    };
+  }
+
+  async function inflate(u8, fmt) {
+    if (typeof DecompressionStream === "undefined")
+      throw new Error("this browser can't decompress " + fmt + " data");
+    const s = new Blob([u8]).stream().pipeThrough(new DecompressionStream(fmt));
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+
+  /* bytes de PNG/JPEG/WebP → algo que drawImage acepta */
+  function decodeImage(bytes) {
+    const blob = new Blob([bytes]);
+    if (typeof createImageBitmap === "function") return createImageBitmap(blob);
+    return new Promise(function (ok, bad) {
+      const url = URL.createObjectURL(blob), img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); ok(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); bad(new Error("bad image")); };
+      img.src = url;
+    });
+  }
+
+  function newCanvas(w, h) {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    return c;
+  }
+
+  /* ======================================================================
+   * PMTiles v3
+   * ==================================================================== */
+  function pmVarint(u8, p) {
+    let v = 0, mul = 1, b;
+    do { b = u8[p.i++]; v += (b & 0x7f) * mul; mul *= 128; } while (b & 0x80);
+    return v;
+  }
+
+  /* (z, x, y) → id de tesela: teselas de los niveles anteriores + índice en
+   * la curva de Hilbert del nivel. */
+  function zxyToId(z, x, y) {
+    let acc = 0;
+    for (let i = 0; i < z; i++) acc += Math.pow(4, i);
+    const n = Math.pow(2, z);
+    let d = 0;
+    for (let s = n / 2; s >= 1; s /= 2) {
+      const rx = (x & s) > 0 ? 1 : 0, ry = (y & s) > 0 ? 1 : 0;
+      d += s * s * ((3 * rx) ^ ry);
+      if (ry === 0) {
+        if (rx === 1) { x = n - 1 - x; y = n - 1 - y; }
+        const t = x; x = y; y = t;
+      }
+    }
+    return acc + d;
+  }
+
+  function pmDirectory(u8) {
+    const p = { i: 0 };
+    const n = pmVarint(u8, p);
+    const e = new Array(n);
+    let id = 0;
+    for (let k = 0; k < n; k++) { id += pmVarint(u8, p); e[k] = { id: id, run: 1, len: 0, off: 0 }; }
+    for (let k = 0; k < n; k++) e[k].run = pmVarint(u8, p);
+    for (let k = 0; k < n; k++) e[k].len = pmVarint(u8, p);
+    for (let k = 0; k < n; k++) {
+      const v = pmVarint(u8, p);
+      e[k].off = v === 0 && k > 0 ? e[k - 1].off + e[k - 1].len : v - 1;
+    }
+    return e;
+  }
+
+  function pmFind(entries, id) {
+    let lo = 0, hi = entries.length - 1;
+    while (lo <= hi) {
+      const m = (lo + hi) >> 1, c = entries[m].id - id;
+      if (c < 0) lo = m + 1; else if (c > 0) hi = m - 1; else return entries[m];
+    }
+    if (hi >= 0) {
+      const e = entries[hi];
+      if (e.run === 0 || id - e.id < e.run) return e;
+    }
+    return null;
+  }
+
+  async function openPmtiles(file) {
+    const read = reader(file);
+    const h = await read(0, Math.min(file.size, 16384));
+    const magic = String.fromCharCode.apply(null, h.subarray(0, 7));
+    if (magic !== "PMTiles") throw new Error("not a PMTiles file");
+    if (h[7] !== 3) throw new Error("PMTiles version " + h[7] + " — only version 3 is supported " +
+      "(convert it with `pmtiles convert`)");
+    const dv = new DataView(h.buffer, h.byteOffset, h.byteLength);
+    const u64 = o => dv.getUint32(o, true) + dv.getUint32(o + 4, true) * 4294967296;
+    const H = {
+      rootOff: u64(8), rootLen: u64(16), leafOff: u64(40), dataOff: u64(56),
+      icomp: h[97], tcomp: h[98], ttype: h[99], minZ: h[100], maxZ: h[101],
+      w: dv.getInt32(102, true) / 1e7, s: dv.getInt32(106, true) / 1e7,
+      e: dv.getInt32(110, true) / 1e7, n: dv.getInt32(114, true) / 1e7,
+    };
+    if (H.ttype === 1)
+      throw new Error("it holds vector tiles (MVT) — only raster PMTiles (PNG, JPEG, WebP) can be shown");
+    const unc = function (u8, c) {
+      if (c === 0 || c === 1) return Promise.resolve(u8);
+      if (c === 2) return inflate(u8, "gzip");
+      return Promise.reject(new Error("PMTiles compression " + (c === 3 ? "brotli" : c === 4 ? "zstd" : c) +
+        " is not supported (gzip or none)"));
+    };
+    const rootRaw = H.rootOff + H.rootLen <= h.length
+      ? h.slice(H.rootOff, H.rootOff + H.rootLen) : await read(H.rootOff, H.rootLen);
+    const root = pmDirectory(await unc(rootRaw, H.icomp));
+    const leaves = new Map();
+    function leaf(off, len) {
+      const k = off + ":" + len;
+      let p = leaves.get(k);
+      if (!p) {
+        p = read(H.leafOff + off, len).then(u => unc(u, H.icomp)).then(pmDirectory);
+        leaves.set(k, p);
+        if (leaves.size > 64) leaves.delete(leaves.keys().next().value);
+      }
+      return p;
+    }
+    async function getTile(z, x, y) {
+      if (z < H.minZ || z > H.maxZ) return null;
+      const id = zxyToId(z, x, y);
+      let dir = root;
+      for (let depth = 0; depth < 4; depth++) {
+        const e = pmFind(dir, id);
+        if (!e) return null;
+        if (e.run > 0) return unc(await read(H.dataOff + e.off, e.len), H.tcomp);
+        dir = await leaf(e.off, e.len);
+      }
+      return null;
+    }
+    const ok = [H.w, H.s, H.e, H.n].every(isFinite) && H.e > H.w && H.n > H.s;
+    return { kind: "tiles", format: "PMTiles " + (["?", "MVT", "PNG", "JPEG", "WebP", "AVIF"][H.ttype] || "?"),
+             minZ: H.minZ, maxZ: H.maxZ, bounds: ok ? [H.w, H.s, H.e, H.n] : null, getTile: getTile };
+  }
+
+  /* ======================================================================
+   * SQLite de sólo lectura (para MBTiles)
+   * ==================================================================== */
+  async function openSqlite(file) {
+    const read = reader(file);
+    const head = await read(0, 100);
+    if (String.fromCharCode.apply(null, head.subarray(0, 15)) !== "SQLite format 3")
+      throw new Error("not an SQLite / MBTiles file");
+    let ps = (head[16] << 8) | head[17];
+    if (ps === 1) ps = 65536;
+    const U = ps - head[20];
+    const maxPages = Math.max(64, Math.floor(48 * 1048576 / ps));
+    const cache = new Map();
+    function page(n) {
+      let p = cache.get(n);
+      if (p) { cache.delete(n); cache.set(n, p); return p; }
+      p = read((n - 1) * ps, ps);
+      cache.set(n, p);
+      if (cache.size > maxPages) cache.delete(cache.keys().next().value);
+      return p;
+    }
+    const be16 = (u, o) => (u[o] << 8) | u[o + 1];
+    const be32 = (u, o) => ((u[o] << 24) >>> 0) + (u[o + 1] << 16) + (u[o + 2] << 8) + u[o + 3];
+    function varint(u, p) {
+      let v = 0;
+      for (let k = 0; k < 8; k++) {
+        const b = u[p.i++];
+        v = v * 128 + (b & 0x7f);
+        if (!(b & 0x80)) return v;
+      }
+      return v * 256 + u[p.i++];
+    }
+    function localSize(P, tableLeaf) {
+      const X = tableLeaf ? U - 35 : Math.floor((U - 12) * 64 / 255) - 23;
+      if (P <= X) return P;
+      const M = Math.floor((U - 12) * 32 / 255) - 23;
+      const K = M + ((P - M) % (U - 4));
+      return K <= X ? K : M;
+    }
+    async function payload(pg, start, P, tableLeaf) {
+      const L = localSize(P, tableLeaf);
+      if (L === P) return pg.subarray(start, start + P);
+      const out = new Uint8Array(P);
+      out.set(pg.subarray(start, start + L));
+      let next = be32(pg, start + L), o = L;
+      while (o < P && next) {
+        const op = await page(next);
+        const take = Math.min(P - o, U - 4);
+        out.set(op.subarray(4, 4 + take), o);
+        o += take;
+        next = be32(op, 0);
+      }
+      return out;
+    }
+    /* registro → valores; `upto`: columnas a decodificar (las demás no
+     * hacen falta y pueden no estar en la parte local del registro) */
+    function record(u, upto) {
+      const p = { i: 0 };
+      const hs = varint(u, p);
+      const types = [];
+      while (p.i < hs) types.push(varint(u, p));
+      const out = [];
+      let o = hs;
+      const n = upto === undefined ? types.length : Math.min(upto, types.length);
+      for (let c = 0; c < n; c++) {
+        const t = types[c];
+        let v = null, len = 0;
+        if (t >= 1 && t <= 6) {
+          len = [0, 1, 2, 3, 4, 6, 8][t];
+          if (o + len > u.length) return null;
+          v = 0;
+          for (let k = 0; k < len; k++) v = v * 256 + u[o + k];
+          if (u[o] & 0x80) v -= Math.pow(2, 8 * len);
+        } else if (t === 7) {
+          len = 8;
+          if (o + 8 > u.length) return null;
+          v = new DataView(u.buffer, u.byteOffset + o, 8).getFloat64(0, false);
+        } else if (t === 8) v = 0;
+        else if (t === 9) v = 1;
+        else if (t >= 12) {
+          len = (t - 12 - (t & 1)) / 2;
+          if (o + len > u.length) return null;
+          v = t & 1 ? new TextDecoder().decode(u.subarray(o, o + len)) : u.subarray(o, o + len);
+        }
+        out.push(v);
+        o += len;
+      }
+      return out;
+    }
+    function cmpVal(a, b) {
+      const ta = a === null ? 0 : typeof a === "number" ? 1 : typeof a === "string" ? 2 : 3;
+      const tb = b === null ? 0 : typeof b === "number" ? 1 : typeof b === "string" ? 2 : 3;
+      if (ta !== tb) return ta - tb;
+      if (ta === 1 || ta === 2) return a < b ? -1 : a > b ? 1 : 0;
+      return 0;
+    }
+    function cmpKey(rec, key) {
+      for (let i = 0; i < key.length; i++) {
+        const c = cmpVal(rec[i] === undefined ? null : rec[i], key[i]);
+        if (c) return c;
+      }
+      return 0;
+    }
+    function hdrOf(n) { return n === 1 ? 100 : 0; }
+
+    /* fila de una tabla con rowid: el registro completo (bytes) o null */
+    async function tableRow(root, rowid) {
+      let n = root;
+      for (let guard = 0; guard < 64; guard++) {
+        const pg = await page(n), h = hdrOf(n), t = pg[h], nc = be16(pg, h + 3);
+        if (t === 0x05) {
+          const cp = h + 12;
+          let lo = 0, hi = nc;
+          while (lo < hi) {
+            const m = (lo + hi) >> 1, c = be16(pg, cp + 2 * m);
+            const key = varint(pg, { i: c + 4 });
+            if (key < rowid) lo = m + 1; else hi = m;
+          }
+          n = lo < nc ? be32(pg, be16(pg, cp + 2 * lo)) : be32(pg, h + 8);
+        } else if (t === 0x0d) {
+          const cp = h + 8;
+          let lo = 0, hi = nc - 1;
+          while (lo <= hi) {
+            const m = (lo + hi) >> 1, p = { i: be16(pg, cp + 2 * m) };
+            const P = varint(pg, p), rid = varint(pg, p);
+            if (rid < rowid) lo = m + 1;
+            else if (rid > rowid) hi = m - 1;
+            else return payload(pg, p.i, P, true);
+          }
+          return null;
+        } else throw new Error("unexpected SQLite page type " + t);
+      }
+      return null;
+    }
+
+    /* primera entrada de un B-tree de índice cuyo prefijo es `key` */
+    async function indexSeek(root, key) {
+      let n = root;
+      for (let guard = 0; guard < 64; guard++) {
+        const pg = await page(n), h = hdrOf(n), t = pg[h], nc = be16(pg, h + 3);
+        const interior = t === 0x02;
+        if (!interior && t !== 0x0a) throw new Error("unexpected SQLite index page type " + t);
+        const cp = h + (interior ? 12 : 8);
+        const recAt = async function (m) {
+          const c = be16(pg, cp + 2 * m), p = { i: c + (interior ? 4 : 0) };
+          const P = varint(pg, p);
+          return record(await payload(pg, p.i, P, false));
+        };
+        let lo = 0, hi = nc, hit = null;
+        while (lo < hi) {
+          const m = (lo + hi) >> 1, r = await recAt(m), c = cmpKey(r, key);
+          if (c < 0) lo = m + 1;
+          else { hi = m; if (c === 0) hit = r; }
+        }
+        // en un índice las claves de los nodos interiores son entradas de
+        // verdad; con teselas únicas da lo mismo cuál de las iguales sale
+        if (hit) return hit;
+        if (!interior) return null;
+        n = lo < nc ? be32(pg, be16(pg, cp + 2 * lo)) : be32(pg, h + 8);
+      }
+      return null;
+    }
+
+    /* recorre un B-tree entero en orden: cb(rowid, bytes locales, P, page, start) */
+    async function walk(root, cb) {
+      const stack = [root];
+      while (stack.length) {
+        const n = stack.pop(), pg = await page(n), h = hdrOf(n), t = pg[h], nc = be16(pg, h + 3);
+        if (t === 0x05 || t === 0x02) {
+          const cp = h + 12;
+          const kids = [];
+          for (let k = 0; k < nc; k++) kids.push(be32(pg, be16(pg, cp + 2 * k)));
+          kids.push(be32(pg, h + 8));
+          if (t === 0x02)
+            for (let k = 0; k < nc; k++) {
+              const p = { i: be16(pg, cp + 2 * k) + 4 }, P = varint(pg, p);
+              await cb(null, pg, p.i, P, false);
+            }
+          for (let k = kids.length - 1; k >= 0; k--) stack.push(kids[k]);
+        } else if (t === 0x0d || t === 0x0a) {
+          const cp = h + 8;
+          for (let k = 0; k < nc; k++) {
+            const p = { i: be16(pg, cp + 2 * k) };
+            const P = varint(pg, p);
+            const rid = t === 0x0d ? varint(pg, p) : null;
+            await cb(rid, pg, p.i, P, t === 0x0d);
+          }
+        } else throw new Error("unexpected SQLite page type " + t);
+      }
+    }
+    async function scanRecords(root, upto) {
+      const rows = [];
+      await walk(root, async function (rid, pg, start, P, leaf) {
+        const L = localSize(P, leaf);
+        let r = upto !== undefined ? record(pg.subarray(start, start + L), upto) : null;
+        if (!r) r = record(await payload(pg, start, P, leaf), upto);
+        rows.push({ rowid: rid, rec: r });
+      });
+      return rows;
+    }
+
+    const master = (await scanRecords(1)).map(x => ({
+      type: String(x.rec[0] || ""), name: String(x.rec[1] || ""), tbl: String(x.rec[2] || ""),
+      root: x.rec[3], sql: String(x.rec[4] || ""),
+    }));
+    return { master, tableRow, indexSeek, scanRecords, record, cmpKey };
+  }
+
+  /* -- esquema: columnas de CREATE TABLE / CREATE INDEX -------------------- */
+  function splitTop(s) {
+    const out = [];
+    let depth = 0, cur = "", q = null;
+    for (const ch of s) {
+      if (q) { cur += ch; if (ch === q) q = null; continue; }
+      if (ch === '"' || ch === "'" || ch === "`" || ch === "[") { q = ch === "[" ? "]" : ch; cur += ch; continue; }
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (ch === "," && depth === 0) { out.push(cur.trim()); cur = ""; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  const unq = s => String(s || "").trim().replace(/^["'`[]|["'`\]]$/g, "").toLowerCase();
+  function inner(sql) {
+    const a = sql.indexOf("("), b = sql.lastIndexOf(")");
+    return a >= 0 && b > a ? sql.slice(a + 1, b) : "";
+  }
+  function tableCols(sql) {
+    const cols = [];
+    let alias = -1;
+    const parts = splitTop(inner(sql));
+    for (const p of parts) {
+      if (/^(constraint|primary|unique|check|foreign)\b/i.test(p)) continue;
+      const m = /^("[^"]+"|`[^`]+`|\[[^\]]+\]|\S+)/.exec(p);
+      if (!m) continue;
+      if (/^\S+\s+integer\s+primary\s+key/i.test(p)) alias = cols.length;
+      cols.push(unq(m[1]));
+    }
+    return { cols: cols, alias: alias };
+  }
+  function keyGroup(sql, word) {
+    const re = new RegExp(word + "\\s*\\(([^)]*)\\)", "i");
+    const m = re.exec(inner(sql));
+    return m ? m[1].split(",").map(unq) : null;
+  }
+  function indexCols(entry, master) {
+    if (entry.sql) {
+      const m = /\bon\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|\S+?)\s*\(([^)]*)\)/i.exec(entry.sql);
+      return m ? m[2].split(",").map(c => unq(c.replace(/\s+(asc|desc|collate\s+\S+)\s*$/i, ""))) : [];
+    }
+    // índice automático de un UNIQUE / PRIMARY KEY de la tabla
+    const t = master.find(x => x.type === "table" && x.name.toLowerCase() === entry.tbl.toLowerCase());
+    if (!t) return [];
+    return keyGroup(t.sql, "unique") || keyGroup(t.sql, "primary\\s+key") || [];
+  }
+  const startsWith = (a, b) => b.every((c, i) => a[i] === c);
+
+  /* Búsqueda por clave en una tabla: {get(key) → valores por columna | null} */
+  async function makeLookup(db, name, key) {
+    const t = db.master.find(m => m.type === "table" && m.name.toLowerCase() === name);
+    if (!t) return null;
+    const tc = tableCols(t.sql);
+    if (/without\s+rowid/i.test(t.sql)) {
+      const pk = keyGroup(t.sql, "primary\\s+key") || [];
+      if (startsWith(pk, key)) {
+        const order = pk.concat(tc.cols.filter(c => pk.indexOf(c) < 0));
+        return { cols: order, get: async k => db.indexSeek(t.root, k) };
+      }
+    }
+    const idx = db.master.find(m => m.type === "index" && m.tbl.toLowerCase() === name &&
+                                    startsWith(indexCols(m, db.master), key));
+    const fetch = async function (rowid) {
+      const bytes = await db.tableRow(t.root, rowid);
+      if (!bytes) return null;
+      const r = db.record(bytes);
+      if (tc.alias >= 0) r[tc.alias] = rowid;
+      return r;
+    };
+    if (idx)
+      return { cols: tc.cols, get: async function (k) {
+        const r = await db.indexSeek(idx.root, k);
+        return r ? fetch(r[r.length - 1]) : null;
+      } };
+    // sin índice: un recorrido y un índice propio en memoria
+    const ki = key.map(c => tc.cols.indexOf(c));
+    if (ki.some(i => i < 0)) return null;
+    const upto = Math.max.apply(null, ki) + 1;
+    const map = new Map();
+    for (const row of await db.scanRecords(t.root, upto))
+      map.set(ki.map(i => i === tc.alias ? row.rowid : row.rec[i]).join("/"), row.rowid);
+    return { cols: tc.cols, keys: map, get: async function (k) {
+      const rid = map.get(k.join("/"));
+      return rid === undefined ? null : fetch(rid);
+    } };
+  }
+
+  async function openMbtiles(file) {
+    const db = await openSqlite(file);
+    const meta = {};
+    const mt = db.master.find(m => m.type === "table" && m.name.toLowerCase() === "metadata");
+    if (mt) {
+      const c = tableCols(mt.sql).cols;
+      const iN = c.indexOf("name"), iV = c.indexOf("value");
+      for (const r of await db.scanRecords(mt.root))
+        if (r.rec && r.rec[iN] !== undefined) meta[String(r.rec[iN]).toLowerCase()] = r.rec[iV];
+    }
+    const fmt = String(meta.format || "").toLowerCase();
+    if (fmt === "pbf" || fmt === "mvt")
+      throw new Error("it holds vector tiles (pbf) — only raster MBTiles (PNG, JPEG, WebP) can be shown");
+
+    const K = ["zoom_level", "tile_column", "tile_row"];
+    let get = null, keysMap = null;
+    const tiles = await makeLookup(db, "tiles", K);
+    if (tiles) {
+      const iD = tiles.cols.indexOf("tile_data");
+      keysMap = tiles.keys;
+      get = async function (k) { const r = await tiles.get(k); return r ? r[iD] : null; };
+    } else {
+      // esquema normalizado: map (z, x, y, tile_id) + images (tile_data, tile_id)
+      const map = await makeLookup(db, "map", K);
+      const images = map && await makeLookup(db, "images", ["tile_id"]);
+      if (!map || !images) throw new Error("no tiles table (or map + images) in this MBTiles");
+      const iId = map.cols.indexOf("tile_id"), iD = images.cols.indexOf("tile_data");
+      keysMap = map.keys;
+      get = async function (k) {
+        const r = await map.get(k);
+        if (!r) return null;
+        const im = await images.get([r[iId]]);
+        return im ? im[iD] : null;
+      };
+    }
+
+    let minZ = parseInt(meta.minzoom, 10), maxZ = parseInt(meta.maxzoom, 10);
+    if (!isFinite(minZ) || !isFinite(maxZ)) {
+      const zs = [];
+      if (keysMap) for (const k of keysMap.keys()) zs.push(+k.split("/")[0]);
+      else
+        for (let z = 0; z <= 24; z++) {
+          const lk = await makeLookupProbe(db, z);
+          if (lk) zs.push(z);
+        }
+      if (!isFinite(minZ)) minZ = zs.length ? Math.min.apply(null, zs) : 0;
+      if (!isFinite(maxZ)) maxZ = zs.length ? Math.max.apply(null, zs) : 18;
+    }
+    let bounds = null;
+    const b = String(meta.bounds || "").split(",").map(Number);
+    if (b.length === 4 && b.every(isFinite) && b[2] > b[0] && b[3] > b[1]) bounds = b;
+
+    async function getTile(z, x, y) {
+      if (z < minZ || z > maxZ) return null;
+      const d = await get([z, x, Math.pow(2, z) - 1 - y]);    // MBTiles numera en TMS
+      if (!d || !d.length) return null;
+      return d[0] === 0x1f && d[1] === 0x8b ? inflate(d, "gzip") : d;
+    }
+    async function makeLookupProbe(db2, z) {
+      const t = db2.master.find(m => m.type === "index" &&
+        startsWith(indexCols(m, db2.master), K) && /^(tiles|map)$/i.test(m.tbl));
+      return t ? db2.indexSeek(t.root, [z]) : null;
+    }
+    return { kind: "tiles", format: "MBTiles " + (fmt || "png").toUpperCase(),
+             name: meta.name ? String(meta.name) : "", minZ: minZ, maxZ: maxZ,
+             bounds: bounds, getTile: getTile };
+  }
+
+  /* ======================================================================
+   * GeoTIFF
+   * ==================================================================== */
+  const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4,
+                      12: 8, 13: 4, 16: 8, 17: 8, 18: 8 };
+
+  async function tiffIfds(read, size) {
+    const head = await read(0, Math.min(size, 16));
+    const le = head[0] === 0x49;
+    if (!(head[0] === 0x49 && head[1] === 0x49) && !(head[0] === 0x4d && head[1] === 0x4d))
+      throw new Error("not a TIFF file");
+    const dv0 = new DataView(head.buffer, head.byteOffset, head.byteLength);
+    const magic = dv0.getUint16(2, le);
+    const big = magic === 43;
+    if (magic !== 42 && !big) throw new Error("not a TIFF file");
+    const u64 = (dv, o) => le
+      ? dv.getUint32(o, true) + dv.getUint32(o + 4, true) * 4294967296
+      : dv.getUint32(o, false) * 4294967296 + dv.getUint32(o + 4, false);
+    let next = big ? u64(dv0, 8) : dv0.getUint32(4, le);
+    const ifds = [];
+    while (next && ifds.length < 64) {
+      const cntB = await read(next, big ? 8 : 2);
+      const cdv = new DataView(cntB.buffer, cntB.byteOffset, cntB.byteLength);
+      const n = big ? u64(cdv, 0) : cdv.getUint16(0, le);
+      const es = big ? 20 : 12;
+      const body = await read(next + (big ? 8 : 2), n * es + (big ? 8 : 4));
+      const dv = new DataView(body.buffer, body.byteOffset, body.byteLength);
+      const tags = {};
+      for (let i = 0; i < n; i++) {
+        const o = i * es;
+        const tag = dv.getUint16(o, le), type = dv.getUint16(o + 2, le);
+        const count = big ? u64(dv, o + 4) : dv.getUint32(o + 4, le);
+        const sz = (TYPE_SIZE[type] || 1) * count;
+        const inl = big ? 8 : 4;
+        let vb, vdv, vo;
+        if (sz <= inl) { vdv = dv; vo = o + (big ? 12 : 8); vb = body; }
+        else {
+          const off = big ? u64(dv, o + 12) : dv.getUint32(o + 8, le);
+          vb = await read(off, sz);
+          vdv = new DataView(vb.buffer, vb.byteOffset, vb.byteLength); vo = 0;
+        }
+        if (type === 2) {
+          let s = "";
+          for (let k = 0; k < count; k++) {
+            const ch = vdv.getUint8(vo + k);
+            s += ch ? String.fromCharCode(ch) : "\n";
+          }
+          tags[tag] = s;
+          continue;
+        }
+        if (type === 7 && tag !== 347) { tags[tag] = null; continue; }
+        const arr = tag === 347 ? new Uint8Array(count) : new Array(count);
+        for (let k = 0; k < count; k++) {
+          const p = vo + k * (TYPE_SIZE[type] || 1);
+          let v;
+          switch (type) {
+            case 1: case 7: v = vdv.getUint8(p); break;
+            case 6: v = vdv.getInt8(p); break;
+            case 3: v = vdv.getUint16(p, le); break;
+            case 8: v = vdv.getInt16(p, le); break;
+            case 4: case 13: v = vdv.getUint32(p, le); break;
+            case 9: v = vdv.getInt32(p, le); break;
+            case 5: v = vdv.getUint32(p, le) / (vdv.getUint32(p + 4, le) || 1); break;
+            case 10: v = vdv.getInt32(p, le) / (vdv.getInt32(p + 4, le) || 1); break;
+            case 11: v = vdv.getFloat32(p, le); break;
+            case 12: v = vdv.getFloat64(p, le); break;
+            case 16: case 18: v = u64(vdv, p); break;
+            case 17: v = u64(vdv, p); break;
+            default: v = 0;
+          }
+          arr[k] = v;
+        }
+        tags[tag] = arr;
+      }
+      ifds.push(tags);
+      next = big ? u64(dv, n * es) : dv.getUint32(n * es, le);
+    }
+    if (!ifds.length) throw new Error("the TIFF has no images");
+    return { le: le, ifds: ifds };
+  }
+
+  function lzw(src, expected) {
+    const prefix = new Int16Array(4096), suffix = new Uint8Array(4096),
+          first = new Uint8Array(4096), len = new Uint16Array(4096);
+    for (let i = 0; i < 256; i++) { prefix[i] = -1; suffix[i] = i; first[i] = i; len[i] = 1; }
+    let out = new Uint8Array(expected || src.length * 3), op = 0;
+    const emit = function (c) {
+      const L = len[c];
+      if (op + L > out.length) {
+        const o = new Uint8Array(Math.max(out.length * 2, op + L));
+        o.set(out); out = o;
+      }
+      let p = op + L - 1, k = c;
+      while (k >= 0 && p >= op) { out[p--] = suffix[k]; k = prefix[k]; }
+      op += L;
+    };
+    let bit = 0, width = 9, next = 258, old = -1;
+    const total = src.length * 8;
+    while (bit + width <= total) {
+      const b = bit >> 3;
+      const v = (src[b] << 16) | ((src[b + 1] || 0) << 8) | (src[b + 2] || 0);
+      const code = (v >> (24 - (bit & 7) - width)) & ((1 << width) - 1);
+      bit += width;
+      if (code === 257) break;
+      if (code === 256) { width = 9; next = 258; old = -1; continue; }
+      if (old === -1) { if (code > 255) break; emit(code); old = code; continue; }
+      if (code < next) {
+        emit(code);
+        if (next < 4096) {
+          prefix[next] = old; suffix[next] = first[code]; first[next] = first[old];
+          len[next] = len[old] + 1; next++;
+        }
+      } else {
+        if (next < 4096) {
+          prefix[next] = old; suffix[next] = first[old]; first[next] = first[old];
+          len[next] = len[old] + 1; next++;
+        }
+        emit(code);
+      }
+      old = code;
+      if (next >= (1 << width) - 1 && width < 12) width++;
+    }
+    return out.subarray(0, op);
+  }
+
+  function packbits(src, expected) {
+    const out = new Uint8Array(expected);
+    let i = 0, o = 0;
+    while (i < src.length && o < expected) {
+      const n = (src[i++] << 24) >> 24;
+      if (n >= 0) { for (let k = 0; k <= n && o < expected; k++) out[o++] = src[i++]; }
+      else if (n !== -128) { const b = src[i++]; for (let k = 0; k < 1 - n && o < expected; k++) out[o++] = b; }
+    }
+    return out;
+  }
+
+  /* bytes crudos → muestras tipadas (con el orden de bytes del archivo) */
+  function typed(raw, bps, fmt, le) {
+    const n = Math.floor(raw.length / (bps / 8));
+    const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+    let a;
+    if (bps === 8) return fmt === 2 ? new Int8Array(raw.buffer, raw.byteOffset, raw.length) : raw;
+    if (bps === 16) {
+      a = fmt === 2 ? new Int16Array(n) : new Uint16Array(n);
+      for (let i = 0; i < n; i++) a[i] = fmt === 2 ? dv.getInt16(2 * i, le) : dv.getUint16(2 * i, le);
+    } else if (bps === 32) {
+      a = fmt === 3 ? new Float32Array(n) : fmt === 2 ? new Int32Array(n) : new Uint32Array(n);
+      for (let i = 0; i < n; i++)
+        a[i] = fmt === 3 ? dv.getFloat32(4 * i, le) : fmt === 2 ? dv.getInt32(4 * i, le) : dv.getUint32(4 * i, le);
+    } else if (bps === 64 && fmt === 3) {
+      a = new Float64Array(n);
+      for (let i = 0; i < n; i++) a[i] = dv.getFloat64(8 * i, le);
+    } else throw new Error(bps + "-bit samples are not supported");
+    return a;
+  }
+
+  /* predictor 3 (coma flotante): deshace la diferencia de bytes y el
+   * barajado por planos de bytes, fila por fila */
+  function unpredictFloat(raw, w, spp, bps) {
+    const bpsB = bps / 8, rowB = w * spp * bpsB, rows = Math.floor(raw.length / rowB);
+    const out = new Uint8Array(rows * rowB);
+    const n = w * spp;
+    for (let r = 0; r < rows; r++) {
+      const row = raw.subarray(r * rowB, (r + 1) * rowB);
+      for (let i = 1; i < rowB; i++) row[i] = (row[i] + row[i - 1]) & 255;
+      const o = r * rowB;
+      for (let k = 0; k < n; k++)
+        for (let b = 0; b < bpsB; b++) out[o + k * bpsB + b] = row[b * n + k];   // big-endian
+    }
+    return out;
+  }
+
+  function geoKeys(t) {
+    const dir = t[34735];
+    const keys = {};
+    if (!dir) return keys;
+    const dbl = t[34736] || [], asc = t[34737] || "";
+    for (let i = 4; i + 3 < dir.length; i += 4) {
+      const id = dir[i], loc = dir[i + 1], cnt = dir[i + 2], v = dir[i + 3];
+      if (loc === 0) keys[id] = v;
+      else if (loc === 34736) keys[id] = cnt === 1 ? dbl[v] : dbl.slice(v, v + cnt);
+      else if (loc === 34737) keys[id] = asc.substr(v, cnt).replace(/[|\n]+$/, "");
+    }
+    return keys;
+  }
+
+  /* GeoKeys → texto de CRS que entiende SW.shp.parsePrj ("" = no se sabe) */
+  function crsFromKeys(k) {
+    const S = SW.shp;
+    const pcs = k[3072], gcs = k[2048], model = k[1024];
+    const cit = [k[1026], k[3073], k[2049]].filter(Boolean).join(" ");
+    if (pcs && pcs !== 32767 && S.epsgWkt(pcs)) return "EPSG:" + pcs;
+    if (pcs === 32767 && k[3075] === 1) {     // Transversa de Mercator definida en las claves
+      let a = k[2057], invf = k[2059];
+      const ell = k[2056];
+      if (!a) {
+        if (ell === 7022 || gcs === 4248) { a = 6378388; invf = 297; }
+        else if (ell === 7019 || gcs === 4674) { a = 6378137; invf = 298.257222101; }
+        else { a = 6378137; invf = 298.257223563; }
+      }
+      if (!invf && k[2058]) invf = a / (a - k[2058]);
+      return 'PROJCS["' + (k[3073] || k[1026] || "Transverse Mercator").replace(/"/g, "") +
+        '",GEOGCS["g",DATUM["d",SPHEROID["s",' + a + "," + (invf || 298.257223563) + ']],' +
+        'UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],' +
+        'PARAMETER["latitude_of_origin",' + (k[3081] || k[3085] || 0) + '],' +
+        'PARAMETER["central_meridian",' + (k[3080] || k[3088] || 0) + '],' +
+        'PARAMETER["scale_factor",' + (k[3092] || 1) + '],' +
+        'PARAMETER["false_easting",' + (k[3082] || 0) + '],' +
+        'PARAMETER["false_northing",' + (k[3083] || 0) + '],UNIT["metre",1]]';
+    }
+    const utm = /UTM\s*zone\s*(\d{1,2})\s*,?\s*(north|south|[NS])?/i.exec(cit);
+    if (utm) {
+      const south = /^s/i.test(utm[2] || "") || (!utm[2] && /south/i.test(cit));
+      const datum = /psad/i.test(cit) ? { name: "PSAD56", sph: "International 1924", a: 6378388, rf: 297 }
+        : /sirgas/i.test(cit) ? { name: "SIRGAS 2000", sph: "GRS 1980", a: 6378137, rf: 298.257222101 } : null;
+      return S.utmWkt(+utm[1], south, datum);
+    }
+    if (pcs && pcs !== 32767) return "EPSG:" + pcs;
+    if (model === 2 || (!pcs && gcs)) return "EPSG:4326";
+    return "";
+  }
+
+  /* chunk (strip/tesela) → muestras ya descomprimidas y con el predictor
+   * deshecho; o {rgba} si vino en JPEG/WebP */
+  async function chunk(ctx, idx) {
+    const t = ctx.t;
+    const off = ctx.offsets[idx], len = ctx.counts[idx];
+    if (!len) return null;
+    let raw = await ctx.read(off, len);
+    const comp = ctx.comp;
+    if (comp === 7 || comp === 50001 || comp === 6) {
+      if (comp === 6) throw new Error("old-style JPEG TIFF compression is not supported");
+      let bytes = raw;
+      if (comp === 7 && t[347] && t[347].length > 4) {
+        const tb = t[347];
+        bytes = new Uint8Array(tb.length - 2 + raw.length - 2);
+        bytes.set(tb.subarray(0, tb.length - 2));
+        bytes.set(raw.subarray(2), tb.length - 2);
+      }
+      const img = await decodeImage(bytes);
+      const w = img.width, h = img.height;
+      if (!ctx.jc || ctx.jc.width < w || ctx.jc.height < h) ctx.jc = newCanvas(w, h);
+      const g = ctx.jc.getContext("2d", { willReadFrequently: true });
+      g.clearRect(0, 0, w, h);
+      g.drawImage(img, 0, 0);
+      if (img.close) img.close();
+      return { rgba: g.getImageData(0, 0, w, h).data, w: w };
+    }
+    const expected = ctx.cw * ctx.chRows(idx) * ctx.sppC * ctx.bps / 8;
+    if (comp === 5) raw = lzw(raw, expected);
+    else if (comp === 8 || comp === 32946) raw = await inflate(raw, "deflate");
+    else if (comp === 32773) raw = packbits(raw, expected);
+    else if (comp !== 1)
+      throw new Error("TIFF compression " + comp + " is not supported (none, LZW, Deflate, PackBits, JPEG, WebP)");
+    if (ctx.pred === 3) {
+      raw = unpredictFloat(raw.slice(), ctx.cw, ctx.sppC, ctx.bps);
+      return typed(raw, ctx.bps, ctx.fmt, false);
+    }
+    const v = typed(raw, ctx.bps, ctx.fmt, ctx.le);
+    if (ctx.pred === 2) {
+      const rs = ctx.cw * ctx.sppC, rows = Math.floor(v.length / rs), s = ctx.sppC;
+      for (let r = 0; r < rows; r++) {
+        const o = r * rs;
+        for (let i = s; i < rs; i++) v[o + i] = v[o + i] + v[o + i - s];
+      }
+    }
+    return v;
+  }
+
+  /* lee un IFD a una grilla de salida ow × oh (vecino más cercano) */
+  async function readIfd(read, le, t, ow, oh, mode, progress) {
+    const W = t[256][0], Hh = t[257][0];
+    const spp = t[277] ? t[277][0] : 1;
+    const bps = t[258] ? t[258][0] : 1;
+    const fmt = t[339] ? t[339][0] : 1;
+    const planar = t[284] ? t[284][0] : 1;
+    const tiled = !!t[322];
+    const cw = tiled ? t[322][0] : W;
+    const chH = tiled ? t[323][0] : Math.min(Hh, t[278] ? t[278][0] : Hh);
+    const across = tiled ? Math.ceil(W / cw) : 1, down = Math.ceil(Hh / chH);
+    const perPlane = across * down;
+    const ctx = {
+      t: t, read: read, le: le, comp: t[259] ? t[259][0] : 1, pred: t[317] ? t[317][0] : 1,
+      bps: bps, fmt: fmt, cw: cw, sppC: planar === 2 ? 1 : spp,
+      offsets: tiled ? t[324] : t[273], counts: tiled ? t[325] : t[279],
+      chRows: idx => tiled ? chH : Math.min(chH, Hh - (idx % perPlane) * chH),
+    };
+    if (!ctx.offsets) throw new Error("the TIFF has no image data offsets");
+    if (bps !== 8 && bps !== 16 && bps !== 32 && bps !== 64)
+      throw new Error(bps + "-bit TIFF samples are not supported");
+    const nb = mode.bands;
+    const out = mode.u8 ? new Uint8ClampedArray(ow * oh * 4) : new Float32Array(ow * oh * nb).fill(NaN);
+    const sxOf = new Int32Array(ow), syOf = new Int32Array(oh);
+    for (let x = 0; x < ow; x++) sxOf[x] = Math.min(W - 1, Math.floor((x + 0.5) * W / ow));
+    for (let y = 0; y < oh; y++) syOf[y] = Math.min(Hh - 1, Math.floor((y + 0.5) * Hh / oh));
+    const planes = planar === 2 ? Math.min(spp, Math.max(nb, mode.u8 ? 4 : nb)) : 1;
+    const total = perPlane * planes;
+    let done = 0;
+    for (let pl = 0; pl < planes; pl++)
+      for (let ci = 0; ci < perPlane; ci++) {
+        const cx = tiled ? (ci % across) * cw : 0, cy = (tiled ? Math.floor(ci / across) : ci) * chH;
+        // ¿alguna salida cae en este chunk?
+        let oy0 = -1, oy1 = -1, ox0 = -1, ox1 = -1;
+        for (let y = 0; y < oh; y++) if (syOf[y] >= cy && syOf[y] < cy + chH) { if (oy0 < 0) oy0 = y; oy1 = y; }
+        for (let x = 0; x < ow; x++) if (sxOf[x] >= cx && sxOf[x] < cx + cw) { if (ox0 < 0) ox0 = x; ox1 = x; }
+        done++;
+        if (oy0 < 0 || ox0 < 0) continue;
+        const data = await chunk(ctx, pl * perPlane + ci);
+        if (progress && (done & 15) === 0) progress(done / total);
+        if (!data) continue;
+        for (let y = oy0; y <= oy1; y++) {
+          const ry = syOf[y] - cy;
+          for (let x = ox0; x <= ox1; x++) {
+            const rx = sxOf[x] - cx, o = (y * ow + x);
+            if (data.rgba) {
+              const s = (ry * data.w + rx) * 4;
+              if (mode.u8) {
+                out[o * 4] = data.rgba[s]; out[o * 4 + 1] = data.rgba[s + 1];
+                out[o * 4 + 2] = data.rgba[s + 2]; out[o * 4 + 3] = 255;
+              } else for (let b = 0; b < nb; b++) out[o * nb + b] = data.rgba[s + b];
+              continue;
+            }
+            const s = (ry * cw + rx) * ctx.sppC;
+            if (mode.u8) {
+              if (planar === 2) mode.put(out, o, pl, data[s]);
+              else mode.pix(out, o, data, s);
+            } else if (planar === 2) { if (pl < nb) out[o * nb + pl] = data[s]; }
+            else for (let b = 0; b < nb; b++) out[o * nb + b] = data[s + b];
+          }
+        }
+      }
+    return out;
+  }
+
+  /* percentiles 2–98 % de una banda (sin NaN ni nodata) */
+  function stretch(vals, nb, b, nodata) {
+    const step = Math.max(1, Math.floor(vals.length / nb / 200000));
+    const s = [];
+    for (let i = b; i < vals.length; i += nb * step) {
+      const v = vals[i];
+      if (v === v && v !== nodata && isFinite(v)) s.push(v);
+    }
+    if (!s.length) return [0, 1];
+    s.sort((x, y) => x - y);
+    const lo = s[Math.floor(s.length * 0.02)], hi = s[Math.min(s.length - 1, Math.floor(s.length * 0.98))];
+    return hi > lo ? [lo, hi] : [s[0], s[s.length - 1] > s[0] ? s[s.length - 1] : s[0] + 1];
+  }
+
+  const RAMP = [[0, [38, 115, 77]], [0.2, [120, 168, 90]], [0.4, [225, 210, 140]],
+                [0.6, [190, 140, 90]], [0.8, [150, 110, 95]], [1, [250, 250, 250]]];
+  function ramp(t) {
+    t = Math.max(0, Math.min(1, t));
+    for (let i = 1; i < RAMP.length; i++)
+      if (t <= RAMP[i][0]) {
+        const a = RAMP[i - 1], b = RAMP[i], f = (t - a[0]) / (b[0] - a[0]);
+        return [a[1][0] + (b[1][0] - a[1][0]) * f, a[1][1] + (b[1][1] - a[1][1]) * f,
+                a[1][2] + (b[1][2] - a[1][2]) * f];
+      }
+    return RAMP[RAMP.length - 1][1];
+  }
+
+  /* banda única flotante → RGBA según el estilo */
+  function renderBand(r) {
+    const w = r.w, h = r.h, v = r.vals, nd = r.nodata, out = r.ctx.createImageData(w, h);
+    const d = out.data, st = r.stats, span = st[1] - st[0] || 1;
+    const valid = x => x === x && x !== nd && isFinite(x) && Math.abs(x) < 1e30;
+    let shade = null;
+    if (r.style !== "gray") {
+      shade = new Float32Array(w * h);
+      const dx = r.pixM[0], dy = r.pixM[1];
+      const zen = (90 - 45) * D2R, azm = ((360 - 315 + 90) % 360) * D2R;
+      const zf = r.style === "relief" ? 1.5 : 2;
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (!valid(v[i])) continue;
+          const at = (xx, yy) => {
+            xx = Math.max(0, Math.min(w - 1, xx)); yy = Math.max(0, Math.min(h - 1, yy));
+            const q = v[yy * w + xx];
+            return valid(q) ? q : v[i];
+          };
+          const a = at(x - 1, y - 1), b = at(x, y - 1), c = at(x + 1, y - 1),
+                dd = at(x - 1, y), f = at(x + 1, y),
+                g = at(x - 1, y + 1), hh = at(x, y + 1), ii = at(x + 1, y + 1);
+          const gx = ((c + 2 * f + ii) - (a + 2 * dd + g)) / (8 * dx) * zf;
+          const gy = ((g + 2 * hh + ii) - (a + 2 * b + c)) / (8 * dy) * zf;
+          // sombreado de Horn, como el de ArcGIS / GDAL
+          const slope = Math.atan(Math.hypot(gx, gy));
+          const aspect = Math.atan2(gy, -gx);
+          const s = Math.cos(zen) * Math.cos(slope) +
+                    Math.sin(zen) * Math.sin(slope) * Math.cos(azm - aspect);
+          shade[i] = Math.max(0, s);
+        }
+    }
+    for (let i = 0; i < w * h; i++) {
+      const x = v[i], o = i * 4;
+      if (!valid(x)) { d[o + 3] = 0; continue; }
+      const t = (x - st[0]) / span;
+      if (r.style === "gray") {
+        const g = Math.max(0, Math.min(255, t * 255));
+        d[o] = d[o + 1] = d[o + 2] = g;
+      } else if (r.style === "relief") {
+        const c = ramp(t), s = 0.35 + 0.75 * shade[i];
+        d[o] = Math.min(255, c[0] * s); d[o + 1] = Math.min(255, c[1] * s); d[o + 2] = Math.min(255, c[2] * s);
+      } else {
+        const g = Math.min(255, 255 * shade[i]);
+        d[o] = d[o + 1] = d[o + 2] = g;
+      }
+      d[o + 3] = 255;
+    }
+    r.ctx.putImageData(out, 0, 0);
+  }
+
+  /* texto de un .tfw → transformación píxel→mundo (esquina superior izq.) */
+  function worldFile(text) {
+    const n = String(text || "").trim().split(/\s+/).map(Number);
+    if (n.length < 6 || !n.slice(0, 6).every(isFinite)) return null;
+    const [A, D, B, E, C, F] = n;
+    // C, F son el CENTRO del píxel (0, 0)
+    return { a: A, b: B, c: C - A / 2 - B / 2, d: D, e: E, f: F - D / 2 - E / 2 };
+  }
+
+  /* files: el .tif y, opcionalmente, su .tfw y su .prj. askCrs(defaultText)
+   * → Promise<texto de CRS> cuando el archivo no declara uno. */
+  async function openGeoTiff(files, askCrs, progress) {
+    const tif = files.find(f => /\.tiff?$/i.test(f.name)) || files[0];
+    const stem = tif.name.replace(/\.[^.]+$/, "").toLowerCase();
+    const side = ext => files.find(f => f !== tif && f.name.toLowerCase().replace(/\.[^.]+$/, "") === stem &&
+                                       ext.test(f.name));
+    const read = reader(tif);
+    const T = await tiffIfds(read, tif.size);
+    const main = T.ifds[0];
+    if (!main[256] || !main[257]) throw new Error("the TIFF has no image size");
+    const W = main[256][0], Hh = main[257][0];
+    const keys = geoKeys(main);
+
+    // georreferencia: píxel (col, fila) → (x, y) del CRS
+    let M = null;
+    const tfw = side(/\.(tfw|tifw|tiffw|wld)$/i);
+    if (tfw) M = worldFile(await tfw.text());
+    if (!M && main[34264] && main[34264].length >= 8) {
+      const m = main[34264];
+      M = { a: m[0], b: m[1], c: m[3], d: m[4], e: m[5], f: m[7] };
+    }
+    if (!M && main[33922] && main[33550]) {
+      const tp = main[33922], sc = main[33550];
+      M = { a: sc[0], b: 0, c: tp[3] - tp[0] * sc[0], d: 0, e: -sc[1], f: tp[4] + tp[1] * sc[1] };
+    }
+    if (!M) throw new Error("no georeferencing (GeoTIFF tags or a .tfw world file)");
+    if (keys[1025] === 2 && !tfw) {     // PixelIsPoint: el tiepoint es el centro del píxel
+      M.c -= (M.a + M.b) / 2; M.f -= (M.d + M.e) / 2;
+    }
+
+    let crsText = crsFromKeys(keys);
+    const prj = side(/\.prj$/i);
+    if (prj) crsText = (await prj.text()).trim() || crsText;
+    let crs = SW.shp.parsePrj(crsText);
+    if (!SW.shp.toLonLat(crs)) {
+      crsText = await askCrs(crsText, crs);
+      if (!crsText) throw new Error("cancelled");
+      crs = SW.shp.parsePrj(crsText);
+      if (!SW.shp.toLonLat(crs)) throw new Error("can't place that coordinate system on the map (" +
+        SW.shp.crsLabel(crs) + ")");
+    }
+
+    // qué IFD leer: el overview más chico que no baje de la resolución pedida
+    const spp = main[277] ? main[277][0] : 1;
+    const bps = main[258] ? main[258][0] : 1;
+    const fmt = main[339] ? main[339][0] : 1;
+    const phot = main[262] ? main[262][0] : (spp >= 3 ? 2 : 1);
+    const cmap = main[320];
+    const comp = main[259] ? main[259][0] : 1;
+    const jpegLike = comp === 7 || comp === 50001;
+    const single = (spp === 1 || (spp === 2 && phot <= 1)) && !cmap && !jpegLike;
+    const u8 = bps === 8 && !(single && fmt === 3);
+    const isBand = single && !u8;
+    const MAX = isBand ? 3072 : (u8 ? 4096 : 2048);
+    const f = Math.min(1, MAX / Math.max(W, Hh));
+    const ow = Math.max(1, Math.round(W * f)), oh = Math.max(1, Math.round(Hh * f));
+    let pick = main;
+    for (const t of T.ifds.slice(1)) {
+      if (!t[256] || !t[257] || ((t[254] ? t[254][0] : 0) & 4)) continue;
+      if (t[256][0] >= ow * 0.95 && t[256][0] < pick[256][0] &&
+          (t[277] ? t[277][0] : 1) === spp && (t[258] ? t[258][0] : 1) === bps) pick = t;
+    }
+    // un overview hereda lo que le falte (tablas JPEG, formato…)
+    for (const k of [258, 262, 277, 284, 317, 339, 347]) if (pick[k] === undefined && main[k] !== undefined) pick[k] = main[k];
+
+    const ndRaw = main[42113] ? parseFloat(String(main[42113]).trim()) : NaN;
+    const nodata = isFinite(ndRaw) ? (u8 ? ndRaw : Math.fround(ndRaw)) : null;
+    const extra = main[338] ? main[338][0] : 0;
+
+    const mode = { u8: u8 && !isBand, bands: isBand ? 1 : Math.min(spp, 4) };
+    if (mode.u8) {
+      const inv = phot === 0;
+      const nd8 = nodata;
+      mode.pix = function (out, o, d, s) {
+        const p = o * 4;
+        if (cmap) {
+          const n = 1 << bps, v = d[s];
+          out[p] = cmap[v] >> 8; out[p + 1] = cmap[n + v] >> 8; out[p + 2] = cmap[2 * n + v] >> 8;
+          out[p + 3] = nd8 !== null && v === nd8 ? 0 : 255;
+        } else if (spp >= 3) {
+          out[p] = d[s]; out[p + 1] = d[s + 1]; out[p + 2] = d[s + 2];
+          out[p + 3] = spp >= 4 && extra ? d[s + 3]
+            : nd8 !== null && d[s] === nd8 && d[s + 1] === nd8 && d[s + 2] === nd8 ? 0 : 255;
+        } else {
+          const g = inv ? 255 - d[s] : d[s];
+          out[p] = out[p + 1] = out[p + 2] = g;
+          out[p + 3] = spp === 2 ? d[s + 1] : nd8 !== null && d[s] === nd8 ? 0 : 255;
+        }
+      };
+      mode.put = function (out, o, pl, v) {
+        const p = o * 4;
+        if (spp >= 3) {
+          if (pl < 3) out[p + pl] = v;
+          else if (pl === 3 && extra) out[p + 3] = v;
+          if (pl === 0 || spp < 4 || !extra) out[p + 3] = 255;
+        } else { out[p] = out[p + 1] = out[p + 2] = v; out[p + 3] = 255; }
+      };
+    }
+    const data = await readIfd(read, T.le, pick, ow, oh, mode, progress);
+
+    const canvas = newCanvas(ow, oh), g = canvas.getContext("2d");
+    const r = { w: ow, h: oh, canvas: canvas, ctx: g, crs: crs, crsText: crsText, nodata: nodata,
+                single: isBand, src: { w: W, h: Hh, bps: bps, spp: spp, fmt: fmt } };
+    if (mode.u8) {
+      g.putImageData(new ImageData(data, ow, oh), 0, 0);
+    } else if (isBand) {
+      r.vals = data;
+      r.stats = stretch(data, 1, 0, nodata);
+      const geo = crs.kind === "geographic";
+      const lat = geo ? (M.f + M.e * Hh / 2) * D2R : 0;
+      const px = Math.hypot(M.a, M.d) * W / ow, py = Math.hypot(M.b, M.e) * Hh / oh;
+      r.pixM = geo ? [px * 111320 * Math.cos(lat), py * 110540] : [px * (crs.unit || 1), py * (crs.unit || 1)];
+      r.style = fmt === 3 || fmt === 2 ? "hillshade" : "gray";
+      r.render = function () { renderBand(r); };
+      renderBand(r);
+    } else {
+      // varias bandas de 16/32 bits: cada una estirada a 8 bits
+      const nb = mode.bands, img = g.createImageData(ow, oh), d = img.data;
+      const st = [];
+      for (let b = 0; b < Math.min(nb, 3); b++) st.push(stretch(data, nb, b, nodata));
+      for (let i = 0; i < ow * oh; i++) {
+        let bad = false;
+        for (let b = 0; b < 3; b++) {
+          const s = st[Math.min(b, st.length - 1)], v = data[i * nb + Math.min(b, nb - 1)];
+          if (!(v === v) || v === nodata) bad = true;
+          d[i * 4 + b] = (v - s[0]) / (s[1] - s[0] || 1) * 255;
+        }
+        d[i * 4 + 3] = bad ? 0 : 255;
+      }
+      g.putImageData(img, 0, 0);
+    }
+    // píxel de salida → CRS
+    const sx = W / ow, sy = Hh / oh;
+    r.toCrs = (x, y) => [M.a * x * sx + M.b * y * sy + M.c, M.d * x * sx + M.e * y * sy + M.f];
+    r.kind = "image";
+    r.format = "GeoTIFF " + (spp >= 3 ? "RGB" : isBand ? "1 band" : "") + " " + bps + "-bit" +
+      (pick !== main ? " (overview " + pick[256][0] + " px)" : "");
+    return r;
+  }
+
+  /* ¿qué es este archivo? por extensión y, si no, por la firma */
+  async function open(files, askCrs, progress) {
+    const main = files.find(f => /\.(tiff?|mbtiles|pmtiles)$/i.test(f.name)) || files[0];
+    const name = main.name;
+    if (/\.pmtiles$/i.test(name)) return Object.assign(await openPmtiles(main), { name: name });
+    if (/\.mbtiles$/i.test(name)) {
+      const r = await openMbtiles(main);
+      return Object.assign(r, { name: name });
+    }
+    const sig = new Uint8Array(await main.slice(0, 16).arrayBuffer());
+    const s = String.fromCharCode.apply(null, sig);
+    if (s.startsWith("PMTiles")) return Object.assign(await openPmtiles(main), { name: name });
+    if (s.startsWith("SQLite format 3")) return Object.assign(await openMbtiles(main), { name: name });
+    return Object.assign(await openGeoTiff(files, askCrs, progress), { name: name });
+  }
+
+  return { open, openPmtiles, openMbtiles, openGeoTiff, zxyToId, decodeImage, lzw };
+})();
+
 /* ==== js/panels/map_window.js ====
- * Ventana de mapa: mapas base gratuitos de Esri (World Imagery, Topo,
- * Street, relieve…) con la traza georreferenciada de la sección encima, y
- * dibujo de una traza NUEVA de perfil con clics sobre el mapa.
+ * Vista de mapa: mapas base gratuitos de Esri (World Imagery, Topo,
+ * Street, relieve…), rasters propios (GeoTIFF, MBTiles, PMTiles — ver
+ * SW.rasters) y la traza georreferenciada de la sección encima; también se
+ * dibuja aquí una traza NUEVA de perfil con clics sobre el mapa.
+ *
+ * Vive en un panel ACOPLADO sobre el perfil (pantalla dividida en
+ * horizontal, con un separador que se arrastra) o, con «⧉», en una
+ * ventana aparte que se puede llevar a otro monitor. El panel se MUDA de
+ * documento con adoptNode, así que sus elementos conservan sus
+ * manejadores; el código sigue corriendo en la ventana principal y dibuja
+ * en el canvas esté donde esté (rAF, ResizeObserver y devicePixelRatio se
+ * toman de la ventana dueña del canvas). Cerrar esa ventana lo oculta;
+ * «Dock» lo devuelve al panel.
+ *
+ * Sincronía con el perfil: el cursor sobre la sección aparece como un
+ * punto sobre la traza (con su distancia s), el tramo de sección visible
+ * se resalta, y con «Follow» el mapa se desplaza para no perder el punto.
+ * Al revés, el cursor sobre el mapa se proyecta a la traza y marca su s
+ * en el perfil con una línea vertical.
  *
  * Es un visor de teselas propio (Web Mercator, 256 px) en un canvas —
  * arrastrar mueve, la rueda o el pellizco acercan— para no traer Leaflet a
@@ -14800,7 +16005,8 @@ SW.actions = SW.actions || {};
  * ya tenía la sección si se sabe convertir (así lo importado sigue en su
  * lugar), si no en UTM WGS 84 del huso de su centro — metros, que es lo que
  * MOVE espera al exportar con SHP 3D. Las líneas ya dibujadas conservan su
- * distancia a lo largo del perfil. Sólo esta ventana y Topo salen a la red. */
+ * distancia a lo largo del perfil. Sólo los mapas base de Esri y Topo
+ * salen a la red: los rasters propios se leen del disco. */
 "use strict";
 window.SW = window.SW || {};
 SW.actions = SW.actions || {};
@@ -14821,24 +16027,48 @@ SW.mapWindow = (function () {
       attr: "Esri, USGS, NOAA", labels: true },
     { id: "terrain", label: "Esri World Terrain", path: "World_Terrain_Base", max: 13,
       attr: "Esri, USGS, NOAA", labels: true },
+    { id: "none", label: "No basemap (offline)", path: null, max: 0, attr: "" },
   ];
   const LABELS = "Reference/World_Boundaries_and_Places";
   const TS = 256;
+  const TRACE = "#ff3b30", CURSOR = "#00e5ff";
 
-  const tiles = new Map();          // url -> {img, ok}
-  function tile(url, onload) {
-    let t = tiles.get(url);
+  /* -- fuentes de teselas ---------------------------------------------------
+   * {key, minZ, maxZ, bounds?, load(z, x, y) → Promise<imagen | null>,
+   *  cache: Map("z/x/y" → {img, ok, empty, failed})} */
+  function esriSource(path, max) {
+    return { key: path, minZ: 0, maxZ: max, cache: new Map(), cap: 800,
+      load: function (z, x, y) {
+        return new Promise(function (ok, bad) {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = function () { ok(img); };
+          img.onerror = function () { bad(new Error("tile")); };
+          img.src = ESRI + path + "/MapServer/tile/" + z + "/" + y + "/" + x;
+        });
+      } };
+  }
+  const esri = new Map();
+  function esriOf(path, max) {
+    if (!esri.has(path)) esri.set(path, esriSource(path, max));
+    return esri.get(path);
+  }
+  function tileOf(src, z, x, y) {
+    const k = z + "/" + x + "/" + y;
+    let t = src.cache.get(k);
     if (t) return t;
-    t = { img: new Image(), ok: false };
-    t.img.crossOrigin = "anonymous";
-    t.img.onload = function () { t.ok = true; onload(); };
-    t.img.onerror = function () { t.failed = true; };
-    t.img.src = url;
-    tiles.set(url, t);
-    if (tiles.size > 800) tiles.delete(tiles.keys().next().value);
+    t = { img: null, ok: false };
+    src.cache.set(k, t);
+    if (src.cache.size > (src.cap || 400)) {
+      const old = src.cache.keys().next().value, o = src.cache.get(old);
+      if (o && o.img && o.img.close) o.img.close();
+      src.cache.delete(old);
+    }
+    src.load(z, x, y).then(function (img) {
+      if (img) { t.img = img; t.ok = true; request(); } else t.empty = true;
+    }, function () { t.failed = true; });
     return t;
   }
-  const urlOf = (path, z, x, y) => ESRI + path + "/MapServer/tile/" + z + "/" + y + "/" + x;
 
   // lon/lat <-> mundo normalizado [0, 1]
   function toW(lon, lat) {
@@ -14859,447 +16089,1040 @@ SW.mapWindow = (function () {
     try { return JSON.parse(window.localStorage.getItem(VIEW_KEY) || "null"); }
     catch (e) { return null; }
   }
-  function saveView(v) {
-    try { window.localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch (e) { /* nada */ }
+  function saveView() {
+    try {
+      window.localStorage.setItem(VIEW_KEY, JSON.stringify({
+        cx: st.cx, cy: st.cy, zoom: st.zoom, base: st.base, labels: st.labels,
+        follow: st.follow, mode: st.mode, dockH: st.dockH,
+      }));
+    } catch (e) { /* nada */ }
   }
 
-  /* traza de la sección en lon/lat (o null) */
-  function traceLonLat() {
-    const gt = SW.model.state.sec.geo_trace;
+  /* -- la traza de la sección ----------------------------------------------
+   * {pts: [[lon, lat]…], crs, gt, loc (s → x, y), proj (x, y → s, d),
+   *  inv (x, y → lon, lat), fwd (lon, lat → x, y)} o {unsupported} o null;
+   * se recalcula cuando sec.geo_trace cambia de objeto (cada set_geo_trace
+   * lo clona, también al deshacer). */
+  let traceRef, traceInfo = null;
+  function trace() {
+    const gt = SW.model && SW.model.state.sec ? SW.model.state.sec.geo_trace : null;
+    if (gt === traceRef) return traceInfo;
+    traceRef = gt;
+    traceInfo = null;
     if (!gt) return null;
     const S = SW.shp;
     const crs = S.parsePrj(gt.crs || "");
     if (gt.crs_kind && crs.kind === "unknown") crs.kind = gt.crs_kind;
-    const f = S.toLonLat(crs);
-    if (!f) return { unsupported: true, crs: crs };
+    const inv = S.toLonLat(crs), fwd = S.fromLonLat(crs);
+    if (!inv) { traceInfo = { unsupported: true, crs: crs }; return traceInfo; }
     const path = gt.path && gt.path.length >= 2 ? gt.path : [[gt.x0, gt.y0], [gt.x1, gt.y1]];
-    return { pts: path.map(p => f(+p[0], +p[1])), crs: crs };
+    traceInfo = { pts: path.map(p => inv(+p[0], +p[1])), crs: crs, gt: gt, inv: inv, fwd: fwd };
+    try {
+      traceInfo.loc = SW.shpExport.makeLocator(gt, crs);
+      traceInfo.proj = S.makeProjector(Object.assign({}, gt, { proj_az: null }), crs,
+        { correct: gt.mercator_correction !== false });
+    } catch (e) { /* sin sincronía, pero la traza se dibuja igual */ }
+    return traceInfo;
+  }
+  /* s (m a lo largo de la traza) → lon/lat */
+  function lonLatAt(s) {
+    const t = trace();
+    if (!t || !t.loc || !isFinite(s)) return null;
+    const q = t.loc.at(s);
+    return t.inv(q[0], q[1]);
   }
 
-  function open() {
-    const U = SW.ui;
-    const sec = SW.model.state.sec;
-    const saved = loadView() || {};
-    const st = {
-      cx: 0.3, cy: 0.6, zoom: 4,
-      base: BASEMAPS.find(b => b.id === saved.base) ? saved.base : "imagery",
-      labels: saved.labels !== false,
-      drawing: false, draft: [], hover: null, cursor: null,
-    };
-    const existing = traceLonLat();
-    let cv, ctx, W = 0, H = 0, raf = 0, info, foot, drawBtn, applyBox;
+  /* -- estado (sobrevive a acoplar / desacoplar) ---------------------------- */
+  const saved = loadView() || {};
+  const st = {
+    cx: 0.3, cy: 0.6, zoom: 4,
+    base: BASEMAPS.find(b => b.id === saved.base) ? saved.base : "imagery",
+    labels: saved.labels !== false,
+    follow: saved.follow !== false,
+    mode: "hidden",               // hidden | dock | popup
+    dockH: +saved.dockH > 80 ? +saved.dockH : 0,
+    drawing: false, draft: [], hover: null, cursor: null,
+    secS: null,                   // s del cursor sobre el perfil
+    secRange: null,               // [s0, s1] visibles en el perfil
+    mapS: null,                   // s del cursor del mapa proyectado a la traza
+    rasters: [],
+  };
+  if (isFinite(saved.cx)) { st.cx = saved.cx; st.cy = saved.cy; st.zoom = saved.zoom; }
+  else setView(-71.5, -35.5, 5);        // centro-sur de Chile
+  let fitPending = !isFinite(saved.cx);
 
-    function setView(lon, lat, z) {
-      const w = toW(lon, lat); st.cx = w[0]; st.cy = w[1]; st.zoom = z;
+  let root = null, cv = null, ctx = null, W = 0, H = 0, raf = 0, info = null,
+      drawBtn = null, applyBox = null, popBtn = null, layersBox = null,
+      attrEl = null, wrapEl = null, ro = null, popup = null, popupPoll = 0;
+
+  function setView(lon, lat, z) {
+    const w = toW(lon, lat); st.cx = w[0]; st.cy = w[1]; st.zoom = z;
+  }
+  function fitWorld(x0, y0, x1, y1) {
+    st.cx = (x0 + x1) / 2; st.cy = (y0 + y1) / 2;
+    const span = Math.max(x1 - x0, y1 - y0, 1e-7);
+    const px = Math.max(200, Math.min(W || 800, H || 500) * 0.8);
+    st.zoom = Math.max(1, Math.min(19, Math.log2(px / (span * TS))));
+  }
+  function fit(pts) {
+    if (!pts || !pts.length) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of pts) {
+      const w = toW(p[0], p[1]);
+      x0 = Math.min(x0, w[0]); x1 = Math.max(x1, w[0]);
+      y0 = Math.min(y0, w[1]); y1 = Math.max(y1, w[1]);
     }
-    function fit(pts) {
-      if (!pts || !pts.length) return;
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const p of pts) {
-        const w = toW(p[0], p[1]);
-        x0 = Math.min(x0, w[0]); x1 = Math.max(x1, w[0]);
-        y0 = Math.min(y0, w[1]); y1 = Math.max(y1, w[1]);
-      }
-      st.cx = (x0 + x1) / 2; st.cy = (y0 + y1) / 2;
-      const span = Math.max(x1 - x0, y1 - y0, 1e-7);
-      const px = Math.max(200, Math.min(W || 800, H || 500) * 0.7);
-      st.zoom = Math.max(1, Math.min(18, Math.log2(px / (span * TS))));
+    fitWorld(x0, y0, x1, y1);
+  }
+
+  const scale = () => TS * Math.pow(2, st.zoom);
+  const toScreen = (w) => [(w[0] - st.cx) * scale() + W / 2, (w[1] - st.cy) * scale() + H / 2];
+  const toWorld = (x, y) => [st.cx + (x - W / 2) / scale(), st.cy + (y - H / 2) / scale()];
+  const ll2s = p => toScreen(toW(p[0], p[1]));
+
+  const win = () => (cv && cv.ownerDocument.defaultView) || window;
+  function request() {
+    if (raf || !cv || st.mode === "hidden") return;
+    raf = win().requestAnimationFrame(draw);
+  }
+
+  /* -- dibujo --------------------------------------------------------------- */
+  function drawTiles(src, alpha) {
+    const tz = Math.max(src.minZ, Math.min(src.maxZ, Math.round(st.zoom)));
+    const n = Math.pow(2, tz), sz = scale() / n;
+    const a = toWorld(0, 0), b = toWorld(W, H);
+    let i0 = Math.floor(a[0] * n), i1 = Math.floor(b[0] * n);
+    let j0 = Math.max(0, Math.floor(a[1] * n)), j1 = Math.min(n - 1, Math.floor(b[1] * n));
+    if (src.bounds) {
+      const p = toW(src.bounds[0], src.bounds[3]), q = toW(src.bounds[2], src.bounds[1]);
+      i0 = Math.max(i0, Math.floor(p[0] * n)); i1 = Math.min(i1, Math.floor(q[0] * n));
+      j0 = Math.max(j0, Math.floor(p[1] * n)); j1 = Math.min(j1, Math.floor(q[1] * n));
     }
-    if (existing && existing.pts) st.pendingFit = existing.pts;
-    else if (isFinite(saved.cx)) { st.cx = saved.cx; st.cy = saved.cy; st.zoom = saved.zoom; }
-    else setView(-71.5, -35.5, 5);        // centro-sur de Chile
-
-    const scale = () => TS * Math.pow(2, st.zoom);
-    const toScreen = (w) => [(w[0] - st.cx) * scale() + W / 2, (w[1] - st.cy) * scale() + H / 2];
-    const toWorld = (x, y) => [st.cx + (x - W / 2) / scale(), st.cy + (y - H / 2) / scale()];
-
-    function request() { if (!raf) raf = requestAnimationFrame(draw); }
-
-    function drawLayer(path, maxZ) {
-      const tz = Math.max(0, Math.min(maxZ, Math.round(st.zoom)));
-      const n = Math.pow(2, tz), sz = scale() / n;
-      const a = toWorld(0, 0), b = toWorld(W, H);
-      const i0 = Math.floor(a[0] * n), i1 = Math.floor(b[0] * n);
-      const j0 = Math.max(0, Math.floor(a[1] * n)), j1 = Math.min(n - 1, Math.floor(b[1] * n));
-      for (let j = j0; j <= j1; j++)
-        for (let i = i0; i <= i1; i++) {
-          const xi = ((i % n) + n) % n;
-          const p = toScreen([i / n, j / n]);
-          const t = tile(urlOf(path, tz, xi, j), request);
-          if (t.ok) { ctx.drawImage(t.img, p[0], p[1], sz + 0.5, sz + 0.5); continue; }
-          // mientras carga: un antepasado ya cargado, recortado y ampliado
-          for (let up = 1; up <= 5 && tz - up >= 0; up++) {
-            const f = Math.pow(2, up);
-            const pt = tiles.get(urlOf(path, tz - up, Math.floor(xi / f), Math.floor(j / f)));
-            if (pt && pt.ok) {
-              const ss = TS / f;
-              ctx.drawImage(pt.img, (xi % f) * ss, (j % f) * ss, ss, ss, p[0], p[1], sz + 0.5, sz + 0.5);
-              break;
-            }
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 600) return false;     // muy lejos bajo su minZ
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    for (let j = j0; j <= j1; j++)
+      for (let i = i0; i <= i1; i++) {
+        const xi = ((i % n) + n) % n;
+        const p = toScreen([i / n, j / n]);
+        const t = tileOf(src, tz, xi, j);
+        if (t.ok) { ctx.drawImage(t.img, p[0], p[1], sz + 0.5, sz + 0.5); continue; }
+        // mientras carga: un antepasado ya cargado, recortado y ampliado
+        for (let up = 1; up <= 5 && tz - up >= src.minZ; up++) {
+          const f = Math.pow(2, up);
+          const pt = src.cache.get((tz - up) + "/" + Math.floor(xi / f) + "/" + Math.floor(j / f));
+          if (pt && pt.ok) {
+            const ss = (pt.img.width || TS) / f;
+            ctx.drawImage(pt.img, (xi % f) * ss, (j % f) * ss, ss, ss, p[0], p[1], sz + 0.5, sz + 0.5);
+            break;
           }
         }
-    }
+      }
+    ctx.globalAlpha = 1;
+    return true;
+  }
 
-    function poly(pts, color, width, dash) {
-      if (!pts || pts.length < 1) return;
-      ctx.save();
-      ctx.lineJoin = "round"; ctx.lineCap = "round";
-      ctx.beginPath();
-      pts.forEach(function (p, i) {
-        const q = toScreen(toW(p[0], p[1]));
-        if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]);
-      });
-      ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = width + 3; ctx.setLineDash(dash || []);
-      ctx.stroke();
-      ctx.strokeStyle = color; ctx.lineWidth = width;
-      ctx.stroke();
-      ctx.setLineDash([]);
+  /* imagen georreferenciada: malla de celdas, cada una con su afín (en un
+   * área de unos km la proyección del raster → Mercator es casi lineal) */
+  function drawImageRaster(r, dpr) {
+    const G = r.G, N = G + 1, nodes = r.nodes;
+    const sp = new Float64Array(N * N * 2);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let k = 0; k < N * N; k++) {
+      const q = toScreen([nodes[2 * k], nodes[2 * k + 1]]);
+      sp[2 * k] = q[0]; sp[2 * k + 1] = q[1];
+      x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]);
+      y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]);
+    }
+    if (x1 < 0 || y1 < 0 || x0 > W || y0 > H) return;
+    const img = r.canvas, iw = r.w, ih = r.h;
+    ctx.save();
+    ctx.globalAlpha = r.opacity;
+    ctx.imageSmoothingEnabled = (x1 - x0) < iw * 2;
+    for (let j = 0; j < G; j++)
+      for (let i = 0; i < G; i++) {
+        const k = j * N + i;
+        const p0x = sp[2 * k], p0y = sp[2 * k + 1];
+        const p1x = sp[2 * (k + 1)], p1y = sp[2 * (k + 1) + 1];
+        const p2x = sp[2 * (k + N)], p2y = sp[2 * (k + N) + 1];
+        const p3x = sp[2 * (k + N + 1)], p3y = sp[2 * (k + N + 1) + 1];
+        if (Math.max(p0x, p1x, p2x, p3x) < 0 || Math.min(p0x, p1x, p2x, p3x) > W ||
+            Math.max(p0y, p1y, p2y, p3y) < 0 || Math.min(p0y, p1y, p2y, p3y) > H) continue;
+        const sx0 = i * iw / G, sy0 = j * ih / G, sw = iw / G, sh = ih / G;
+        const a = (p1x - p0x) / sw, b = (p1y - p0y) / sw, c = (p2x - p0x) / sh, d = (p2y - p0y) / sh;
+        ctx.setTransform(dpr * a, dpr * b, dpr * c, dpr * d,
+                         dpr * (p0x - a * sx0 - c * sy0), dpr * (p0y - b * sx0 - d * sy0));
+        // se solapa un poco con la celda siguiente: sin costuras
+        const ox = Math.max(1, sw / Math.max(1, Math.hypot(p1x - p0x, p1y - p0y))),
+              oy = Math.max(1, sh / Math.max(1, Math.hypot(p2x - p0x, p2y - p0y)));
+        const w2 = Math.min(iw - sx0, sw + ox), h2 = Math.min(ih - sy0, sh + oy);
+        ctx.drawImage(img, sx0, sy0, w2, h2, sx0, sy0, w2, h2);
+      }
+    ctx.restore();
+  }
+
+  function poly(pts, color, width, dash, dots) {
+    if (!pts || pts.length < 1) return;
+    ctx.save();
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath();
+    pts.forEach(function (p, i) {
+      const q = ll2s(p);
+      if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]);
+    });
+    ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = width + 3; ctx.setLineDash(dash || []);
+    ctx.stroke();
+    ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (dots !== false)
       for (const p of pts) {
-        const q = toScreen(toW(p[0], p[1]));
+        const q = ll2s(p);
         ctx.beginPath(); ctx.arc(q[0], q[1], 3.5, 0, 2 * Math.PI);
         ctx.fillStyle = color; ctx.fill();
         ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.stroke();
       }
-      ctx.restore();
-    }
-    function endLabel(p, text, color) {
-      const q = toScreen(toW(p[0], p[1]));
-      ctx.save();
-      ctx.font = "bold 13px system-ui, sans-serif";
-      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.8)";
-      ctx.strokeText(text, q[0] + 7, q[1] - 7);
-      ctx.fillStyle = color; ctx.fillText(text, q[0] + 7, q[1] - 7);
-      ctx.restore();
-    }
+    ctx.restore();
+  }
+  function label(q, text, color, dx, dy) {
+    ctx.save();
+    ctx.font = "bold 13px system-ui, sans-serif";
+    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.8)";
+    ctx.strokeText(text, q[0] + (dx || 7), q[1] + (dy || -7));
+    ctx.fillStyle = color; ctx.fillText(text, q[0] + (dx || 7), q[1] + (dy || -7));
+    ctx.restore();
+  }
 
-    function draw() {
-      raf = 0;
-      if (!cv) return;
-      const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-      if (Math.round(r.width * dpr) !== cv.width || Math.round(r.height * dpr) !== cv.height) {
-        cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
-      }
-      W = r.width; H = r.height;
-      if (st.pendingFit && W > 0) { fit(st.pendingFit); st.pendingFit = null; }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = "#dfe6ea"; ctx.fillRect(0, 0, W, H);
-      const bm = BASEMAPS.find(b => b.id === st.base);
-      drawLayer(bm.path, bm.max);
-      if (st.labels) drawLayer(LABELS, 19);
-      if (existing && existing.pts) {
-        poly(existing.pts, "#ff3b30", 3);
-        const L = SW.model.state.sec;
-        endLabel(existing.pts[0], L.label_left || "A", "#ff3b30");
-        endLabel(existing.pts[existing.pts.length - 1], L.label_right || "B", "#ff3b30");
-      }
-      if (st.draft.length) {
-        const pts = st.drawing && st.hover ? st.draft.concat([st.hover]) : st.draft;
-        poly(pts, "#ffd60a", 2.5, st.drawing ? [7, 5] : null);
-        endLabel(st.draft[0], "start", "#ffd60a");
-      }
-      saveView({ cx: st.cx, cy: st.cy, zoom: st.zoom, base: st.base, labels: st.labels });
-      updateInfo();
-    }
+  /* tramo [s0, s1] de la traza, muestreado (sigue las inflexiones) */
+  function stretchPts(s0, s1) {
+    const t = trace();
+    if (!t || !t.loc) return null;
+    const L = t.loc.length;
+    const a = Math.max(0, Math.min(L, s0)), b = Math.max(0, Math.min(L, s1));
+    if (!(b > a)) return null;
+    const ss = [a];
+    for (const k of t.loc.bends) if (k > a && k < b) ss.push(k);
+    ss.push(b);
+    return ss.map(lonLatAt);
+  }
 
-    function draftLength() {
-      let L = 0;
-      for (let i = 1; i < st.draft.length; i++) L += geodesic(st.draft[i - 1], st.draft[i]);
-      return L;
+  function draw() {
+    raf = 0;
+    if (!cv || st.mode === "hidden") return;
+    const w = win(), dpr = w.devicePixelRatio || 1;
+    const r = cv.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
+    if (Math.round(r.width * dpr) !== cv.width || Math.round(r.height * dpr) !== cv.height) {
+      cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
     }
-    function updateInfo() {
-      if (!info) return;
-      const c = st.cursor ? "Cursor " + st.cursor[1].toFixed(5) + ", " + st.cursor[0].toFixed(5) : "";
-      let d = "";
-      if (st.draft.length >= 2) {
-        const a = st.draft[0], b = st.draft[st.draft.length - 1];
-        const w0 = toW(a[0], a[1]), w1 = toW(b[0], b[1]);
-        const az = (Math.atan2(w1[0] - w0[0], -(w1[1] - w0[1])) * 180 / Math.PI + 360) % 360;
-        d = " · New trace " + (draftLength() / 1000).toFixed(2) + " km, " + st.draft.length +
-            " points, azimuth " + az.toFixed(0) + "°";
-      } else if (st.drawing) d = " · Click on the map to place the start of the trace";
-      info.textContent = c + d;
-      if (applyBox) applyBox.style.display = !st.drawing && st.draft.length >= 2 ? "" : "none";
+    W = r.width; H = r.height;
+    const t = trace();
+    if (fitPending) {
+      fitPending = false;
+      if (t && t.pts) fit(t.pts);
     }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#dfe6ea"; ctx.fillRect(0, 0, W, H);
+    const bm = BASEMAPS.find(b => b.id === st.base);
+    if (bm.path) drawTiles(esriOf(bm.path, bm.max));
+    for (const ras of st.rasters) {
+      if (!ras.visible) continue;
+      if (ras.kind === "tiles") drawTiles(ras.src, ras.opacity);
+      else { drawImageRaster(ras, dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+    }
+    if (st.labels && bm.path) drawTiles(esriOf(LABELS, 19));
 
-    /* -- interacción --------------------------------------------------------- */
-    const ptrs = new Map();
-    let drag = null, pinch = null;
-    function onDown(e) {
-      cv.setPointerCapture(e.pointerId);
-      ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
-      if (ptrs.size === 2) {
-        const [a, b] = [...ptrs.values()];
-        pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), zoom: st.zoom };
-        drag = null;
-      } else drag = { x: e.offsetX, y: e.offsetY, cx: st.cx, cy: st.cy, moved: 0, t: Date.now() };
-    }
-    function onMove(e) {
-      st.cursor = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
-      if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
-      if (pinch && ptrs.size === 2) {
-        const [a, b] = [...ptrs.values()];
-        const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-        zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, pinch.zoom + Math.log2(d / pinch.d) - st.zoom);
-        return;
+    const sec = SW.model.state.sec;
+    if (t && t.pts) {
+      poly(t.pts, TRACE, 3);
+      // tramo visible en el perfil
+      if (st.secRange) {
+        const seg = stretchPts(st.secRange[0], st.secRange[1]);
+        if (seg) poly(seg, "#ffd60a", 6, null, false);
+        poly(t.pts, TRACE, 2, null, false);
       }
-      if (drag) {
-        const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y;
-        drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
-        if (drag.moved > 4) {
-          st.cx = drag.cx - dx / scale(); st.cy = drag.cy - dy / scale();
-          cv.style.cursor = "grabbing";
+      label(ll2s(t.pts[0]), sec.label_left || "A", TRACE);
+      label(ll2s(t.pts[t.pts.length - 1]), sec.label_right || "B", TRACE);
+      // cursor de la sección
+      if (st.secS !== null) {
+        const p = lonLatAt(st.secS);
+        if (p) {
+          const q = ll2s(p);
+          const p2 = lonLatAt(st.secS + 1), q2 = p2 ? ll2s(p2) : [q[0] + 1, q[1]];
+          const ux = q2[0] - q[0], uy = q2[1] - q[1], L = Math.hypot(ux, uy) || 1;
+          ctx.save();
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(q[0] - uy / L * 14, q[1] + ux / L * 14);
+          ctx.lineTo(q[0] + uy / L * 14, q[1] - ux / L * 14);
+          ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 5; ctx.stroke();
+          ctx.strokeStyle = CURSOR; ctx.lineWidth = 2.5; ctx.stroke();
+          ctx.beginPath(); ctx.arc(q[0], q[1], 6.5, 0, 2 * Math.PI);
+          ctx.fillStyle = CURSOR; ctx.fill();
+          ctx.strokeStyle = "#000"; ctx.lineWidth = 1.5; ctx.stroke();
+          ctx.restore();
+          label(q, "s " + sLabel(st.secS), CURSOR, 10, 18);
         }
       }
-      st.hover = st.drawing ? st.cursor : null;
-      request();
+      // cursor del mapa proyectado sobre la traza
+      if (st.mapS !== null && st.secS === null) {
+        const p = lonLatAt(st.mapS);
+        if (p) {
+          const q = ll2s(p), c = ll2s(st.cursor);
+          ctx.save();
+          ctx.setLineDash([4, 4]); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath(); ctx.arc(q[0], q[1], 4.5, 0, 2 * Math.PI);
+          ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = "#000"; ctx.stroke();
+          ctx.restore();
+        }
+      }
+    } else {
+      ctx.save();
+      ctx.font = "12px system-ui, sans-serif";
+      const msg = t && t.unsupported
+        ? "The section's trace is in a coordinate system the map can't place (" +
+          SW.shp.crsLabel(t.crs) + ")."
+        : "No georeferenced trace yet — use Draw trace, or import a 3D shapefile / SEG-Y.";
+      const tw = ctx.measureText(msg).width;
+      ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(8, 8, tw + 16, 22);
+      ctx.fillStyle = "#333"; ctx.fillText(msg, 16, 23);
+      ctx.restore();
     }
-    function onUp(e) {
-      ptrs.delete(e.pointerId);
-      if (ptrs.size < 2) pinch = null;
-      const d = drag;
+    if (st.draft.length) {
+      const pts = st.drawing && st.hover ? st.draft.concat([st.hover]) : st.draft;
+      poly(pts, "#ffd60a", 2.5, st.drawing ? [7, 5] : null);
+      label(ll2s(st.draft[0]), "start", "#ffd60a");
+    }
+    saveView();
+    updateInfo();
+  }
+
+  function sLabel(s) {
+    const sec = SW.model.state.sec;
+    const du = (sec && sec.display_units) || { h: "km" };
+    return SW.units.label(s, du.h, 2);
+  }
+
+  function draftLength() {
+    let L = 0;
+    for (let i = 1; i < st.draft.length; i++) L += geodesic(st.draft[i - 1], st.draft[i]);
+    return L;
+  }
+  function updateInfo() {
+    if (!info) return;
+    let c = st.cursor ? st.cursor[1].toFixed(5) + ", " + st.cursor[0].toFixed(5) : "";
+    const t = trace();
+    if (st.cursor && t && t.fwd) {
+      const q = t.fwd(st.cursor[0], st.cursor[1]);
+      c += "  (" + q[0].toFixed(0) + ", " + q[1].toFixed(0) + ")";
+      if (st.mapS !== null && st.mapD !== null)
+        c += " · on section s " + sLabel(st.mapS) + ", " +
+             (Math.abs(st.mapD) < 1000 ? Math.abs(st.mapD).toFixed(0) + " m" :
+              (Math.abs(st.mapD) / 1000).toFixed(2) + " km") + " off the trace";
+    }
+    if (st.secS !== null) c = "Section cursor s " + sLabel(st.secS) + (c ? " · " + c : "");
+    let d = "";
+    if (st.draft.length >= 2) {
+      const a = st.draft[0], b = st.draft[st.draft.length - 1];
+      const w0 = toW(a[0], a[1]), w1 = toW(b[0], b[1]);
+      const az = (Math.atan2(w1[0] - w0[0], -(w1[1] - w0[1])) * 180 / Math.PI + 360) % 360;
+      d = " · New trace " + (draftLength() / 1000).toFixed(2) + " km, " + st.draft.length +
+          " points, azimuth " + az.toFixed(0) + "°";
+    } else if (st.drawing) d = " · Click on the map to place the start of the trace";
+    info.textContent = (c + d) || " ";
+    if (applyBox) applyBox.style.display = !st.drawing && st.draft.length >= 2 ? "" : "none";
+  }
+
+  /* -- interacción --------------------------------------------------------- */
+  const ptrs = new Map();
+  let drag = null, pinch = null;
+  function onDown(e) {
+    cv.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), zoom: st.zoom };
       drag = null;
-      cv.style.cursor = st.drawing ? "crosshair" : "grab";
-      if (d && d.moved <= 4 && st.drawing) {
-        const p = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
-        const last = st.draft[st.draft.length - 1];
-        // doble clic: el segundo clic cae sobre el mismo punto y termina
-        if (last && Date.now() - (st.lastClick || 0) < 350) { finishDraw(); return; }
-        st.lastClick = Date.now();
-        st.draft.push(p);
-        request();
+    } else drag = { x: e.offsetX, y: e.offsetY, cx: st.cx, cy: st.cy, moved: 0 };
+    if (layersBox) layersBox.classList.add("hidden");
+  }
+  function onMove(e) {
+    st.cursor = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
+    if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
+    if (pinch && ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, pinch.zoom + Math.log2(d / pinch.d) - st.zoom);
+      return;
+    }
+    if (drag) {
+      const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y;
+      drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+      if (drag.moved > 4) {
+        st.cx = drag.cx - dx / scale(); st.cy = drag.cy - dy / scale();
+        cv.style.cursor = "grabbing";
       }
     }
-    function zoomAt(x, y, dz) {
-      const z = Math.max(1, Math.min(19, st.zoom + dz));
-      const before = toWorld(x, y);
-      st.zoom = z;
-      const after = toWorld(x, y);
-      st.cx += before[0] - after[0]; st.cy += before[1] - after[1];
+    st.hover = st.drawing ? st.cursor : null;
+    projectCursor();
+    request();
+  }
+  /* cursor del mapa → s sobre la traza (y línea en el perfil) */
+  function projectCursor() {
+    const t = trace();
+    let s = null, d = null;
+    if (st.cursor && t && t.proj && t.loc && t.fwd && !st.drawing) {
+      const q = t.fwd(st.cursor[0], st.cursor[1]);
+      const r = t.proj.project(q[0], q[1]);
+      if (isFinite(r[0]) && r[0] >= 0 && r[0] <= t.loc.length) { s = r[0]; d = r[1]; }
+    }
+    if (s !== st.mapS) {
+      st.mapS = s; st.mapD = d;
+      if (SW.view) SW.view.requestDraw();
+    }
+  }
+  function onLeave() {
+    st.hover = null; st.cursor = null;
+    if (st.mapS !== null) { st.mapS = null; if (SW.view) SW.view.requestDraw(); }
+    request();
+  }
+  function onUp(e) {
+    ptrs.delete(e.pointerId);
+    if (ptrs.size < 2) pinch = null;
+    const d = drag;
+    drag = null;
+    cv.style.cursor = st.drawing ? "crosshair" : "grab";
+    if (d && d.moved <= 4 && st.drawing) {
+      const p = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
+      const last = st.draft[st.draft.length - 1];
+      // doble clic: el segundo clic cae sobre el mismo punto y termina
+      if (last && Date.now() - (st.lastClick || 0) < 350) { finishDraw(); return; }
+      st.lastClick = Date.now();
+      st.draft.push(p);
       request();
     }
-    function onWheel(e) {
-      e.preventDefault();
-      zoomAt(e.offsetX, e.offsetY, -Math.sign(e.deltaY) * (e.ctrlKey ? 0.25 : 0.5));
+  }
+  function zoomAt(x, y, dz) {
+    const z = Math.max(1, Math.min(21, st.zoom + dz));
+    const before = toWorld(x, y);
+    st.zoom = z;
+    const after = toWorld(x, y);
+    st.cx += before[0] - after[0]; st.cy += before[1] - after[1];
+    request();
+  }
+  function onWheel(e) {
+    e.preventDefault();
+    zoomAt(e.offsetX, e.offsetY, -Math.sign(e.deltaY) * (e.ctrlKey ? 0.25 : 0.5));
+  }
+  function onKey(e) {
+    if (!st.drawing) return;
+    if (e.key === "Enter") { finishDraw(); e.preventDefault(); }
+    else if (e.key === "Backspace") { st.draft.pop(); request(); e.preventDefault(); }
+    else if (e.key === "Escape") { clearDraft(); e.preventDefault(); }
+  }
+
+  function startDraw() {
+    st.drawing = true; st.draft = []; st.hover = null;
+    drawBtn.textContent = "Finish trace";
+    drawBtn.classList.add("active");
+    cv.style.cursor = "crosshair";
+    cv.focus();
+    request();
+  }
+  function finishDraw() {
+    st.drawing = false; st.hover = null;
+    // dos clics casi en el mismo punto no hacen un tramo
+    st.draft = st.draft.filter((p, i, a) => !i || geodesic(a[i - 1], p) > 0.5);
+    drawBtn.textContent = "Draw trace";
+    drawBtn.classList.remove("active");
+    cv.style.cursor = "grab";
+    if (st.draft.length < 2) {
+      st.draft = [];
+      SW.view.status("A trace needs at least two points.");
     }
-    function onKey(e) {
-      if (!st.drawing) return;
-      if (e.key === "Enter") { finishDraw(); e.preventDefault(); }
-      else if (e.key === "Backspace") { st.draft.pop(); request(); e.preventDefault(); }
+    request();
+  }
+  function clearDraft() {
+    st.draft = []; st.drawing = false;
+    drawBtn.textContent = "Draw trace";
+    drawBtn.classList.remove("active");
+    cv.style.cursor = "grab";
+    request();
+  }
+
+  /* -- aplicar la traza dibujada ------------------------------------------- */
+  function apply(opts) {
+    const S = SW.shp, sec = SW.model.state.sec;
+    const pts = st.draft;
+    const gt0 = sec.geo_trace;
+    // CRS: el de la traza actual si se sabe convertir; si no, UTM del centro
+    let crs = null, text = "";
+    if (gt0) {
+      const c = S.parsePrj(gt0.crs || "");
+      if (gt0.crs_kind && c.kind === "unknown") c.kind = gt0.crs_kind;
+      if (S.fromLonLat(c) && S.toLonLat(c)) { crs = c; text = gt0.crs || ""; }
     }
-
-    function startDraw() {
-      st.drawing = true; st.draft = []; st.hover = null;
-      drawBtn.textContent = "Finish trace";
-      cv.style.cursor = "crosshair";
-      cv.focus();
-      request();
+    if (!crs) {
+      let lo = 0, la = 0;
+      for (const p of pts) { lo += p[0]; la += p[1]; }
+      lo /= pts.length; la /= pts.length;
+      const zone = Math.max(1, Math.min(60, Math.floor((lo + 180) / 6) + 1));
+      text = S.utmWkt(zone, la < 0);
+      crs = S.parsePrj(text);
     }
-    function finishDraw() {
-      st.drawing = false; st.hover = null;
-      // dos clics casi en el mismo punto no hacen un tramo
-      st.draft = st.draft.filter((p, i, a) => !i || geodesic(a[i - 1], p) > 0.5);
-      drawBtn.textContent = "Draw new trace";
-      cv.style.cursor = "grab";
-      if (st.draft.length < 2) {
-        st.draft = [];
-        SW.view.status("A trace needs at least two points.");
-      }
-      request();
+    const fwd = S.fromLonLat(crs);
+    const path = pts.map(p => fwd(p[0], p[1]));
+    const a = path[0], b = path[path.length - 1];
+    const gt = { x0: a[0], y0: a[1], x1: b[0], y1: b[1], crs: text, crs_kind: crs.kind,
+                 mercator_correction: true, length: 0, azimuth: 0,
+                 buffer_km: gt0 && gt0.buffer_km !== undefined ? gt0.buffer_km : 0,
+                 proj_az: null, origin: "map" };
+    if (path.length > 2) gt.path = path.map(p => [p[0], p[1]]);
+    const P = S.makeProjector(gt, crs, { correct: true });
+    gt.length = P.length; gt.azimuth = P.azimuth;
+    const redo = [{ op: "set_geo_trace", trace: gt }];
+    const undo = [{ op: "set_geo_trace", trace: gt0 || null }];
+    const props = {};
+    if (opts.length) props.length = Math.max(1, Math.round(gt.length));
+    if (opts.labels) {
+      props.label_left = S.compass(gt.azimuth + 180);
+      props.label_right = S.compass(gt.azimuth);
     }
-
-    /* -- aplicar la traza dibujada ------------------------------------------- */
-    function apply(opts) {
-      const S = SW.shp;
-      const pts = st.draft;
-      const gt0 = sec.geo_trace;
-      // CRS: el de la traza actual si se sabe convertir; si no, UTM del centro
-      let crs = null, text = "";
-      if (gt0) {
-        const c = S.parsePrj(gt0.crs || "");
-        if (gt0.crs_kind && c.kind === "unknown") c.kind = gt0.crs_kind;
-        if (S.fromLonLat(c) && S.toLonLat(c)) { crs = c; text = gt0.crs || ""; }
-      }
-      if (!crs) {
-        let lo = 0, la = 0;
-        for (const p of pts) { lo += p[0]; la += p[1]; }
-        lo /= pts.length; la /= pts.length;
-        const zone = Math.max(1, Math.min(60, Math.floor((lo + 180) / 6) + 1));
-        text = S.utmWkt(zone, la < 0);
-        crs = S.parsePrj(text);
-      }
-      const fwd = S.fromLonLat(crs);
-      const path = pts.map(p => fwd(p[0], p[1]));
-      const a = path[0], b = path[path.length - 1];
-      const gt = { x0: a[0], y0: a[1], x1: b[0], y1: b[1], crs: text, crs_kind: crs.kind,
-                   mercator_correction: true, length: 0, azimuth: 0,
-                   buffer_km: gt0 && gt0.buffer_km !== undefined ? gt0.buffer_km : 0,
-                   proj_az: null, origin: "map" };
-      if (path.length > 2) gt.path = path.map(p => [p[0], p[1]]);
-      const P = S.makeProjector(gt, crs, { correct: true });
-      gt.length = P.length; gt.azimuth = P.azimuth;
-      const redo = [{ op: "set_geo_trace", trace: gt }];
-      const undo = [{ op: "set_geo_trace", trace: gt0 || null }];
-      const props = {};
-      if (opts.length) props.length = Math.max(1, Math.round(gt.length));
-      if (opts.labels) {
-        props.label_left = S.compass(gt.azimuth + 180);
-        props.label_right = S.compass(gt.azimuth);
-      }
-      if (opts.name && !sec.lines.length && /^Untitled/.test(sec.name || ""))
-        props.name = "Section " + props.label_left + "–" + props.label_right;
-      if (Object.keys(props).length) {
-        const before = {};
-        for (const k of Object.keys(props)) before[k] = sec[k];
-        redo.push({ op: "set_section_props", props: props });
-        undo.push({ op: "set_section_props", props: before });
-      }
-      SW.undo.push({ label: "Section trace from map", redo: redo, undo: undo });
-      if (SW.panels.imports) SW.panels.imports.render();
-      if (SW.actions.refreshGeoButtons) SW.actions.refreshGeoButtons();
-      SW.view.zoomToExtent();
-      SW.view.requestDraw();
-      SW.view.status("Section trace set from the map: " + (gt.length / 1000).toFixed(2) +
-        " km, azimuth " + gt.azimuth.toFixed(0) + "° (" + S.crsLabel(crs) + ").");
-      if (opts.topo) {
-        const pr = S.demPrefs();
-        S.runTopography(gt, crs, { source: pr.source || "terrarium", key: pr.key || "" })
-          .then(ok => { if (ok) SW.view.zoomToExtent(); });
-      }
+    if (opts.name && !sec.lines.length && /^Untitled/.test(sec.name || ""))
+      props.name = "Section " + props.label_left + "–" + props.label_right;
+    if (Object.keys(props).length) {
+      const before = {};
+      for (const k of Object.keys(props)) before[k] = sec[k];
+      redo.push({ op: "set_section_props", props: props });
+      undo.push({ op: "set_section_props", props: before });
     }
+    SW.undo.push({ label: "Section trace from map", redo: redo, undo: undo });
+    if (SW.panels.imports) SW.panels.imports.render();
+    if (SW.actions.refreshGeoButtons) SW.actions.refreshGeoButtons();
+    SW.view.zoomToExtent();
+    SW.view.requestDraw();
+    SW.view.status("Section trace set from the map: " + (gt.length / 1000).toFixed(2) +
+      " km, azimuth " + gt.azimuth.toFixed(0) + "° (" + S.crsLabel(crs) + ").");
+    if (opts.topo) {
+      const pr = S.demPrefs();
+      S.runTopography(gt, crs, { source: pr.source || "terrarium", key: pr.key || "" })
+        .then(ok => { if (ok) SW.view.zoomToExtent(); });
+    }
+    st.draft = [];
+    request();
+  }
 
-    U.modal({
-      title: "Map — section traces",
-      wide: true,
-      onClose: function () {
-        cancelAnimationFrame(raf); raf = 0; cv = null;
-        window.removeEventListener("resize", request);
-      },
-      build: function (body, api) {
-        const box = api.overlay.querySelector(".modal");
-        box.style.width = "min(1180px, 100%)";
-        box.style.height = "100%";
-        body.style.cssText += "display:flex;flex-direction:column;gap:6px;flex:1;min-height:0;";
-        const bar = U.el("div");
-        bar.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
-        const bmSel = U.select(BASEMAPS.map(b => ({ value: b.id, label: b.label })), st.base);
-        bmSel.addEventListener("change", function () { st.base = bmSel.value; request(); });
-        bar.appendChild(bmSel);
-        const lab = U.el("label");
-        lab.style.cssText = "display:flex;gap:4px;align-items:center;font-size:12px;";
-        const lc = document.createElement("input");
-        lc.type = "checkbox"; lc.checked = st.labels;
-        lc.addEventListener("change", function () { st.labels = lc.checked; request(); });
-        lab.appendChild(lc); lab.appendChild(document.createTextNode("Place names"));
-        bar.appendChild(lab);
-        drawBtn = U.el("button", "primary", "Draw new trace");
-        drawBtn.title = "Click on the map to place the vertices (bends allowed); " +
-                        "double-click or Enter to finish, Backspace removes the last point";
-        drawBtn.addEventListener("click", function () { st.drawing ? finishDraw() : startDraw(); });
-        bar.appendChild(drawBtn);
-        const undoPt = U.el("button", "mini", "Undo point");
-        undoPt.addEventListener("click", function () { st.draft.pop(); request(); });
-        bar.appendChild(undoPt);
-        const clr = U.el("button", "mini", "Clear");
-        clr.addEventListener("click", function () {
-          st.draft = []; st.drawing = false; drawBtn.textContent = "Draw new trace";
-          cv.style.cursor = "grab"; request();
-        });
-        bar.appendChild(clr);
-        const zt = U.el("button", "mini", "Zoom to trace");
-        zt.title = "Zoom to the section trace (red) and the new one (yellow)";
-        zt.disabled = !(existing && existing.pts);
-        zt.addEventListener("click", function () {
-          fit((existing && existing.pts ? existing.pts : []).concat(st.draft)); request();
-        });
-        bar.appendChild(zt);
-        const go = U.textInput("");
-        go.placeholder = "Go to: lat, lon";
-        go.style.width = "150px";
-        go.addEventListener("keydown", function (e) {
-          if (e.key !== "Enter") return;
-          const m = /(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)/.exec(go.value);
-          if (!m) { SW.view.status("Type latitude, longitude (e.g. -36.83, -73.05)."); return; }
-          setView(+m[2], +m[1], Math.max(st.zoom, 11)); request();
-        });
-        bar.appendChild(go);
-        body.appendChild(bar);
-
-        const wrap = U.el("div");
-        wrap.style.cssText = "position:relative;flex:1;min-height:320px;border:1px solid " +
-          "var(--grid,#ccd);border-radius:6px;overflow:hidden;";
-        cv = document.createElement("canvas");
-        cv.tabIndex = 0;
-        cv.style.cssText = "width:100%;height:100%;display:block;cursor:grab;touch-action:none;outline:none;";
-        ctx = cv.getContext("2d");
-        wrap.appendChild(cv);
-        const attr = U.el("div");
-        attr.style.cssText = "position:absolute;right:0;bottom:0;font-size:10px;padding:1px 5px;" +
-          "background:rgba(255,255,255,.75);color:#333;pointer-events:none;max-width:70%;";
-        const setAttr = () => {
-          attr.textContent = "Tiles © Esri — " + BASEMAPS.find(b => b.id === st.base).attr;
-        };
-        setAttr();
-        bmSel.addEventListener("change", setAttr);
-        wrap.appendChild(attr);
-        body.appendChild(wrap);
-        info = U.el("div");
-        info.style.cssText = "font-size:11px;color:var(--ink-3);min-height:14px;";
-        body.appendChild(info);
-        if (existing && existing.unsupported)
-          U.note(body, "⚠ The section's trace is in a coordinate system the map " +
-            "can't place (" + SW.shp.crsLabel(existing.crs) + "). Set it with Topo, " +
-            "or draw a new trace here.");
-        else if (!existing)
-          U.note(body, "This section has no georeferenced trace yet. Draw one: " +
-            "it becomes the section's trace (UTM WGS 84), and Topo / SHP 3D " +
-            "light up.");
-
-        applyBox = U.el("div");
-        applyBox.style.cssText = "display:none;border-top:1px solid var(--grid,#dde);padding-top:6px;";
-        const opts = { length: true, labels: true, topo: true, name: true };
-        const chk = function (key, text, title) {
-          const l = U.el("label");
-          l.style.cssText = "display:inline-flex;gap:4px;align-items:center;margin-right:12px;font-size:12px;";
-          l.title = title;
-          const c = document.createElement("input");
-          c.type = "checkbox"; c.checked = opts[key];
-          c.addEventListener("change", () => { opts[key] = c.checked; });
-          l.appendChild(c); l.appendChild(document.createTextNode(text));
-          applyBox.appendChild(l);
-        };
-        chk("length", "Section length = trace", "Set the section's length to the trace's");
-        chk("labels", "End labels from azimuth", "Label the ends with compass directions");
-        chk("topo", "Add topography", "Sample the DEM (Topo's source) under the new trace");
-        const useBtn = U.el("button", "primary", "Use as section trace");
-        useBtn.title = (sec.geo_trace ? "Replaces the current trace (red). " : "") +
-          "Lines already drawn keep their distance along the section.";
-        useBtn.addEventListener("click", function () {
-          apply(opts);
-          api.close();
-        });
-        applyBox.appendChild(useBtn);
-        if (sec.geo_trace && (sec.lines || []).length)
-          applyBox.appendChild(U.el("div", null, "⚠ Replaces the current trace; " +
-            "what is drawn keeps its distances and is re-georeferenced on the new one."));
-        body.appendChild(applyBox);
-
-        cv.addEventListener("pointerdown", onDown);
-        cv.addEventListener("pointermove", onMove);
-        cv.addEventListener("pointerup", onUp);
-        cv.addEventListener("pointercancel", onUp);
-        cv.addEventListener("pointerleave", function () { st.hover = null; request(); });
-        cv.addEventListener("wheel", onWheel, { passive: false });
-        cv.addEventListener("keydown", onKey);
-        cv.addEventListener("dblclick", e => e.preventDefault());
-        window.addEventListener("resize", request);
-        setTimeout(request, 0);
-      },
-      buttons: [{ label: "Close" }],
+  /* -- rasters propios ------------------------------------------------------ */
+  let rasterSeq = 0;
+  function askCrs(current, crs) {
+    const t = trace();
+    const def = t && t.crs && t.crs.text ? t.crs.text : "";
+    window.focus();
+    return new Promise(function (resolve) {
+      let typed = "", answer, useIt = null;   // answer undefined: cerrado sin elegir
+      const dlg = SW.ui.modal({
+        title: "Raster coordinate system",
+        build: function (body) {
+          SW.ui.note(body, (current
+            ? "The raster declares " + SW.shp.crsLabel(crs) + ", which the map can't place. "
+            : "The raster doesn't declare its coordinate system. ") +
+            "Type an EPSG code (e.g. 32719, 24879, 5361, 4326, 3857) or paste a .prj (WKT)." +
+            (def ? " Empty = the section trace's (" + SW.shp.crsLabel(t.crs) + ")." : ""));
+          const inp = SW.ui.textInput("");
+          useIt = function (api) { answer = typed; if (api) return; dlg.close(); };
+          inp.placeholder = def ? "EPSG code or WKT — empty: trace's" : "EPSG code or WKT";
+          inp.style.width = "100%";
+          inp.addEventListener("input", () => { typed = inp.value; });
+          inp.addEventListener("keydown", e => { if (e.key === "Enter") useIt(); });
+          body.appendChild(inp);
+        },
+        onClose: function () {
+          if (answer === undefined) { resolve(null); return; }
+          const v = answer.trim();
+          resolve(/^\d{4,6}$/.test(v) ? "EPSG:" + v : v || def || null);
+        },
+        buttons: [
+          { label: "Cancel" },
+          { label: "Use", primary: true, action: function (api) { useIt(api); } },
+        ],
+      });
     });
   }
 
-  SW.actions.openMap = open;
-  return { open: open, toW: toW, fromW: fromW };
+  async function addRasterFiles(list) {
+    const files = Array.from(list || []);
+    if (!files.length) return;
+    const mains = files.filter(f => /\.(tiff?|mbtiles|pmtiles)$/i.test(f.name));
+    if (!mains.length) {
+      SW.view.status("Map rasters: choose a GeoTIFF (.tif, with its .tfw/.prj if any), an .mbtiles or a .pmtiles.");
+      return;
+    }
+    for (const m of mains) {
+      const group = /\.tiff?$/i.test(m.name)
+        ? [m].concat(files.filter(f => !/\.(tiff?|mbtiles|pmtiles)$/i.test(f.name))) : [m];
+      SW.view.status("Reading " + m.name + "…");
+      try {
+        const r = await SW.rasters.open(group, askCrs, function (p) {
+          SW.view.status("Reading " + m.name + "… " + Math.round(p * 100) + "%");
+        });
+        r.id = ++rasterSeq;
+        r.visible = true;
+        r.opacity = 1;
+        if (r.kind === "tiles") {
+          r.src = { key: "r" + r.id, minZ: r.minZ, maxZ: r.maxZ, bounds: r.bounds,
+                    cache: new Map(), cap: 400,
+                    load: function (z, x, y) {
+                      return r.getTile(z, x, y).then(b => b && b.length ? SW.rasters.decodeImage(b) : null);
+                    } };
+          r.llBounds = r.bounds;
+        } else meshOf(r);
+        st.rasters.push(r);
+        if (st.mode === "hidden") show("dock");
+        // un mapa de medio mundo no se encuadra: alejaría de la traza
+        const b = r.llBounds;
+        if (!b || b[2] - b[0] < 30) zoomToRaster(r);
+        renderLayers();
+        SW.view.status("Map: added " + m.name + " — " + r.format +
+          (r.kind === "tiles" ? ", zoom " + r.minZ + "–" + r.maxZ : ", " + SW.shp.crsLabel(r.crs)) + ".");
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err);
+        if (msg !== "cancelled") SW.view.status("Couldn't open " + m.name + ": " + msg);
+        else SW.view.status("Raster not added.");
+      }
+    }
+  }
+
+  /* malla G×G de la imagen en coordenadas de mundo Web Mercator */
+  function meshOf(r) {
+    const G = 24, N = G + 1, inv = SW.shp.toLonLat(r.crs);
+    const nodes = new Float64Array(N * N * 2);
+    let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+    for (let j = 0; j < N; j++)
+      for (let i = 0; i < N; i++) {
+        const c = r.toCrs(i * r.w / G, j * r.h / G), ll = inv(c[0], c[1]), q = toW(ll[0], ll[1]);
+        const k = j * N + i;
+        nodes[2 * k] = q[0]; nodes[2 * k + 1] = q[1];
+        w = Math.min(w, ll[0]); e = Math.max(e, ll[0]); s = Math.min(s, ll[1]); n = Math.max(n, ll[1]);
+      }
+    r.G = G; r.nodes = nodes; r.llBounds = [w, s, e, n];
+  }
+
+  function zoomToRaster(r) {
+    const b = r.llBounds;
+    if (b && b.every(isFinite)) {
+      const p = toW(b[0], b[3]), q = toW(b[2], b[1]);
+      fitWorld(p[0], p[1], q[0], q[1]);
+    } else if (r.kind === "tiles") st.zoom = Math.max(st.zoom, r.minZ);
+    request();
+  }
+
+  function pickRasters() {
+    const doc = root ? root.ownerDocument : document;
+    const inp = doc.createElement("input");
+    inp.type = "file";
+    inp.multiple = true;
+    inp.accept = ".tif,.tiff,.tfw,.tifw,.wld,.prj,.mbtiles,.pmtiles";
+    inp.addEventListener("change", function () { addRasterFiles(inp.files); });
+    inp.click();
+  }
+
+  function renderLayers() {
+    if (!layersBox) return;
+    const U = SW.ui;
+    layersBox.innerHTML = "";
+    const head = U.el("div", "map-layers-head", "Map layers (top first)");
+    layersBox.appendChild(head);
+    if (!st.rasters.length)
+      layersBox.appendChild(U.el("div", "map-layers-empty",
+        "No rasters yet. Add a GeoTIFF (with its .tfw / .prj if it has them), " +
+        "an MBTiles or a PMTiles — or drop them on the map. They are read " +
+        "from disk (nothing is uploaded) and are not saved with the project."));
+    st.rasters.slice().reverse().forEach(function (r) {
+      const row = U.el("div", "map-layer");
+      const top = U.el("div", "map-layer-top");
+      const vis = document.createElement("input");
+      vis.type = "checkbox"; vis.checked = r.visible;
+      vis.title = "Show / hide";
+      vis.addEventListener("change", () => { r.visible = vis.checked; request(); });
+      top.appendChild(vis);
+      const nm = U.el("span", "map-layer-name", r.name);
+      nm.title = r.name + " — " + r.format;
+      top.appendChild(nm);
+      const btn = (txt, title, fn) => {
+        const b = U.el("button", "mini", txt); b.title = title;
+        b.addEventListener("click", fn); top.appendChild(b); return b;
+      };
+      btn("⤢", "Zoom to layer", () => zoomToRaster(r));
+      btn("↑", "Move up", function () {
+        const i = st.rasters.indexOf(r);
+        if (i < st.rasters.length - 1) { st.rasters.splice(i, 1); st.rasters.splice(i + 1, 0, r); }
+        renderLayers(); request();
+      });
+      btn("✕", "Remove", function () {
+        st.rasters.splice(st.rasters.indexOf(r), 1);
+        if (r.src) for (const t of r.src.cache.values()) if (t.img && t.img.close) t.img.close();
+        renderLayers(); request();
+      });
+      row.appendChild(top);
+      const bot = U.el("div", "map-layer-bot");
+      bot.appendChild(U.el("span", "map-layer-fmt", r.format));
+      const op = document.createElement("input");
+      op.type = "range"; op.min = 0; op.max = 100; op.value = Math.round(r.opacity * 100);
+      op.title = "Opacity";
+      op.addEventListener("input", () => { r.opacity = op.value / 100; request(); });
+      bot.appendChild(op);
+      if (r.single) {
+        const sty = U.select([{ value: "hillshade", label: "Hillshade" },
+                              { value: "relief", label: "Color relief" },
+                              { value: "gray", label: "Gray" }], r.style);
+        sty.title = "How a single-band raster (DEM) is drawn";
+        sty.addEventListener("change", () => { r.style = sty.value; r.render(); request(); });
+        bot.appendChild(sty);
+      }
+      row.appendChild(bot);
+      layersBox.appendChild(row);
+    });
+    const add = U.el("button", "primary mini", "Add raster…");
+    add.title = "GeoTIFF (.tif + optional .tfw / .prj), MBTiles or PMTiles (raster tiles)";
+    add.addEventListener("click", pickRasters);
+    layersBox.appendChild(add);
+  }
+
+  /* -- construcción del panel (una vez) ------------------------------------ */
+  function build() {
+    const U = SW.ui;
+    root = U.el("div", "map-panel");
+    const bar = U.el("div", "map-bar");
+    const bmSel = U.select(BASEMAPS.map(b => ({ value: b.id, label: b.label })), st.base);
+    bmSel.title = "Basemap (Esri tiles need internet)";
+    bar.appendChild(bmSel);
+    const lab = U.el("label", "map-check");
+    const lc = document.createElement("input");
+    lc.type = "checkbox"; lc.checked = st.labels;
+    lc.addEventListener("change", function () { st.labels = lc.checked; request(); });
+    lab.appendChild(lc); lab.appendChild(document.createTextNode("Places"));
+    lab.title = "Place names and boundaries over the basemap";
+    bar.appendChild(lab);
+    const lay = U.el("button", "mini", "Layers");
+    lay.title = "Your rasters: GeoTIFF, MBTiles, PMTiles — add, show/hide, opacity, order";
+    lay.addEventListener("click", function () {
+      layersBox.classList.toggle("hidden");
+      renderLayers();
+    });
+    bar.appendChild(lay);
+    const add = U.el("button", "mini", "+ Raster");
+    add.title = "Add a GeoTIFF (.tif + optional .tfw / .prj), MBTiles or PMTiles";
+    add.addEventListener("click", pickRasters);
+    bar.appendChild(add);
+    bar.appendChild(U.el("span", "map-sep"));
+    drawBtn = U.el("button", "mini", "Draw trace");
+    drawBtn.title = "Draw a new section trace: click on the map to place the vertices " +
+                    "(bends allowed); double-click or Enter to finish, Backspace removes " +
+                    "the last point, Esc cancels";
+    drawBtn.addEventListener("click", function () { st.drawing ? finishDraw() : startDraw(); });
+    bar.appendChild(drawBtn);
+    const zt = U.el("button", "mini", "Zoom to trace");
+    zt.title = "Zoom to the section trace (red) and the new one (yellow)";
+    zt.addEventListener("click", function () {
+      const t = trace();
+      fit((t && t.pts ? t.pts : []).concat(st.draft)); request();
+    });
+    bar.appendChild(zt);
+    const fl = U.el("label", "map-check");
+    const fc = document.createElement("input");
+    fc.type = "checkbox"; fc.checked = st.follow;
+    fc.addEventListener("change", function () { st.follow = fc.checked; saveView(); });
+    fl.appendChild(fc); fl.appendChild(document.createTextNode("Follow"));
+    fl.title = "Pan the map to keep the section cursor (cyan) in view";
+    bar.appendChild(fl);
+    const go = U.textInput("");
+    go.placeholder = "Go to: lat, lon";
+    go.className = "map-go";
+    go.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      const m = /(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)/.exec(go.value);
+      if (!m) { SW.view.status("Type latitude, longitude (e.g. -36.83, -73.05)."); return; }
+      setView(+m[2], +m[1], Math.max(st.zoom, 11)); request();
+    });
+    bar.appendChild(go);
+    bar.appendChild(U.el("span", "map-grow"));
+    popBtn = U.el("button", "mini", "⧉");
+    popBtn.addEventListener("click", function () { show(st.mode === "popup" ? "dock" : "popup"); });
+    bar.appendChild(popBtn);
+    const x = U.el("button", "mini", "✕");
+    x.title = "Close the map";
+    x.addEventListener("click", function () { show("hidden"); });
+    bar.appendChild(x);
+    root.appendChild(bar);
+
+    wrapEl = U.el("div", "map-canvas-wrap");
+    cv = document.createElement("canvas");
+    cv.tabIndex = 0;
+    cv.className = "map-canvas";
+    ctx = cv.getContext("2d");
+    wrapEl.appendChild(cv);
+    attrEl = U.el("div", "map-attr");
+    const setAttr = () => {
+      const bm = BASEMAPS.find(b => b.id === st.base);
+      attrEl.textContent = bm.path ? "Tiles © Esri — " + bm.attr : "";
+      attrEl.style.display = bm.path ? "" : "none";
+    };
+    setAttr();
+    bmSel.addEventListener("change", function () { st.base = bmSel.value; setAttr(); request(); });
+    wrapEl.appendChild(attrEl);
+    layersBox = U.el("div", "map-layers hidden");
+    wrapEl.appendChild(layersBox);
+    root.appendChild(wrapEl);
+
+    info = U.el("div", "map-info", " ");
+    root.appendChild(info);
+
+    applyBox = U.el("div", "map-apply");
+    applyBox.style.display = "none";
+    const opts = { length: true, labels: true, topo: true, name: true };
+    const chk = function (key, text, title) {
+      const l = U.el("label", "map-check");
+      l.title = title;
+      const c = document.createElement("input");
+      c.type = "checkbox"; c.checked = opts[key];
+      c.addEventListener("change", () => { opts[key] = c.checked; });
+      l.appendChild(c); l.appendChild(document.createTextNode(text));
+      applyBox.appendChild(l);
+    };
+    chk("length", "Section length = trace", "Set the section's length to the trace's");
+    chk("labels", "End labels from azimuth", "Label the ends with compass directions");
+    chk("topo", "Add topography", "Sample the DEM (Topo's source) under the new trace");
+    const useBtn = U.el("button", "primary mini", "Use as section trace");
+    useBtn.title = "Replaces the current trace (red), if any. Lines already drawn keep " +
+                   "their distance along the section and are re-georeferenced on the new one.";
+    useBtn.addEventListener("click", function () { apply(opts); });
+    applyBox.appendChild(useBtn);
+    const cancel = U.el("button", "mini", "Discard");
+    cancel.addEventListener("click", clearDraft);
+    applyBox.appendChild(cancel);
+    root.appendChild(applyBox);
+
+    cv.addEventListener("pointerdown", onDown);
+    cv.addEventListener("pointermove", onMove);
+    cv.addEventListener("pointerup", onUp);
+    cv.addEventListener("pointercancel", onUp);
+    cv.addEventListener("pointerleave", onLeave);
+    cv.addEventListener("wheel", onWheel, { passive: false });
+    cv.addEventListener("keydown", onKey);
+    cv.addEventListener("dblclick", e => e.preventDefault());
+    wrapEl.addEventListener("dragover", function (e) {
+      if (!e.dataTransfer) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+    });
+    wrapEl.addEventListener("drop", function (e) {
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (!files || !files.length) return;
+      e.preventDefault();
+      addRasterFiles(files);
+    });
+  }
+
+  function observe() {
+    if (ro) ro.disconnect();
+    ro = null;
+    const w = win();
+    if (w.ResizeObserver && wrapEl) { ro = new w.ResizeObserver(request); ro.observe(wrapEl); }
+  }
+
+  /* -- acoplar / desacoplar ------------------------------------------------ */
+  const $ = id => document.getElementById(id);
+  function dockEls() { return { dock: $("map-dock"), split: $("map-split") }; }
+
+  function closePopup() {
+    clearInterval(popupPoll); popupPoll = 0;
+    const p = popup;
+    popup = null;
+    if (p && !p.closed) { try { p.close(); } catch (e) { /* nada */ } }
+  }
+
+  function openPopup() {
+    const feat = "popup=yes,width=" + Math.min(1400, Math.round(screen.availWidth * 0.6)) +
+                 ",height=" + Math.min(1000, Math.round(screen.availHeight * 0.7));
+    let p = null;
+    try { p = window.open("", "structuralsketcher-map", feat); } catch (e) { p = null; }
+    if (!p) return null;
+    let d;
+    try { d = p.document; } catch (e) { p.close(); return null; }
+    d.open();
+    d.write("<!doctype html><html><head><meta charset=\"utf-8\"><title>Map — " +
+            String(SW.model.state.sec.name || "StructuralSketcher").replace(/[<&]/g, "") +
+            "</title></head><body class=\"map-popup\"></body></html>");
+    d.close();
+    for (const s of document.querySelectorAll("style")) d.head.appendChild(d.importNode(s, true));
+    return p;
+  }
+
+  /* mode: "hidden" | "dock" | "popup" */
+  function show(mode) {
+    if (!root) build();
+    const E = dockEls();
+    if (mode === "popup") {
+      const p = popup && !popup.closed ? popup : openPopup();
+      if (!p) {
+        SW.view.status("The browser blocked the map window — allow pop-ups for this page, " +
+                       "or keep the map docked above the section.");
+        mode = st.mode === "hidden" ? "dock" : st.mode;
+        if (mode === "popup") return;
+      } else {
+        popup = p;
+        p.document.body.appendChild(p.document.adoptNode(root));
+        p.addEventListener("pagehide", function () {
+          if (popup === p) { popup = null; adoptHome(); st.mode = "hidden"; layout(); saveView(); }
+        });
+        clearInterval(popupPoll);
+        popupPoll = setInterval(function () {
+          if (popup === p && p.closed) {
+            popup = null; clearInterval(popupPoll); adoptHome(); st.mode = "hidden"; layout(); saveView();
+          }
+        }, 1000);
+        p.focus();
+      }
+    }
+    if (mode !== "popup" && popup) {
+      const p = popup;
+      popup = null;
+      adoptHome();
+      clearInterval(popupPoll); popupPoll = 0;
+      try { p.close(); } catch (e) { /* nada */ }
+    }
+    if (mode === "dock" && E.dock && root.parentNode !== E.dock) adoptHome();
+    st.mode = mode;
+    layout();
+    observe();
+    if (popBtn) {
+      popBtn.textContent = mode === "popup" ? "Dock" : "⧉";
+      popBtn.title = mode === "popup" ? "Put the map back above the section"
+        : "Open the map in its own window (drag it to another screen)";
+    }
+    const mb = $("map-btn");
+    if (mb) mb.classList.toggle("active", mode !== "hidden");
+    saveView();
+    request();
+    if (SW.view) SW.view.requestDraw();
+  }
+  function adoptHome() {
+    const E = dockEls();
+    if (root && E.dock) {
+      if (root.ownerDocument !== document) document.adoptNode(root);
+      E.dock.appendChild(root);
+    }
+  }
+  function layout() {
+    const E = dockEls();
+    if (!E.dock) return;
+    const on = st.mode === "dock";
+    E.dock.classList.toggle("hidden", !on);
+    E.split.classList.toggle("hidden", !on);
+    if (on) {
+      const total = E.dock.parentNode.clientHeight || window.innerHeight * 0.7;
+      const h = st.dockH || Math.round(total * 0.45);
+      E.dock.style.height = Math.max(120, Math.min(total - 140, h)) + "px";
+    }
+  }
+
+  function wireSplit() {
+    const E = dockEls();
+    if (!E.split) return;
+    let d = null;
+    E.split.addEventListener("pointerdown", function (e) {
+      E.split.setPointerCapture(e.pointerId);
+      d = { y: e.clientY, h: E.dock.getBoundingClientRect().height };
+      E.split.classList.add("dragging");
+      e.preventDefault();
+    });
+    E.split.addEventListener("pointermove", function (e) {
+      if (!d) return;
+      const total = E.dock.parentNode.clientHeight;
+      st.dockH = Math.max(120, Math.min(total - 140, d.h + e.clientY - d.y));
+      E.dock.style.height = st.dockH + "px";
+    });
+    const up = function () {
+      if (!d) return;
+      d = null; E.split.classList.remove("dragging"); saveView();
+    };
+    E.split.addEventListener("pointerup", up);
+    E.split.addEventListener("pointercancel", up);
+    E.split.addEventListener("dblclick", function () {
+      st.dockH = 0; layout(); saveView();
+    });
+  }
+
+  /* -- enlaces con la vista de la sección ---------------------------------- */
+  /* cursor sobre el perfil (s en m, o null al salir) */
+  function setSectionCursor(s) {
+    s = s === null || s === undefined || !isFinite(s) ? null : s;
+    if (s === st.secS) return;
+    st.secS = s;
+    if (st.mode === "hidden") return;
+    if (s !== null && st.follow && cv && W > 0) {
+      const p = lonLatAt(s);
+      if (p) {
+        const q = ll2s(p), m = Math.min(60, W * 0.15, H * 0.15);
+        if (q[0] < m || q[1] < m || q[0] > W - m || q[1] > H - m) {
+          const w = toW(p[0], p[1]); st.cx = w[0]; st.cy = w[1];
+        }
+      }
+    }
+    request();
+  }
+  /* tras cada redibujo del perfil: tramo visible y traza nueva/deshecha */
+  function onSectionDraw(s0, s1) {
+    if (st.mode === "hidden") return;
+    const prev = traceRef;
+    trace();
+    const r = st.secRange;
+    if (prev !== traceRef || !r || Math.abs(r[0] - s0) > 1e-6 || Math.abs(r[1] - s1) > 1e-6) {
+      if (prev !== traceRef && traceInfo && traceInfo.pts && !prev) fit(traceInfo.pts);
+      st.secRange = [s0, s1];
+      request();
+    }
+  }
+  /* la línea vertical del cursor del mapa sobre el perfil */
+  function drawSectionOverlay(c, V) {
+    if (st.mode === "hidden" || st.mapS === null || st.secS !== null) return;
+    const r = V.plotRect(), x = V.sx(st.mapS);
+    if (x < r.x || x > r.x + r.w) return;
+    c.save();
+    c.setTransform(V.dpr(), 0, 0, V.dpr(), 0, 0);
+    c.setLineDash([6, 4]);
+    c.strokeStyle = "#0891b2"; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(x, r.y); c.lineTo(x, r.y + r.h); c.stroke();
+    c.setLineDash([]);
+    c.font = "bold 11px system-ui, sans-serif";
+    const txt = "map " + sLabel(st.mapS);
+    const tw = c.measureText(txt).width;
+    c.fillStyle = "rgba(255,255,255,.85)"; c.fillRect(x + 4, r.y + 4, tw + 8, 16);
+    c.fillStyle = "#0e7490"; c.fillText(txt, x + 8, r.y + 16);
+    c.restore();
+  }
+
+  function init() {
+    wireSplit();
+    window.addEventListener("resize", function () { if (st.mode === "dock") layout(); request(); });
+    window.addEventListener("pagehide", closePopup);
+    // se reabre acoplado si quedó abierto (una ventana nueva la bloquearía
+    // el navegador sin un clic)
+    if (saved.mode === "dock" || saved.mode === "popup") show("dock");
+  }
+
+  function toggle() {
+    if (st.mode === "hidden") show("dock");
+    else if (st.mode === "popup" && popup) popup.focus();
+    else show("hidden");
+  }
+
+  SW.actions.openMap = toggle;
+  SW.actions.addMapRasters = addRasterFiles;
+  return { open: toggle, show: show, init: init, toW: toW, fromW: fromW,
+           setSectionCursor: setSectionCursor, onSectionDraw: onSectionDraw,
+           drawSectionOverlay: drawSectionOverlay, addRasterFiles: addRasterFiles,
+           get mode() { return st.mode; } };
 })();
 
 /* ==== js/panels/select_by.js ====
@@ -23610,6 +25433,12 @@ SW.view = (function () {
     requestAnimationFrame(function () {
       drawQueued = false;
       SW.render.draw();
+      // vista de mapa: tramo visible de la sección y cursor del mapa
+      if (SW.mapWindow && SW.mapWindow.mode !== "hidden" && cv && cv.width > 0) {
+        const r = plotRect();
+        SW.mapWindow.onSectionDraw(xs(r.x), xs(r.x + r.w));
+        SW.mapWindow.drawSectionOverlay(ctx, SW.view);
+      }
       syncEditActionButtons();
     });
   }
@@ -23865,6 +25694,7 @@ SW.view = (function () {
     const s = xs(pos.x), z = yz(pos.y);
     $("ro-s").textContent = "s: " + SW.units.label(s, du.h, 3);
     $("ro-z").textContent = "elev: " + SW.units.label(z, du.v, 3);
+    if (SW.mapWindow) SW.mapWindow.setSectionCursor(s);
   }
 
   /* ============ capa de entrada ==========================================
@@ -24887,6 +26717,9 @@ SW.view = (function () {
       SW.view.cv = cv;
       SW.view.ctx = ctx;
       wireCanvas();
+      cv.addEventListener("pointerleave", function () {
+        if (SW.mapWindow) SW.mapWindow.setSectionCursor(null);
+      });
       wireKeyboard();
       wireToolbar();
       window.addEventListener("resize", resize);
@@ -24895,6 +26728,7 @@ SW.view = (function () {
       syncFromDocument(false);
       syncUndoButtons();
       SW.tools.activate("pan");
+      if (SW.mapWindow) SW.mapWindow.init();
     },
   };
 
