@@ -9,8 +9,8 @@ measure, split, extend, transform and export the section.
 ## Running it
 
 Single self-contained `index.html` — no build step, no dependencies, no
-network access except two optional features: Google Drive (below), which
-loads Google's sign-in and picker scripts only once it is set up, and the DEM topography of the shapefile import (below). Open it directly from disk (double-click) or
+network access except optional features: Google Drive (below), which
+loads Google's sign-in and picker scripts only once it is set up, the DEM topography of the shapefile import (below) and the Esri basemaps of the map view. GeoTIFF, MBTiles and PMTiles rasters on the map are read with built-in code, offline. Open it directly from disk (double-click) or
 serve it with any static file server:
 
 ```bash
@@ -149,6 +149,52 @@ on the canvas:
   trace-header coordinates; if the section has a trace, the line can be
   placed on it by those coordinates. The vertical axis is two-way time,
   depth converted with a constant velocity, or depth.
+
+## Map view (split screen or second window)
+
+**Map** (header) opens a map **docked above the section** — a horizontal
+split; drag the divider to resize it (double click resets). **⧉** moves the
+map to **its own window**, which can be dragged to another screen; **Dock**
+puts it back, and closing that window hides the map. The map shows:
+
+- **Basemaps**: Esri World Imagery, Topo, Street, National Geographic and
+  relief (online), with optional place names — or none, offline.
+- **Your rasters** (**+ Raster**, **Layers**, or drop the files on the map
+  or the section), read from disk — nothing is uploaded, and they are not
+  saved with the project:
+  - **GeoTIFF** (`.tif`, plus its `.tfw` world file and `.prj` if it has
+    them): classic or BigTIFF, strips or tiles, uncompressed, LZW,
+    Deflate, PackBits, JPEG or WebP, predictors 2 and 3, 8–64-bit integer
+    or float samples. It is read in parts (a multi-GB file is not loaded
+    whole) into an image of at most ~4096 px, from the smallest internal
+    overview that is detailed enough. The coordinate system comes from the
+    GeoKeys (EPSG, or a user-defined Transverse Mercator) or the `.prj`; if
+    neither tells, the map asks for an EPSG code (default: the trace's).
+    A single-band DEM is drawn as hillshade, color relief or a gray
+    stretch; GDAL's nodata is transparent.
+  - **MBTiles** (raster: PNG/JPEG/WebP): an SQLite reader of its own looks
+    each tile up through the `(zoom_level, tile_column, tile_row)` index —
+    plain `tiles` table or the normalized `map` + `images` schema — reading
+    only the pages it needs, so big files open instantly.
+  - **PMTiles** v3 (raster; gzip or uncompressed directories): read by
+    ranges straight from the file.
+
+  Vector tiles (MVT/pbf) are not supported. Each layer has visibility,
+  opacity, order and zoom-to.
+- **The section trace** (red) with its end labels; the stretch of the
+  section currently on screen is highlighted in yellow.
+
+**Synchronized cursors**: moving the cursor over the section moves a cyan
+marker along the trace, at the same distance *s* (with a tick square to
+the trace); with **Follow** on, the map pans to keep it in view. Moving the
+cursor over the map projects it onto the trace and marks that *s* on the
+section with a dashed vertical line (the readout under the map gives the
+distance off the trace).
+
+**Draw trace** draws a new profile trace with clicks (bends allowed;
+double click or Enter finishes, Backspace removes the last point, Esc
+cancels) and **Use as section trace** makes it the section's — optionally
+with its length, end labels and the DEM topography.
 
 ## Structural algorithms
 
@@ -401,19 +447,15 @@ is reopened).
   Attributes: `NAME`, `TYPE`, `ID`, `COLORVAL` (hex). Unzip and open it in
   MOVE (or QGIS/ArcGIS). Dip symbols and reference layers are not exported.
 
-## Map window and profile traces
+## Profile traces from the map
 
-**Map** (header) opens a map with free Esri basemaps — World Imagery, World
-Topo, World Street, National Geographic, Shaded Relief, World Terrain, with
-optional place names — and the section's georeferenced trace on top (red,
-with its end labels). **Draw new trace**: click the vertices (bends are
-fine), double-click or Enter to finish, Backspace / *Undo point* to step
-back; *Go to* takes "lat, lon". **Use as section trace** makes it the
-section's trace — in the CRS of the previous trace when it can be
-converted, otherwise UTM WGS 84 of its zone — and can also set the
-section length, the end labels from the azimuth and add the DEM topography.
-Lines already drawn keep their distance along the section. Needs the
-internet (tiles © Esri and its data providers).
+In the map view (see *Map view* above), **Draw trace** + **Use as section
+trace** makes a new trace the section's — in the CRS of the previous trace
+when it can be converted, otherwise UTM WGS 84 of its zone — and can also
+set the section length, the end labels from the azimuth and add the DEM
+topography. Lines already drawn keep their distance along the section.
+*Go to* takes "lat, lon". The Esri basemaps need the internet (tiles © Esri
+and its data providers); your own rasters don't.
 
 Coordinate systems read from a `.prj`: WKT1 (ESRI/OGC) and WKT2
 (`PROJCRS`/`GEOGCRS`, as written by recent QGIS/GDAL), a bare EPSG code
