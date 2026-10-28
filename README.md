@@ -157,8 +157,16 @@ split; drag the divider to resize it (double click resets). **⧉** moves the
 map to **its own window**, which can be dragged to another screen; **Dock**
 puts it back, and closing that window hides the map. The map shows:
 
-- **Basemaps**: Esri World Imagery, Topo, Street, National Geographic and
-  relief (online), with optional place names — or none, offline.
+- **Basemaps**: Esri World Imagery, Topo, Street, National Geographic,
+  Hillshade and shaded relief (online), with optional place names — or none,
+  offline.
+- **Contours** (checkbox): contour lines computed in the browser from the
+  free Terrarium DEM (AWS Open Data, ~30 m, needs internet), as in
+  FieldDraw. The steps follow the zoom — from zoom 9: 1000/2000 m, 500/1000,
+  200/1000, 100/500 (zoom 12–13), 50/250, 20/100 (zoom 15+) — thin lines
+  at the first value, thicker and labelled at the second. Tiles are
+  contoured with a one-sample margin from their neighbours, so the lines
+  join across tile edges. Nice over the Hillshade basemap.
 - **Your rasters** (**+ Raster**, **Layers**, or drop the files on the map
   or the section), read from disk — nothing is uploaded, and they are not
   saved with the project:
@@ -189,7 +197,11 @@ marker along the trace, at the same distance *s* (with a tick square to
 the trace); with **Follow** on, the map pans to keep it in view. Moving the
 cursor over the map projects it onto the trace and marks that *s* on the
 section with a dashed vertical line (the readout under the map gives the
-distance off the trace).
+distance off the trace). And what the map is **looking at** — the centre
+of the map view, marked with a magenta crosshair — is projected onto the
+trace and shown on the section as a **magenta dot**, on the topography line
+when there is one (otherwise on the top edge); it follows as you pan the
+map.
 
 **Draw trace** draws a new profile trace with clicks (bends allowed;
 double click or Enter finishes, Backspace removes the last point, Esc
