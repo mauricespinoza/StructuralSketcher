@@ -189,7 +189,11 @@ marker along the trace, at the same distance *s* (with a tick square to
 the trace); with **Follow** on, the map pans to keep it in view. Moving the
 cursor over the map projects it onto the trace and marks that *s* on the
 section with a dashed vertical line (the readout under the map gives the
-distance off the trace).
+distance off the trace). And what the map is **looking at** — the centre
+of the map view, marked with a magenta crosshair — is projected onto the
+trace and shown on the section as a **magenta dot**, on the topography line
+when there is one (otherwise on the top edge); it follows as you pan the
+map.
 
 **Draw trace** draws a new profile trace with clicks (bends allowed;
 double click or Enter finishes, Backspace removes the last point, Esc

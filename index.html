@@ -1245,7 +1245,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.28.0",
+  version: "0.28.1",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1257,6 +1257,12 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.28.1", date: "2026-10-28", highlights: [
+      "A magenta dot on the section marks what the map is looking at: the " +
+        "centre of the map view (magenta crosshair) projected onto the " +
+        "trace, sitting on the topography when there is one. It moves as " +
+        "you pan the map, docked or in its own window.",
+    ] },
     { version: "0.28.0", date: "2026-10-28", highlights: [
       "Map view docked above the section (split screen, drag the divider) " +
         "or, with ⧉, in its own window to take to another screen. The " +
@@ -16145,6 +16151,7 @@ SW.mapWindow = (function () {
     secS: null,                   // s del cursor sobre el perfil
     secRange: null,               // [s0, s1] visibles en el perfil
     mapS: null,                   // s del cursor del mapa proyectado a la traza
+    viewS: null,                  // s del CENTRO del mapa proyectado a la traza
     rasters: [],
   };
   if (isFinite(saved.cx)) { st.cx = saved.cx; st.cy = saved.cy; st.zoom = saved.zoom; }
@@ -16394,8 +16401,56 @@ SW.mapWindow = (function () {
       poly(pts, "#ffd60a", 2.5, st.drawing ? [7, 5] : null);
       label(ll2s(st.draft[0]), "start", "#ffd60a");
     }
+    viewCenter();
     saveView();
     updateInfo();
+  }
+
+  /* Lo que se está mirando en el mapa: su centro, proyectado a la traza,
+   * es el punto magenta del perfil; aquí se marca con una mira del mismo
+   * color para que se sepa a qué corresponde. */
+  const VIEW = "#d946ef";
+  function viewCenter() {
+    const t = trace();
+    let s = null;
+    if (t && t.proj && t.loc && t.fwd) {
+      const c = fromW(st.cx, st.cy), q = t.fwd(c[0], c[1]);
+      const r = t.proj.project(q[0], q[1]);
+      if (isFinite(r[0]) && r[0] >= 0 && r[0] <= t.loc.length) s = r[0];
+    }
+    if (s !== null) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 4;
+      const cross = () => {
+        ctx.beginPath();
+        ctx.moveTo(W / 2 - 9, H / 2); ctx.lineTo(W / 2 - 3, H / 2);
+        ctx.moveTo(W / 2 + 3, H / 2); ctx.lineTo(W / 2 + 9, H / 2);
+        ctx.moveTo(W / 2, H / 2 - 9); ctx.lineTo(W / 2, H / 2 - 3);
+        ctx.moveTo(W / 2, H / 2 + 3); ctx.lineTo(W / 2, H / 2 + 9);
+        ctx.stroke();
+      };
+      cross();
+      ctx.strokeStyle = VIEW; ctx.lineWidth = 2;
+      cross();
+      ctx.restore();
+    }
+    if (s === st.viewS || (s !== null && st.viewS !== null && Math.abs(s - st.viewS) < 1e-6)) return;
+    st.viewS = s;
+    if (SW.view) SW.view.requestDraw();
+  }
+
+  /* cota de la topografía visible en s (la primera línea que lo cubre) */
+  function topoAt(s) {
+    for (const l of SW.model.state.sec.lines || []) {
+      if (l.kind !== "topography" || l.visible === false) continue;
+      const v = l.vertices || [];
+      for (let i = 1; i < v.length; i++) {
+        const a = v[i - 1], b = v[i];
+        if ((s - a[0]) * (s - b[0]) > 0 || a[0] === b[0]) continue;
+        return a[1] + (b[1] - a[1]) * (s - a[0]) / (b[0] - a[0]);
+      }
+    }
+    return null;
   }
 
   function sLabel(s) {
@@ -17085,7 +17140,25 @@ SW.mapWindow = (function () {
   }
   /* la línea vertical del cursor del mapa sobre el perfil */
   function drawSectionOverlay(c, V) {
-    if (st.mode === "hidden" || st.mapS === null || st.secS !== null) return;
+    if (st.mode === "hidden") return;
+    if (st.viewS !== null) {
+      // el punto de lo que se mira en el mapa: sobre la topografía si la
+      // hay; si no, sobre el borde superior del área de dibujo
+      const r = V.plotRect(), x = V.sx(st.viewS), z = topoAt(st.viewS);
+      let y = z === null ? r.y : V.zy(z);
+      y = Math.max(r.y, Math.min(r.y + r.h, y));
+      if (x >= r.x && x <= r.x + r.w) {
+        c.save();
+        c.setTransform(V.dpr(), 0, 0, V.dpr(), 0, 0);
+        c.beginPath(); c.arc(x, y, 6, 0, 2 * Math.PI);
+        c.fillStyle = VIEW; c.fill();
+        c.lineWidth = 2; c.strokeStyle = "#fff"; c.stroke();
+        c.lineWidth = 1; c.strokeStyle = "rgba(0,0,0,.6)";
+        c.beginPath(); c.arc(x, y, 7.5, 0, 2 * Math.PI); c.stroke();
+        c.restore();
+      }
+    }
+    if (st.mapS === null || st.secS !== null) return;
     const r = V.plotRect(), x = V.sx(st.mapS);
     if (x < r.x || x > r.x + r.w) return;
     c.save();
