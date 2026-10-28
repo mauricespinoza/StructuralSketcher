@@ -467,6 +467,35 @@ is reopened).
   Attributes: `NAME`, `TYPE`, `ID`, `COLORVAL` (hex). Unzip and open it in
   MOVE (or QGIS/ArcGIS). Dip symbols and reference layers are not exported.
 
+## Several sections in one project
+
+A project holds any number of sections. The **selector** at the left of the
+second bar switches between them (**+** adds a blank one, **✕** deletes the
+current one, with a confirmation; a ⌖ marks the ones that have a trace on the
+map). Each section is complete and independent — its lines, dips, units,
+images, trace, versions — and remembers its own **undo history and view** while
+you work on another, in memory. The project file is still one `.sketch.json`:
+`section` is the active section (as in single-section files) and the others go
+in `other_sections`, with `section_order`; old files open as one section.
+
+On the **map**, every section's trace is drawn (the active one in red with its
+end labels, the others in their own colour with their name):
+
+- **Click a trace** to make that section the active one.
+- **Right-click a trace** (long-press with a finger or pencil) for its menu:
+  - **Add vertical image…** — choose a picture of a vertical section. The
+    section opens and the picture lands on its view, stretched to the trace's
+    length (keeping its proportions, hanging from the section's top). Fit it
+    with the tools you already have: the Image tool (I) to move and resize,
+    Transform, and Calibrate (G) when you know a length.
+  - **Open section view**, **Rename…**, **Delete section…**.
+  - On empty map: **Draw a new trace**.
+- **Draw trace** then **Add as new section** starts another section on the
+  drawn trace and leaves the current one and its trace alone (**Use as section
+  trace** still replaces the current section's trace).
+
+Rasters on the map belong to the project, not to a section.
+
 ## Profile traces from the map
 
 In the map view (see *Map view* above), **Draw trace** + **Use as section
