@@ -1245,7 +1245,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.29.0",
+  version: "0.30.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1257,6 +1257,14 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.30.0", date: "2026-10-28", highlights: [
+      "Saving a project (file, download or Google Drive) now embeds the " +
+        "map rasters loaded in the map view — GeoTIFF (with its .tfw / " +
+        ".prj), MBTiles and PMTiles — inside the .sketch.json, with their " +
+        "visibility, opacity and style; opening the project brings them " +
+        "back. Up to ~200 MB of rasters per project; larger ones are " +
+        "listed as not embedded. Browser autosave does not carry them.",
+    ] },
     { version: "0.29.0", date: "2026-10-28", highlights: [
       "Map view: Esri Hillshade basemap (as in FieldDraw) and a Contours " +
         "option — contour lines computed in the browser from the free " +
@@ -15930,7 +15938,7 @@ SW.rasters = (function () {
 
     const canvas = newCanvas(ow, oh), g = canvas.getContext("2d");
     const r = { w: ow, h: oh, canvas: canvas, ctx: g, crs: crs, crsText: crsText, nodata: nodata,
-                single: isBand, src: { w: W, h: Hh, bps: bps, spp: spp, fmt: fmt } };
+                single: isBand, srcInfo: { w: W, h: Hh, bps: bps, spp: spp, fmt: fmt } };
     if (mode.u8) {
       g.putImageData(new ImageData(data, ow, oh), 0, 0);
     } else if (isBand) {
@@ -16986,7 +16994,9 @@ SW.mapWindow = (function () {
     });
   }
 
-  async function addRasterFiles(list) {
+  const dirtyProject = () => { if (SW.project && SW.project.touch) SW.project.touch(); };
+  async function addRasterFiles(list, opts) {
+    const o = opts || {};
     const files = Array.from(list || []);
     if (!files.length) return;
     const mains = files.filter(f => /\.(tiff?|mbtiles|pmtiles)$/i.test(f.name));
@@ -16997,14 +17007,21 @@ SW.mapWindow = (function () {
     for (const m of mains) {
       const group = /\.tiff?$/i.test(m.name)
         ? [m].concat(files.filter(f => !/\.(tiff?|mbtiles|pmtiles)$/i.test(f.name))) : [m];
-      SW.view.status("Reading " + m.name + "…");
+      if (!o.quiet) SW.view.status("Reading " + m.name + "…");
       try {
-        const r = await SW.rasters.open(group, askCrs, function (p) {
-          SW.view.status("Reading " + m.name + "… " + Math.round(p * 100) + "%");
+        let asked = null;
+        const ask = o.restore && o.restore.crs ? () => Promise.resolve(o.restore.crs)
+          : (cur, crs) => askCrs(cur, crs).then(v => { asked = v; return v; });
+        const r = await SW.rasters.open(group, ask, function (p) {
+          if (!o.quiet) SW.view.status("Reading " + m.name + "… " + Math.round(p * 100) + "%");
         });
         r.id = ++rasterSeq;
-        r.visible = true;
-        r.opacity = 1;
+        r.files = group;                 // los archivos originales: es lo que se incrusta al guardar
+        r.crsAsked = asked || (o.restore && o.restore.crs) || null;
+        const rs = o.restore;
+        r.visible = !rs || rs.visible !== false;
+        r.opacity = rs && isFinite(+rs.opacity) ? Math.max(0, Math.min(1, +rs.opacity)) : 1;
+        if (rs && rs.style && r.single) { r.style = rs.style; r.render(); }
         if (r.kind === "tiles") {
           r.src = { key: "r" + r.id, minZ: r.minZ, maxZ: r.maxZ, bounds: r.bounds,
                     cache: new Map(), cap: 400,
@@ -17014,13 +17031,16 @@ SW.mapWindow = (function () {
           r.llBounds = r.bounds;
         } else meshOf(r);
         st.rasters.push(r);
+        if (o.restore) { renderLayers(); request(); continue; }
         if (st.mode === "hidden") show("dock");
         // un mapa de medio mundo no se encuadra: alejaría de la traza
         const b = r.llBounds;
         if (!b || b[2] - b[0] < 30) zoomToRaster(r);
         renderLayers();
+        dirtyProject();
         SW.view.status("Map: added " + m.name + " — " + r.format +
-          (r.kind === "tiles" ? ", zoom " + r.minZ + "–" + r.maxZ : ", " + SW.shp.crsLabel(r.crs)) + ".");
+          (r.kind === "tiles" ? ", zoom " + r.minZ + "–" + r.maxZ : ", " + SW.shp.crsLabel(r.crs)) +
+          ". It is embedded in the project when you save.");
       } catch (err) {
         const msg = err && err.message ? err.message : String(err);
         if (msg !== "cancelled") SW.view.status("Couldn't open " + m.name + ": " + msg);
@@ -17053,6 +17073,106 @@ SW.mapWindow = (function () {
     request();
   }
 
+  /* -- rasters dentro del proyecto -----------------------------------------
+   * Al guardar se incrustan los archivos ORIGINALES de cada raster cargado
+   * (el .tif con su .tfw / .prj, el .mbtiles o el .pmtiles) en base64 dentro
+   * del .sketch.json, en `map_rasters`; al abrir se vuelven a leer con el
+   * mismo código que al cargarlos. Así el proyecto sigue siendo UN archivo.
+   * Tope: ~200 MB de archivos en total (≈ 270 MB de JSON, que es lo que un
+   * JSON.parse aguanta en una cadena); el que no cabe no se incrusta y el
+   * proyecto lo anota para avisar al abrir. El autoguardado del navegador no
+   * los lleva (su cuota es de pocos MB). */
+  const EMBED_MAX = 200 * 1048576;
+  const STEP = 3 * 1048576;                 // múltiplo de 3: sin relleno en medio
+
+  async function b64Parts(blob) {
+    const parts = [];
+    for (let o = 0; o < blob.size; o += STEP) {
+      const u = new Uint8Array(await blob.slice(o, o + STEP).arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < u.length; i += 0x8000)
+        bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      parts.push(btoa(bin));
+    }
+    return parts;
+  }
+  function unb64(text, size) {
+    const out = new Uint8Array(size);
+    let pos = 0;
+    const CH = 4 * 262144;
+    for (let i = 0; i < text.length; i += CH) {
+      const bin = atob(text.slice(i, i + CH));
+      for (let k = 0; k < bin.length; k++) out[pos++] = bin.charCodeAt(k);
+    }
+    if (pos !== size) throw new Error("embedded raster is truncated");
+    return out;
+  }
+
+  /* → {parts: [texto JSON del arreglo map_rasters…], embedded, bytes, skipped} o null */
+  async function packRasters() {
+    if (!st.rasters.length) return null;
+    const parts = ["["];
+    const skipped = [];
+    let total = 0, embedded = 0;
+    for (let n = 0; n < st.rasters.length; n++) {
+      const r = st.rasters[n];
+      const files = r.files || [];
+      const size = files.reduce((t, f) => t + f.size, 0);
+      const meta = { name: r.name, format: r.format, visible: r.visible, opacity: r.opacity,
+                     style: r.single ? r.style : null, crs: r.crsAsked || null, size: size };
+      if (n) parts.push(",");
+      if (!files.length || total + size > EMBED_MAX) {
+        skipped.push(r.name);
+        parts.push(JSON.stringify(Object.assign(meta, { embedded: false })));
+        continue;
+      }
+      total += size; embedded++;
+      parts.push(JSON.stringify(meta).slice(0, -1) + ',"embedded":true,"files":[');
+      for (let i = 0; i < files.length; i++) {
+        parts.push((i ? "," : "") + '{"name":' + JSON.stringify(files[i].name) +
+                   ',"size":' + files[i].size + ',"data":"');
+        for (const q of await b64Parts(files[i])) parts.push(q);
+        parts.push('"}');
+      }
+      parts.push("]}");
+    }
+    parts.push("]");
+    return { parts: parts, embedded: embedded, bytes: total, skipped: skipped };
+  }
+
+  function clearRasters() {
+    for (const r of st.rasters)
+      if (r.kind === "tiles" && r.src) for (const t of r.src.cache.values()) if (t.img && t.img.close) t.img.close();
+    st.rasters = [];
+  }
+
+  /* Reemplaza los rasters por los de un proyecto que se abre (lista de
+   * `map_rasters`, o nada: un proyecto sin rasters deja el mapa limpio). */
+  async function restoreRasters(list) {
+    clearRasters();
+    renderLayers(); request();
+    if (!Array.isArray(list) || !list.length) return;
+    SW.view.status("Restoring " + list.length + " map raster" + (list.length > 1 ? "s" : "") + "…");
+    const missing = [];
+    for (const e of list) {
+      if (!e || !e.embedded || !Array.isArray(e.files)) { if (e) missing.push(e.name || "raster"); continue; }
+      try {
+        const files = e.files.map(f => new File([unb64(f.data, f.size)], f.name));
+        await addRasterFiles(files, { restore: e, quiet: true });
+      } catch (err) {
+        missing.push((e.name || "raster") + " (" + (err && err.message ? err.message : err) + ")");
+      }
+    }
+    if (st.rasters.length) {
+      if (st.mode === "hidden") show("dock");
+      const t = trace();
+      if (t && t.pts) fit(t.pts); else zoomToRaster(st.rasters[0]);
+      request();
+    }
+    SW.view.status("Map rasters restored from the project: " + st.rasters.length +
+      (missing.length ? ". Not embedded, load again: " + missing.join(", ") : "") + ".");
+  }
+
   function pickRasters() {
     const doc = root ? root.ownerDocument : document;
     const inp = doc.createElement("input");
@@ -17073,14 +17193,15 @@ SW.mapWindow = (function () {
       layersBox.appendChild(U.el("div", "map-layers-empty",
         "No rasters yet. Add a GeoTIFF (with its .tfw / .prj if it has them), " +
         "an MBTiles or a PMTiles — or drop them on the map. They are read " +
-        "from disk (nothing is uploaded) and are not saved with the project."));
+        "from disk (nothing is uploaded) and are embedded in the project file " +
+        "when you save (up to ~200 MB)."));
     st.rasters.slice().reverse().forEach(function (r) {
       const row = U.el("div", "map-layer");
       const top = U.el("div", "map-layer-top");
       const vis = document.createElement("input");
       vis.type = "checkbox"; vis.checked = r.visible;
       vis.title = "Show / hide";
-      vis.addEventListener("change", () => { r.visible = vis.checked; request(); });
+      vis.addEventListener("change", () => { r.visible = vis.checked; request(); dirtyProject(); });
       top.appendChild(vis);
       const nm = U.el("span", "map-layer-name", r.name);
       nm.title = r.name + " — " + r.format;
@@ -17093,12 +17214,12 @@ SW.mapWindow = (function () {
       btn("↑", "Move up", function () {
         const i = st.rasters.indexOf(r);
         if (i < st.rasters.length - 1) { st.rasters.splice(i, 1); st.rasters.splice(i + 1, 0, r); }
-        renderLayers(); request();
+        renderLayers(); request(); dirtyProject();
       });
       btn("✕", "Remove", function () {
         st.rasters.splice(st.rasters.indexOf(r), 1);
-        if (r.src) for (const t of r.src.cache.values()) if (t.img && t.img.close) t.img.close();
-        renderLayers(); request();
+        if (r.kind === "tiles" && r.src) for (const t of r.src.cache.values()) if (t.img && t.img.close) t.img.close();
+        renderLayers(); request(); dirtyProject();
       });
       row.appendChild(top);
       const bot = U.el("div", "map-layer-bot");
@@ -17107,13 +17228,14 @@ SW.mapWindow = (function () {
       op.type = "range"; op.min = 0; op.max = 100; op.value = Math.round(r.opacity * 100);
       op.title = "Opacity";
       op.addEventListener("input", () => { r.opacity = op.value / 100; request(); });
+      op.addEventListener("change", dirtyProject);
       bot.appendChild(op);
       if (r.single) {
         const sty = U.select([{ value: "hillshade", label: "Hillshade" },
                               { value: "relief", label: "Color relief" },
                               { value: "gray", label: "Gray" }], r.style);
         sty.title = "How a single-band raster (DEM) is drawn";
-        sty.addEventListener("change", () => { r.style = sty.value; r.render(); request(); });
+        sty.addEventListener("change", () => { r.style = sty.value; r.render(); request(); dirtyProject(); });
         bot.appendChild(sty);
       }
       row.appendChild(bot);
@@ -17483,7 +17605,8 @@ SW.mapWindow = (function () {
 
   SW.actions.openMap = toggle;
   SW.actions.addMapRasters = addRasterFiles;
-  return { open: toggle, show: show, init: init, toW: toW, fromW: fromW,
+  return { packRasters: packRasters, restoreRasters: restoreRasters,
+           hasRasters: () => st.rasters.length > 0, open: toggle, show: show, init: init, toW: toW, fromW: fromW,
            setSectionCursor: setSectionCursor, onSectionDraw: onSectionDraw,
            drawSectionOverlay: drawSectionOverlay, addRasterFiles: addRasterFiles,
            get mode() { return st.mode; } };
@@ -27695,6 +27818,30 @@ SW.project = (function () {
     return JSON.stringify(SW.model.state.doc);
   }
 
+  /* El proyecto para un archivo (disco, descarga o Drive): el JSON del
+   * documento más, si hay rasters cargados en el mapa, `map_rasters` con sus
+   * archivos incrustados. El autoguardado NO pasa por aquí: sigue siendo
+   * serialize(). → Promise<{data: string | Blob, note}> */
+  function serializeFull() {
+    const base = serialize();
+    const M = SW.mapWindow;
+    if (!M || !M.hasRasters()) return Promise.resolve({ data: base, note: "" });
+    SW.view.status("Embedding the map rasters in the project…");
+    return M.packRasters().then(function (p) {
+      if (!p) return { data: base, note: "" };
+      const data = new Blob([base.slice(0, -1), ',"map_rasters":'].concat(p.parts, ["}"]),
+                            { type: "application/json" });
+      let note = "";
+      if (p.embedded)
+        note = " " + p.embedded + " map raster" + (p.embedded > 1 ? "s" : "") +
+               " embedded (" + (p.bytes / 1048576).toFixed(1) + " MB).";
+      if (p.skipped.length)
+        note += " ⚠ Not embedded (over the " + (200) + " MB limit): " + p.skipped.join(", ") +
+                " — load them again after opening.";
+      return { data: data, note: note };
+    });
+  }
+
   /* -- autoguardado -------------------------------------------------------- */
   function touch() {
     dirty = true;
@@ -27768,6 +27915,10 @@ SW.project = (function () {
   /* -- cargar un documento en la app -------------------------------------- */
   function adopt(doc, opts) {
     opts = opts || {};
+    // los rasters del mapa viajan aparte: no son parte del documento (ni de
+    // su historial ni de su autoguardado)
+    const mapRasters = doc && doc.map_rasters;
+    if (doc && doc.map_rasters !== undefined) delete doc.map_rasters;
     SW.model.setDocument(doc);
     SW.model.syncUnitIds();
     SW.undo.clear();
@@ -27779,6 +27930,11 @@ SW.project = (function () {
     dirty = !!opts.dirty;
     updateTitle();
     if (opts.autosave !== false) { autosaveOk = true; scheduleAutosave(); }
+    if (SW.mapWindow) {
+      SW.mapWindow.restoreRasters(mapRasters).catch(function (e) {
+        SW.view.status("Couldn't restore the map rasters: " + (e && e.message ? e.message : e));
+      });
+    }
   }
 
   /* -- acciones ------------------------------------------------------------ */
@@ -27880,22 +28036,26 @@ SW.project = (function () {
    * "(1)". Se dice en la barra de estado en vez de fingir que se guardó
    * encima. */
   function downloadCopy(name) {
-    SW.bridge.call("saveExport", {
-      format: "sketch.json", data: serialize(),
-      suggested_name: name || suggestedName(),
-    }, function (res) {
-      if (!res || !res.ok) return;
-      dirty = false;
-      fileName = res.path;
-      updateTitle();
-      SW.view.status("Downloaded " + res.path +
-                     " — this browser cannot overwrite files in place.");
+    serializeFull().then(function (full) {
+      SW.bridge.call("saveExport", {
+        format: "sketch.json", data: full.data,
+        suggested_name: name || suggestedName(),
+      }, function (res) {
+        if (!res || !res.ok) return;
+        dirty = false;
+        fileName = res.path;
+        updateTitle();
+        SW.view.status("Downloaded " + res.path +
+                       " — this browser cannot overwrite files in place." + full.note);
+      });
     });
   }
 
   function writeHandle(handle) {
-    return handle.createWritable().then(function (w) {
-      return w.write(serialize()).then(function () { return w.close(); });
+    return serializeFull().then(function (full) {
+      return handle.createWritable().then(function (w) {
+        return w.write(full.data).then(function () { return w.close(); });
+      }).then(function () { return full.note; });
     });
   }
 
@@ -27904,11 +28064,11 @@ SW.project = (function () {
   function saveFile() {
     if (!fileHandle && drive) { saveToDrive(); return; }
     if (!fileHandle) { saveFileAs(); return; }
-    writeHandle(fileHandle).then(function () {
+    writeHandle(fileHandle).then(function (note) {
       dirty = false;
       fileName = fileHandle.name;
       updateTitle();
-      SW.view.status("Saved " + fileHandle.name + ".");
+      SW.view.status("Saved " + fileHandle.name + "." + note);
     }).catch(function (e) {
       // El caso típico es que se revocara el permiso de escritura (por
       // ejemplo tras recargar). Se pide archivo de nuevo en vez de perder
@@ -27934,13 +28094,13 @@ SW.project = (function () {
     } catch (e) { downloadCopy(); return; }
     p.then(function (handle) {
       fileHandle = handle;
-      return writeHandle(handle).then(function () {
+      return writeHandle(handle).then(function (note) {
         drive = null;
         dirty = false;
         fileName = handle.name;
         updateTitle();
         SW.view.status("Saved " + handle.name +
-                       " — \"Save\" now overwrites this file.");
+                       " — \"Save\" now overwrites this file." + note);
       });
     }).catch(function (e) {
       if (e && e.name === "AbortError") return;   // el usuario canceló
@@ -28053,7 +28213,9 @@ SW.project = (function () {
 
   function writeDrive(t) {
     const G = SW.gdrive;
-    const data = new Blob([serialize()], { type: "application/json" });
+    return serializeFull().then(function (full) {
+    const data = full.data instanceof Blob ? full.data
+      : new Blob([full.data], { type: "application/json" });
     const t0 = Date.now();
     SW.view.status("Saving to Google Drive (" +
                    (data.size / 1048576).toFixed(2) + " MB)…");
@@ -28076,8 +28238,9 @@ SW.project = (function () {
         updateTitle();
         SW.view.status("Saved to Google Drive: " + drive.name + " (" +
                        ((Date.now() - t0) / 1000).toFixed(1) + " s) — " +
-                       "\"Save\" now updates this file.");
+                       "\"Save\" now updates this file." + full.note);
       });
+    });
   }
 
   /* -- diálogo de sección --------------------------------------------------- */
@@ -28228,7 +28391,7 @@ SW.project = (function () {
   return { boot, touch, newProject, openFile, saveFile, saveFileAs,
            openFromDrive, saveToDrive, driveFile: () => drive,
            sectionSetup, adopt,
-           clearAutosave, updateTitle, serialize,
+           clearAutosave, updateTitle, serialize, serializeFull,
            isDirty: () => dirty };
 })();
 
