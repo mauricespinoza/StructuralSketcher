@@ -144,6 +144,9 @@ header button.active { background: rgba(37,99,235,.35); color: #fff;
 .ve-field { display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; margin-right: 4px; }
 .ve-field input { width: 54px; }
+.section-select { max-width: 210px; font-size: 12px; }
+#sections-group { align-items: center; gap: 2px; }
+#sections-group button { font-weight: 700; }
 .bar2 .utility {
   background: var(--ruler-bg); border: 1px solid var(--grid);
   border-radius: 8px; padding: 2px;
@@ -316,6 +319,14 @@ body.map-popup { background: var(--surface); }
   box-shadow: 0 6px 20px rgba(0,0,0,.18); padding: 8px; display: flex;
   flex-direction: column; gap: 6px; z-index: 3; }
 .map-layers.hidden { display: none; }
+.map-menu { position: absolute; z-index: 5; min-width: 190px; background: var(--surface);
+  border: 1px solid var(--grid-strong); border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0,0,0,.22); padding: 4px; display: flex; flex-direction: column; }
+.map-menu-head { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-3); padding: 3px 8px 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-menu-item { text-align: left; border-color: transparent; background: transparent; padding: 6px 8px; }
+.map-menu-item:hover { background: var(--accent-soft); }
+.map-menu-item.danger { color: var(--danger); }
 .map-layers-head { font-size: 10.5px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .07em; color: var(--ink-3); }
 .map-layers-empty { font-size: 11px; color: var(--ink-3); }
@@ -806,6 +817,12 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 </header>
 
 <div class="bar2">
+  <div class="bgroup" id="sections-group">
+    <select id="section-select" class="section-select" title="Sections in this project"></select>
+    <button id="section-add" class="icon-only" title="New section">+</button>
+    <button id="section-del" class="icon-only" title="Delete this section" disabled>&#10005;</button>
+  </div>
+  <span class="sep"></span>
   <div class="bgroup">
     <label class="ve-field" title="Vertical exaggeration (display only — measurements use real coordinates)">V.E. <input id="ve" type="number" min="0.1" max="50" step="0.5" value="1"></label>
     <button id="zoom-out" class="icon-only" title="Zoom out"><svg class="ic"><use href="#i-zoom-out"/></svg></button>
@@ -1245,7 +1262,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.30.0",
+  version: "0.31.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1257,6 +1274,20 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.31.0", date: "2026-10-28", highlights: [
+      "A project can now hold several sections. Selector (+ / ✕) in the " +
+        "second bar; each section keeps its own drawing, images, trace, " +
+        "undo history and view. The map shows every section's trace " +
+        "(colour-coded, the active one in red): click a trace to open " +
+        "that section.",
+      "Right-click a trace on the map (long-press on a tablet) → Add " +
+        "vertical image…: pick a picture of a vertical section; it opens " +
+        "that section and lands on its view stretched to the trace " +
+        "length, ready to fit with the Image tool / Transform / Calibrate. " +
+        "The same menu opens, renames or deletes the section.",
+      "Draw trace → Add as new section starts another section on the " +
+        "drawn trace without touching the current one.",
+    ] },
     { version: "0.30.0", date: "2026-10-28", highlights: [
       "Saving a project (file, download or Google Drive) now embeds the " +
         "map rasters loaded in the map view — GeoTIFF (with its .tfw / " +
@@ -4930,8 +4961,7 @@ SW.model = (function () {
   /* Normaliza un documento venido de disco/localStorage: rellena lo que
    * falte y descarta lo que ya no existe (restos de un sidecar del plugin
    * de QGIS abierto acá: traza, sets proyectados, perfil de terreno). */
-  function normalize(doc) {
-    const raw = (doc && doc.section) ? doc.section : (doc || {});
+  function normalizeSection(raw) {
     const sec = Object.assign(blankSection(raw.name), raw);
     delete sec.trace;
     delete sec.tadpole_sets;
@@ -4997,7 +5027,80 @@ SW.model = (function () {
     sec.display_units = Object.assign({ h: "km", v: "km" },
                                       sec.display_units || {});
     if (!sec.length || sec.length <= 0) sec.length = 40000;
-    return { app: "StructuralSketcher", version: 1, section: sec };
+    return sec;
+  }
+
+  /* Un proyecto puede llevar varias secciones: `section` es la ACTIVA (la que
+   * toda la app lee como SW.model.state.sec) y `other_sections` las demás;
+   * `section_order` fija el orden en que se listan. Cambiar de sección es
+   * intercambiar cuál de ellas está en `section` (ver activate). Un archivo de
+   * una sola sección no lleva ni `other_sections` ni `section_order` de más. */
+  function normalize(doc) {
+    const sec = normalizeSection((doc && doc.section) ? doc.section : (doc || {}));
+    const others = ((doc && doc.other_sections) || []).map(normalizeSection);
+    const seen = new Set([sec.id]);
+    for (const o of others) {
+      if (seen.has(o.id)) o.id = genId();
+      seen.add(o.id);
+    }
+    const all = [sec].concat(others);
+    const wanted = (doc && Array.isArray(doc.section_order)) ? doc.section_order : [];
+    const order = wanted.filter((id, i) => all.some(x => x.id === id) && wanted.indexOf(id) === i);
+    for (const x of all) if (order.indexOf(x.id) < 0) order.push(x.id);
+    const out = { app: "StructuralSketcher", version: 1, section: sec };
+    if (others.length) { out.other_sections = others; out.section_order = order; }
+    return out;
+  }
+
+  /* -- varias secciones ---------------------------------------------------- */
+  function sections() {
+    const d = M.doc, all = [d.section].concat(d.other_sections || []);
+    const order = d.section_order || all.map(x => x.id);
+    const out = [];
+    for (const id of order) { const x = all.find(y => y.id === id); if (x) out.push(x); }
+    for (const x of all) if (out.indexOf(x) < 0) out.push(x);
+    return out;
+  }
+  function nextSectionName() {
+    const names = new Set(sections().map(x => x.name));
+    for (let n = sections().length + 1; ; n++)
+      if (!names.has("Section " + n)) return "Section " + n;
+  }
+  /* Hace activa la sección `id` (la que estaba activa pasa a `other_sections`
+   * en el mismo sitio). → false si no existe. */
+  function activate(id) {
+    const d = M.doc;
+    if (d.section.id === id) return true;
+    const others = d.other_sections || [];
+    const i = others.findIndex(x => x.id === id);
+    if (i < 0) return false;
+    if (!d.section_order) d.section_order = sections().map(x => x.id);
+    const next = others[i];
+    others[i] = d.section;
+    d.section = next;
+    d.other_sections = others;
+    M.sec = next;
+    return true;
+  }
+  /* Agrega una sección ya completa (blankSection + lo que se quiera) sin
+   * activarla. */
+  function addSection(sec) {
+    const d = M.doc;
+    const order = sections().map(x => x.id);
+    d.other_sections = (d.other_sections || []).concat([sec]);
+    d.section_order = order.concat([sec.id]);
+    return sec;
+  }
+  /* Quita una sección que NO es la activa. */
+  function removeSection(id) {
+    const d = M.doc;
+    if (d.section.id === id) return false;
+    const before = (d.other_sections || []).length;
+    d.other_sections = (d.other_sections || []).filter(x => x.id !== id);
+    if (d.other_sections.length === before) return false;
+    d.section_order = (d.section_order || []).filter(x => x !== id);
+    if (!d.other_sections.length) { delete d.other_sections; delete d.section_order; }
+    return true;
   }
 
   function setDocument(doc) {
@@ -5416,7 +5519,8 @@ SW.model = (function () {
 
   return {
     state: M, genId, clone, blankDocument, blankSection, normalize,
-    setDocument, topoSamples,
+    setDocument, topoSamples, sections, activate, addSection, removeSection,
+    nextSectionName,
     getLine, lineIndex, nextLineName, unitById, newLine, defaultStyle,
     hexToRgb, KINDS,
     dips, getDip, dipIndex, newDip,
@@ -5489,6 +5593,16 @@ SW.undo = (function () {
   function undoLabel() { return canUndo() ? stack[index].label : ""; }
   function redoLabel() { return canRedo() ? stack[index + 1].label : ""; }
   function clear() { stack.length = 0; index = -1; notify(); }
+  /* La pila de cada sección es suya: al cambiar de sección se guarda la de la
+   * que se deja y se instala la de la que se abre (ver SW.sections). */
+  function exportState() { return { stack: stack.slice(), index: index }; }
+  function importState(st) {
+    stack.length = 0;
+    if (st) { for (const c of st.stack) stack.push(c); index = st.index; }
+    else index = -1;
+    version++;
+    notify();
+  }
   function getVersion() { return version; }
 
   /* -- fábricas de comandos --------------------------------------------------- */
@@ -5553,7 +5667,7 @@ SW.undo = (function () {
   }
 
   return { version: getVersion, onChange, push, undo, redo, canUndo, canRedo, undoLabel,
-           redoLabel, clear,
+           redoLabel, clear, exportState, importState,
            addLine, deleteLine, replaceVertices, setLineProps, splitLine,
            addLines, replaceVerticesMulti };
 })();
@@ -10783,21 +10897,31 @@ window.SW = window.SW || {};
   /* Coloca la imagen ocupando ~70% del alto visible y respetando su
    * proporción de píxeles. Todavía no está a escala — eso lo decide la
    * calibración — pero al menos entra entera en pantalla y sin deformar. */
-  function placeImage(name, dataUrl, w, h) {
+  function placeImage(name, dataUrl, w, h, opts) {
     const V = SW.view;
-    const r = V.plotRect();
-    const visS = r.w / V.state.scale;
-    const visZ = r.h / (V.state.scale * V.state.ve);
-    const centerS = V.xs(r.x + r.w / 2);
-    const centerZ = V.yz(r.y + r.h / 2);
-    let hz = visZ * 0.7;
-    let hs = hz * (w / h);
-    if (hs > visS * 0.9) { hs = visS * 0.9; hz = hs * (h / w); }
+    const fit = opts && opts.fit === "section";
+    let sLeft, sRight, zTop, zBottom;
+    if (fit) {
+      const sec = SW.model.state.sec;
+      sLeft = 0; sRight = sec.length;
+      zTop = sec.z_max; zBottom = zTop - sec.length * (h / w);
+    } else {
+      const r = V.plotRect();
+      const visS = r.w / V.state.scale;
+      const visZ = r.h / (V.state.scale * V.state.ve);
+      const centerS = V.xs(r.x + r.w / 2);
+      const centerZ = V.yz(r.y + r.h / 2);
+      let hz = visZ * 0.7;
+      let hs = hz * (w / h);
+      if (hs > visS * 0.9) { hs = visS * 0.9; hz = hs * (h / w); }
+      sLeft = centerS - hs / 2; sRight = centerS + hs / 2;
+      zTop = centerZ + hz / 2; zBottom = centerZ - hz / 2;
+    }
     const img = {
       id: SW.model.genId(), name: name, data_url: dataUrl,
       natural_w: w, natural_h: h,
-      s_left: centerS - hs / 2, s_right: centerS + hs / 2,
-      z_top: centerZ + hz / 2, z_bottom: centerZ - hz / 2,
+      s_left: sLeft, s_right: sRight,
+      z_top: zTop, z_bottom: zBottom,
       opacity: 1, visible: true, locked: false,
     };
     SW.undo.push({
@@ -10810,6 +10934,12 @@ window.SW = window.SW || {};
     if (SW.panels.images) SW.panels.images.render();
     SW.view.zoomToExtent();
     SW.view.requestDraw();
+    if (fit) {
+      SW.view.status("Image added to \"" + (SW.model.state.sec.name || "the section") +
+        "\", stretched to the section length. Move, resize or transform it to fit " +
+        "(Image tool, I) — calibrate it (G) when you know a length.");
+      return;
+    }
     offerCalibration(img);
   }
 
@@ -10855,7 +10985,11 @@ window.SW = window.SW || {};
   /* Importa un File ya obtenido: del selector de archivos, de arrastrar y
    * soltar sobre el lienzo, o —en una tablet— de la cámara o el carrete,
    * que es lo que ofrece el propio sistema al pulsar un input de imagen. */
-  SW.actions.importImageFile = function (f) {
+  /* opts.fit = "section": una imagen vertical de la sección (la que se agrega
+   * desde la traza en el mapa): se estira al largo de la sección, con su
+   * proporción, colgando de su cota máxima; el usuario la encaja después con
+   * las herramientas de imagen. */
+  SW.actions.importImageFile = function (f, opts) {
     if (!f) return;
     if (f.size > MAX_BYTES) {
       // El archivo se embebe en el proyecto; pasado cierto tamaño el
@@ -10872,7 +11006,7 @@ window.SW = window.SW || {};
       const url = String(reader.result);
       const probe = new Image();
       probe.onload = function () {
-        placeImage(f.name, url, probe.naturalWidth, probe.naturalHeight);
+        placeImage(f.name, url, probe.naturalWidth, probe.naturalHeight, opts);
       };
       probe.onerror = function () {
         SW.view.status("Could not decode that image file.");
@@ -16281,26 +16415,47 @@ SW.mapWindow = (function () {
    *  inv (x, y → lon, lat), fwd (lon, lat → x, y)} o {unsupported} o null;
    * se recalcula cuando sec.geo_trace cambia de objeto (cada set_geo_trace
    * lo clona, también al deshacer). */
-  let traceRef, traceInfo = null;
-  function trace() {
-    const gt = SW.model && SW.model.state.sec ? SW.model.state.sec.geo_trace : null;
-    if (gt === traceRef) return traceInfo;
-    traceRef = gt;
-    traceInfo = null;
-    if (!gt) return null;
+  const traceCache = new WeakMap();      // gt (objeto) → info; cada set_geo_trace crea un gt nuevo
+  function buildTrace(gt) {
     const S = SW.shp;
     const crs = S.parsePrj(gt.crs || "");
     if (gt.crs_kind && crs.kind === "unknown") crs.kind = gt.crs_kind;
     const inv = S.toLonLat(crs), fwd = S.fromLonLat(crs);
-    if (!inv) { traceInfo = { unsupported: true, crs: crs }; return traceInfo; }
+    if (!inv) return { unsupported: true, crs: crs };
     const path = gt.path && gt.path.length >= 2 ? gt.path : [[gt.x0, gt.y0], [gt.x1, gt.y1]];
-    traceInfo = { pts: path.map(p => inv(+p[0], +p[1])), crs: crs, gt: gt, inv: inv, fwd: fwd };
+    const info = { pts: path.map(p => inv(+p[0], +p[1])), crs: crs, gt: gt, inv: inv, fwd: fwd };
     try {
-      traceInfo.loc = SW.shpExport.makeLocator(gt, crs);
-      traceInfo.proj = S.makeProjector(Object.assign({}, gt, { proj_az: null }), crs,
+      info.loc = SW.shpExport.makeLocator(gt, crs);
+      info.proj = S.makeProjector(Object.assign({}, gt, { proj_az: null }), crs,
         { correct: gt.mercator_correction !== false });
     } catch (e) { /* sin sincronía, pero la traza se dibuja igual */ }
-    return traceInfo;
+    return info;
+  }
+  function traceFor(gt) {
+    if (!gt) return null;
+    let t = traceCache.get(gt);
+    if (t === undefined) { t = buildTrace(gt); traceCache.set(gt, t); }
+    return t;
+  }
+  /* la traza de la sección ACTIVA */
+  let traceRef;
+  function trace() {
+    const gt = SW.model && SW.model.state.sec ? SW.model.state.sec.geo_trace : null;
+    traceRef = gt;
+    return traceFor(gt);
+  }
+  /* las trazas de las demás secciones: [{id, name, color, info}] */
+  const SECTION_COLORS = ["#2563eb", "#16a34a", "#a855f7", "#f59e0b", "#0891b2", "#db2777", "#65a30d"];
+  function otherTraces() {
+    const out = [];
+    if (!SW.sections) return out;
+    const L = SW.sections.list();
+    L.forEach(function (x, i) {
+      if (x.active || !x.sec.geo_trace) return;
+      const info = traceFor(x.sec.geo_trace);
+      if (info && info.pts) out.push({ id: x.id, name: x.name, color: SECTION_COLORS[i % SECTION_COLORS.length], info: info });
+    });
+    return out;
   }
   /* s (m a lo largo de la traza) → lon/lat */
   function lonLatAt(s) {
@@ -16628,6 +16783,10 @@ SW.mapWindow = (function () {
     if (st.labels && bm.path) drawTiles(esriOf(LABELS, 19));
 
     const sec = SW.model.state.sec;
+    for (const o of otherTraces()) {
+      poly(o.info.pts, o.color, 2.5, null, false);
+      label(ll2s(o.info.pts[0]), o.name, o.color);
+    }
     if (t && t.pts) {
       poly(t.pts, TRACE, 3);
       // tramo visible en el perfil
@@ -16790,7 +16949,17 @@ SW.mapWindow = (function () {
       drag = null;
     } else drag = { x: e.offsetX, y: e.offsetY, cx: st.cx, cy: st.cy, moved: 0 };
     if (layersBox) layersBox.classList.add("hidden");
+    closeMenu();
+    // dedo o lápiz: no hay botón secundario, se mantiene pulsado
+    clearTimeout(pressTimer);
+    if (drag && e.pointerType !== "mouse" && !st.drawing) {
+      const x = e.offsetX, y = e.offsetY;
+      pressTimer = setTimeout(function () {
+        if (drag && drag.moved <= 4) { drag = null; openMenu(x, y); }
+      }, 600);
+    }
   }
+  let pressTimer = 0;
   function onMove(e) {
     st.cursor = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
     if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
@@ -16809,6 +16978,7 @@ SW.mapWindow = (function () {
       }
     }
     st.hover = st.drawing ? st.cursor : null;
+    if (!drag && !st.drawing) cv.style.cursor = hitTrace(e.offsetX, e.offsetY) ? "pointer" : "grab";
     projectCursor();
     request();
   }
@@ -16832,11 +17002,22 @@ SW.mapWindow = (function () {
     request();
   }
   function onUp(e) {
+    clearTimeout(pressTimer);
     ptrs.delete(e.pointerId);
     if (ptrs.size < 2) pinch = null;
     const d = drag;
     drag = null;
     cv.style.cursor = st.drawing ? "crosshair" : "grab";
+    // un clic sobre la traza de otra sección la hace la activa
+    if (d && d.moved <= 4 && !st.drawing && e.button === 0) {
+      const id = hitTrace(e.offsetX, e.offsetY);
+      if (id && SW.sections && id !== SW.model.state.sec.id) {
+        noRefit = true;
+        SW.sections.switchTo(id);
+        noRefit = false;
+        return;
+      }
+    }
     if (d && d.moved <= 4 && st.drawing) {
       const p = fromW.apply(null, toWorld(e.offsetX, e.offsetY));
       const last = st.draft[st.draft.length - 1];
@@ -16864,6 +17045,100 @@ SW.mapWindow = (function () {
     if (e.key === "Enter") { finishDraw(); e.preventDefault(); }
     else if (e.key === "Backspace") { st.draft.pop(); request(); e.preventDefault(); }
     else if (e.key === "Escape") { clearDraft(); e.preventDefault(); }
+  }
+
+  /* -- varias secciones: trazas, menú secundario, imagen vertical ---------- */
+  let noRefit = false;
+  /* id de la sección cuya traza pasa a menos de `tol` px de (x, y) */
+  function hitTrace(x, y, tol) {
+    tol = tol || 9;
+    const cands = [];
+    const act = SW.model.state.sec, t = trace();
+    if (t && t.pts) cands.push({ id: act.id, pts: t.pts });
+    for (const o of otherTraces()) cands.push({ id: o.id, pts: o.info.pts });
+    let best = null, bd = tol;
+    for (const c of cands) {
+      const q = c.pts.map(ll2s);
+      for (let i = 1; i < q.length; i++) {
+        const ax = q[i - 1][0], ay = q[i - 1][1], dx = q[i][0] - ax, dy = q[i][1] - ay;
+        const L2 = dx * dx + dy * dy;
+        let u = L2 ? ((x - ax) * dx + (y - ay) * dy) / L2 : 0;
+        u = Math.max(0, Math.min(1, u));
+        const d = Math.hypot(x - (ax + u * dx), y - (ay + u * dy));
+        if (d < bd) { bd = d; best = c.id; }
+      }
+    }
+    return best;
+  }
+
+  let menuEl = null;
+  function closeMenu() { if (menuEl && menuEl.parentNode) menuEl.parentNode.removeChild(menuEl); menuEl = null; }
+  /* menú secundario sobre una traza (o sobre el mapa vacío) */
+  function openMenu(x, y) {
+    closeMenu();
+    const U = SW.ui, id = hitTrace(x, y, cv.ownerDocument.defaultView.matchMedia &&
+      cv.ownerDocument.defaultView.matchMedia("(pointer: coarse)").matches ? 16 : 9);
+    const items = [];
+    if (id) {
+      const x2 = SW.model.sections().find(q => q.id === id);
+      const active = SW.model.state.sec.id === id;
+      items.push({ head: (x2.name || "Untitled section") + (active ? " (active)" : "") });
+      items.push({ text: "Add vertical image…", title: "Choose a picture of this vertical section; it goes on this " +
+                   "section's view, stretched to its length, ready to fit with the image tools",
+                   run: () => addVerticalImage(id) });
+      if (!active) items.push({ text: "Open section view", run: function () {
+        noRefit = true; SW.sections.switchTo(id); noRefit = false; } });
+      items.push({ text: "Rename…", run: function () {
+        const n = window.prompt("Section name:", x2.name || ""); if (n) SW.sections.rename(id, n); } });
+      if (SW.model.sections().length > 1)
+        items.push({ text: "Delete section…", danger: true, run: function () {
+          if (window.confirm("Delete the section \"" + (x2.name || "Untitled section") +
+                             "\" with everything in it? This cannot be undone.")) SW.sections.remove(id); } });
+    } else {
+      items.push({ text: "Draw a new trace", run: startDraw });
+    }
+    menuEl = U.el("div", "map-menu");
+    for (const it of items) {
+      if (it.head) { menuEl.appendChild(U.el("div", "map-menu-head", it.head)); continue; }
+      const b = U.el("button", "map-menu-item" + (it.danger ? " danger" : ""), it.text);
+      if (it.title) b.title = it.title;
+      b.addEventListener("pointerdown", e => e.stopPropagation());
+      b.addEventListener("click", function () { closeMenu(); it.run(); });
+      menuEl.appendChild(b);
+    }
+    wrapEl.appendChild(menuEl);
+    const r = wrapEl.getBoundingClientRect();
+    menuEl.style.left = Math.max(2, Math.min(x, r.width - menuEl.offsetWidth - 2)) + "px";
+    menuEl.style.top = Math.max(2, Math.min(y, r.height - menuEl.offsetHeight - 2)) + "px";
+  }
+
+  /* Imagen vertical de una sección: se elige el archivo, se abre la sección y
+   * se coloca en su vista, estirada al largo de la traza; ahí se encaja con
+   * las herramientas de imagen de siempre (mover, escalar, transformar). */
+  function addVerticalImage(id) {
+    const doc = root.ownerDocument;
+    const inp = doc.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.addEventListener("change", function () {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      noRefit = true;
+      SW.sections.switchTo(id);
+      noRefit = false;
+      try { window.focus(); } catch (e) { /* nada */ }
+      SW.actions.importImageFile(f, { fit: "section" });
+    });
+    inp.click();
+  }
+
+  /* Cambió la sección activa (selector, mapa, nueva, borrada): se redibuja y,
+   * si el cambio no vino de un clic en el propio mapa, se encuadra su traza. */
+  function onSectionsChanged() {
+    st.secS = null; st.mapS = null; st.viewS = null; st.secRange = null;
+    const t = trace();
+    if (!noRefit && t && t.pts && st.mode !== "hidden") fit(t.pts);
+    request();
   }
 
   function startDraw() {
@@ -16896,10 +17171,10 @@ SW.mapWindow = (function () {
   }
 
   /* -- aplicar la traza dibujada ------------------------------------------- */
-  function apply(opts) {
+  function apply(opts, asNew) {
     const S = SW.shp, sec = SW.model.state.sec;
     const pts = st.draft;
-    const gt0 = sec.geo_trace;
+    const gt0 = sec.geo_trace;        // para el CRS y el buffer; con asNew no se reemplaza
     // CRS: el de la traza actual si se sabe convertir; si no, UTM del centro
     let crs = null, text = "";
     if (gt0) {
@@ -16925,6 +17200,34 @@ SW.mapWindow = (function () {
     if (path.length > 2) gt.path = path.map(p => [p[0], p[1]]);
     const P = S.makeProjector(gt, crs, { correct: true });
     gt.length = P.length; gt.azimuth = P.azimuth;
+    if (asNew) {
+      // otra sección del proyecto, con esta traza; no toca la actual
+      const lblL = S.compass(gt.azimuth + 180), lblR = S.compass(gt.azimuth);
+      const taken = new Set(SW.model.sections().map(x => x.name));
+      let nm = "Section " + lblL + "–" + lblR;
+      for (let n = 2; taken.has(nm); n++) nm = "Section " + lblL + "–" + lblR + " (" + n + ")";
+      const nprops = { geo_trace: gt };
+      if (opts.length) nprops.length = Math.max(1, Math.round(gt.length));
+      if (opts.labels) { nprops.label_left = lblL; nprops.label_right = lblR; }
+      noRefit = true;
+      SW.sections.add({ name: nm, props: nprops });
+      noRefit = false;
+      if (SW.panels.imports) SW.panels.imports.render();
+      if (SW.actions.refreshGeoButtons) SW.actions.refreshGeoButtons();
+      SW.view.zoomToExtent();
+      SW.view.requestDraw();
+      SW.view.status("New section \"" + nm + "\": " + (gt.length / 1000).toFixed(2) +
+        " km, azimuth " + gt.azimuth.toFixed(0) + "°. Right-click its trace on the map " +
+        "to add a vertical image.");
+      if (opts.topo) {
+        const pr = S.demPrefs();
+        S.runTopography(gt, crs, { source: pr.source || "terrarium", key: pr.key || "" })
+          .then(ok => { if (ok) SW.view.zoomToExtent(); });
+      }
+      st.draft = [];
+      request();
+      return;
+    }
     const redo = [{ op: "set_geo_trace", trace: gt }];
     const undo = [{ op: "set_geo_trace", trace: gt0 || null }];
     const props = {};
@@ -17292,7 +17595,9 @@ SW.mapWindow = (function () {
     zt.title = "Zoom to the section trace (red) and the new one (yellow)";
     zt.addEventListener("click", function () {
       const t = trace();
-      fit((t && t.pts ? t.pts : []).concat(st.draft)); request();
+      let pts = (t && t.pts ? t.pts : []).concat(st.draft);
+      if (!pts.length) for (const o of otherTraces()) pts = pts.concat(o.info.pts);
+      fit(pts); request();
     });
     bar.appendChild(zt);
     const fl = U.el("label", "map-check");
@@ -17364,8 +17669,13 @@ SW.mapWindow = (function () {
     const useBtn = U.el("button", "primary mini", "Use as section trace");
     useBtn.title = "Replaces the current trace (red), if any. Lines already drawn keep " +
                    "their distance along the section and are re-georeferenced on the new one.";
-    useBtn.addEventListener("click", function () { apply(opts); });
+    useBtn.addEventListener("click", function () { apply(opts, false); });
     applyBox.appendChild(useBtn);
+    const newBtn = U.el("button", "primary mini", "Add as new section");
+    newBtn.title = "Keep the current section and its trace; start another section on this trace " +
+                   "(switch between sections with the selector or by clicking their traces)";
+    newBtn.addEventListener("click", function () { apply(opts, true); });
+    applyBox.appendChild(newBtn);
     const cancel = U.el("button", "mini", "Discard");
     cancel.addEventListener("click", clearDraft);
     applyBox.appendChild(cancel);
@@ -17376,6 +17686,10 @@ SW.mapWindow = (function () {
     cv.addEventListener("pointerup", onUp);
     cv.addEventListener("pointercancel", onUp);
     cv.addEventListener("pointerleave", onLeave);
+    cv.addEventListener("contextmenu", function (e) {
+      e.preventDefault();
+      if (!st.drawing) openMenu(e.offsetX, e.offsetY);
+    });
     cv.addEventListener("wheel", onWheel, { passive: false });
     cv.addEventListener("keydown", onKey);
     cv.addEventListener("dblclick", e => e.preventDefault());
@@ -17546,7 +17860,8 @@ SW.mapWindow = (function () {
     trace();
     const r = st.secRange;
     if (prev !== traceRef || !r || Math.abs(r[0] - s0) > 1e-6 || Math.abs(r[1] - s1) > 1e-6) {
-      if (prev !== traceRef && traceInfo && traceInfo.pts && !prev) fit(traceInfo.pts);
+      const ti = trace();
+      if (prev !== traceRef && ti && ti.pts && !prev) fit(ti.pts);
       st.secRange = [s0, s1];
       request();
     }
@@ -17608,6 +17923,8 @@ SW.mapWindow = (function () {
   return { packRasters: packRasters, restoreRasters: restoreRasters,
            hasRasters: () => st.rasters.length > 0, open: toggle, show: show, init: init, toW: toW, fromW: fromW,
            setSectionCursor: setSectionCursor, onSectionDraw: onSectionDraw,
+           onSectionsChanged: onSectionsChanged, hitTrace: hitTrace,
+           view: () => ({ cx: st.cx, cy: st.cy, zoom: st.zoom }),
            drawSectionOverlay: drawSectionOverlay, addRasterFiles: addRasterFiles,
            get mode() { return st.mode; } };
 })();
@@ -27168,6 +27485,7 @@ SW.view = (function () {
     if (SW.panels.restore) SW.panels.restore.render();
     if (SW.panels.versions) SW.panels.versions.render();
     if (SW.project) SW.project.updateTitle();
+    if (SW.sections) SW.sections.refresh();
     if (!keepView) zoomToExtent(); else requestDraw();
   }
 
@@ -27216,6 +27534,7 @@ SW.view = (function () {
       syncUndoButtons();
       SW.tools.activate("pan");
       if (SW.mapWindow) SW.mapWindow.init();
+      if (SW.sections) SW.sections.init();
     },
   };
 
@@ -27763,6 +28082,149 @@ SW.google = (function () {
   return { open, updateButton };
 })();
 
+/* ==== js/sections.js ====
+ * Varias secciones en un proyecto. Cada una es una sección completa (sus
+ * líneas, imágenes, traza en el mapa…); una es la ACTIVA —la que dibuja el
+ * lienzo y editan las herramientas— y las demás esperan. Al cambiar se
+ * guarda, sólo en memoria, la pila de deshacer y el encuadre de la que se
+ * deja, y se restauran los de la que se abre: cada sección vuelve como estaba
+ * en pantalla.
+ *
+ * El selector vive en la segunda barra. Desde el mapa (map_window.js) se
+ * cambia de sección con un clic sobre su traza y se les agrega una imagen
+ * vertical con el menú secundario de la traza. */
+"use strict";
+window.SW = window.SW || {};
+
+SW.sections = (function () {
+  const undoStates = new Map(), views = new Map();
+  const $ = id => document.getElementById(id);
+  let sig = "";
+
+  function list() {
+    const act = SW.model.state.sec.id;
+    return SW.model.sections().map(x => ({ id: x.id, name: x.name, sec: x, active: x.id === act }));
+  }
+
+  function refresh() {
+    const sel = $("section-select");
+    if (!sel) return;
+    const L = list();
+    const s2 = L.map(x => x.id + "|" + x.name + "|" + (x.active ? 1 : 0) + "|" + (x.sec.geo_trace ? 1 : 0)).join("\n");
+    if (s2 === sig) return;
+    sig = s2;
+    sel.innerHTML = "";
+    L.forEach(function (x, i) {
+      const o = document.createElement("option");
+      o.value = x.id;
+      o.textContent = (L.length > 1 ? (i + 1) + ". " : "") + (x.name || "Untitled section") +
+                      (x.sec.geo_trace ? "  ⌖" : "");
+      sel.appendChild(o);
+    });
+    sel.value = SW.model.state.sec.id;
+    const del = $("section-del");
+    if (del) del.disabled = L.length < 2;
+    sel.title = L.length > 1 ? "Sections in this project (⌖ = has a trace on the map)"
+                             : "This project has one section; + adds another";
+  }
+
+  function changed() {
+    sig = "";
+    refresh();
+    if (SW.mapWindow && SW.mapWindow.onSectionsChanged) SW.mapWindow.onSectionsChanged();
+  }
+
+  function reset() { undoStates.clear(); views.clear(); changed(); }
+
+  /* Cambiar de sección activa. */
+  function switchTo(id) {
+    const M = SW.model, cur = M.state.sec, V = SW.view;
+    if (cur.id === id) return true;
+    if (!M.sections().some(x => x.id === id)) return false;
+    // lo pendiente de la herramienta activa se cierra antes de soltar la sección
+    SW.tools.activate("pan");
+    undoStates.set(cur.id, SW.undo.exportState());
+    views.set(cur.id, { scale: V.state.scale, s0: V.state.s0, zTop: V.state.zTop });
+    M.activate(id);
+    SW.undo.importState(undoStates.get(id));
+    if (SW.render && SW.render.clearImageCache) SW.render.clearImageCache();
+    if (V.resetInteraction) V.resetInteraction();
+    V.setSelection([]);
+    const v = views.get(id);
+    V.syncFromDocument(!!v);
+    if (v) {
+      V.state.scale = v.scale; V.state.s0 = v.s0; V.state.zTop = v.zTop;
+      V.requestDraw();
+    }
+    if (SW.project) SW.project.touch();
+    changed();
+    V.status("Section: " + (M.state.sec.name || "Untitled section") + ".");
+    return true;
+  }
+
+  /* Sección nueva (en blanco, con las unidades de la actual). opts: {name,
+   * props, switch:false}. Como el resto de las acciones sobre el proyecto, se
+   * deshace con "Delete section", no con Ctrl+Z. */
+  function add(opts) {
+    opts = opts || {};
+    const M = SW.model;
+    const sec = M.blankSection(opts.name || M.nextSectionName());
+    sec.display_units = M.clone(M.state.sec.display_units);
+    Object.assign(sec, opts.props || {});
+    M.addSection(M.normalize({ section: sec }).section);
+    const added = M.sections().find(x => x.id === sec.id);
+    if (opts.switch !== false) switchTo(sec.id);
+    else { if (SW.project) SW.project.touch(); changed(); }
+    return added;
+  }
+
+  function remove(id) {
+    const M = SW.model;
+    if (M.sections().length < 2) return false;
+    if (M.state.sec.id === id) {
+      const L = M.sections(), i = L.findIndex(x => x.id === id);
+      switchTo((L[i + 1] || L[i - 1]).id);
+    }
+    if (!M.removeSection(id)) return false;
+    undoStates.delete(id); views.delete(id);
+    if (SW.project) SW.project.touch();
+    changed();
+    return true;
+  }
+
+  function rename(id, name) {
+    const x = SW.model.sections().find(y => y.id === id);
+    name = String(name || "").trim();
+    if (!x || !name) return false;
+    x.name = name;
+    if (SW.project) { SW.project.touch(); SW.project.updateTitle(); }
+    changed();
+    return true;
+  }
+
+  function init() {
+    const sel = $("section-select");
+    if (!sel) return;
+    sel.addEventListener("change", function () { switchTo(sel.value); });
+    $("section-add").addEventListener("click", function () {
+      add();
+      SW.view.status("New section — draw on it, or import an image to trace over.");
+    });
+    $("section-del").addEventListener("click", function () {
+      const cur = SW.model.state.sec;
+      if (SW.model.sections().length < 2) return;
+      if (!window.confirm("Delete the section \"" + (cur.name || "Untitled section") +
+                          "\" with everything in it? This cannot be undone."))
+        return;
+      remove(cur.id);
+    });
+    SW.undo.onChange(refresh);
+    refresh();
+  }
+
+  return { list, refresh, switchTo, add, remove, rename, reset, changed, init };
+})();
+
 /* ==== js/project.js ==== */
 "use strict";
 /* StructuralSketcher — ciclo de vida del proyecto: nuevo, abrir, guardar,
@@ -27922,6 +28384,7 @@ SW.project = (function () {
     SW.model.setDocument(doc);
     SW.model.syncUnitIds();
     SW.undo.clear();
+    if (SW.sections) SW.sections.reset();
     if (SW.render && SW.render.clearImageCache) SW.render.clearImageCache();
     if (SW.view) {
       SW.view.setSelection([]);
