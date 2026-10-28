@@ -157,8 +157,16 @@ split; drag the divider to resize it (double click resets). **⧉** moves the
 map to **its own window**, which can be dragged to another screen; **Dock**
 puts it back, and closing that window hides the map. The map shows:
 
-- **Basemaps**: Esri World Imagery, Topo, Street, National Geographic and
-  relief (online), with optional place names — or none, offline.
+- **Basemaps**: Esri World Imagery, Topo, Street, National Geographic,
+  Hillshade and shaded relief (online), with optional place names — or none,
+  offline.
+- **Contours** (checkbox): contour lines computed in the browser from the
+  free Terrarium DEM (AWS Open Data, ~30 m, needs internet), as in
+  FieldDraw. The steps follow the zoom — from zoom 9: 1000/2000 m, 500/1000,
+  200/1000, 100/500 (zoom 12–13), 50/250, 20/100 (zoom 15+) — thin lines
+  at the first value, thicker and labelled at the second. Tiles are
+  contoured with a one-sample margin from their neighbours, so the lines
+  join across tile edges. Nice over the Hillshade basemap.
 - **Your rasters** (**+ Raster**, **Layers**, or drop the files on the map
   or the section), read from disk — nothing is uploaded, and they are not
   saved with the project:

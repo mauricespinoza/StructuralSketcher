@@ -1245,7 +1245,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.28.1",
+  version: "0.29.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1257,6 +1257,12 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.29.0", date: "2026-10-28", highlights: [
+      "Map view: Esri Hillshade basemap (as in FieldDraw) and a Contours " +
+        "option — contour lines computed in the browser from the free " +
+        "Terrarium DEM, thin every minor step and thicker, labelled every " +
+        "major one, with steps chosen by zoom (from zoom 9).",
+    ] },
     { version: "0.28.1", date: "2026-10-28", highlights: [
       "A magenta dot on the section marks what the map is looking at: the " +
         "centre of the map view (magenta crosshair) projected onto the " +
@@ -15981,6 +15987,162 @@ SW.rasters = (function () {
   return { open, openPmtiles, openMbtiles, openGeoTiff, zxyToId, decodeImage, lzw };
 })();
 
+/* ==== js/io/contours.js ====
+ * Curvas de nivel en el cliente, como las de FieldDraw pero sin MapLibre:
+ * teselas terrarium (Terrain-RGB de AWS Open Data, ~30 m, con CORS) →
+ * rejilla de cotas → marching squares → polilíneas por cota.
+ *
+ * Una tesela se contornea con una rejilla de 257 × 257 muestras: sus 256 × 256
+ * más una fila y una columna prestadas de las teselas vecinas (derecha,
+ * abajo y diagonal). Así las curvas de dos teselas contiguas se encuentran en
+ * el borde sin costura. Las muestras están en el CENTRO de cada píxel, o sea
+ * que la muestra k queda en la coordenada k + 0.5 de la tesela.
+ *
+ * Los pasos por zoom son los de FieldDraw: curva fina cada `minor` metros y
+ * curva maestra (más gruesa y rotulada) cada `major`. */
+"use strict";
+window.SW = window.SW || {};
+
+SW.contours = (function () {
+  const TERRARIUM = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+  const N = 256;
+  const G = N + 1;
+
+  /* [fina, maestra] en metros según el zoom de pantalla */
+  function levelsFor(zoom) {
+    const z = Math.round(zoom);
+    if (z < 9) return null;
+    const T = { 9: [1000, 2000], 10: [500, 1000], 11: [200, 1000], 12: [100, 500],
+                13: [100, 500], 14: [50, 250], 15: [20, 100] };
+    return T[Math.min(15, z)] || T[15];
+  }
+
+  /* píxeles RGBA de una tesela terrarium → cotas (m) */
+  function decodeTerrarium(rgba) {
+    const out = new Float32Array(N * N);
+    for (let i = 0; i < N * N; i++)
+      out[i] = rgba[4 * i] * 256 + rgba[4 * i + 1] + rgba[4 * i + 2] / 256 - 32768;
+    return out;
+  }
+
+  /* 257 × 257 con la fila/columna prestada. t, r, b, d: cotas (Float32Array de
+   * 256²) de la propia tesela y de sus vecinas derecha, abajo y diagonal; una
+   * ausente se sustituye por el borde de la propia (la curva se corta ahí). */
+  function grid(t, r, b, d) {
+    const g = new Float32Array(G * G);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) g[y * G + x] = t[y * N + x];
+      g[y * G + N] = r ? r[y * N] : t[y * N + N - 1];
+    }
+    for (let x = 0; x < N; x++) g[N * G + x] = b ? b[x] : t[(N - 1) * N + x];
+    g[N * G + N] = d ? d[0] : (b ? b[N - 1] : (r ? r[(N - 1) * N] : t[N * N - 1]));
+    return g;
+  }
+
+  /* Marching squares con unión de segmentos en polilíneas.
+   * Devuelve [{level, major, pts: Float32Array [x, y, …] en píxeles de tesela}]. */
+  function trace(g, minor, major) {
+    const segs = new Map();                 // nivel → [ [claveA, ax, ay, claveB, bx, by], … ]
+    const add = function (lev, ka, a, kb, b) {
+      let L = segs.get(lev);
+      if (!L) segs.set(lev, L = []);
+      L.push(ka, a[0], a[1], kb, b[0], b[1]);
+    };
+    for (let j = 0; j < G - 1; j++) {
+      for (let i = 0; i < G - 1; i++) {
+        const a = g[j * G + i], b = g[j * G + i + 1];
+        const c = g[(j + 1) * G + i + 1], d = g[(j + 1) * G + i];
+        const lo = Math.min(a, b, c, d), hi = Math.max(a, b, c, d);
+        if (!(hi > lo)) continue;
+        const k0 = Math.ceil(lo / minor), k1 = Math.floor(hi / minor);
+        for (let k = k0; k <= k1; k++) {
+          const v = k * minor;
+          // un nivel exactamente en una muestra: se corre un pelo para que la
+          // clasificación sea coherente entre celdas vecinas
+          const ea = (a >= v ? 1 : 0), eb = (b >= v ? 1 : 0), ec = (c >= v ? 1 : 0), ed = (d >= v ? 1 : 0);
+          const idx = ea | (eb << 1) | (ec << 2) | (ed << 3);
+          if (idx === 0 || idx === 15) continue;
+          // puntos y claves de arista: arriba (a-b), derecha (b-c), abajo (d-c), izquierda (a-d)
+          const top = () => [[i + 0.5 + (v - a) / (b - a), j + 0.5], "h" + i + "," + j];
+          const right = () => [[i + 1.5, j + 0.5 + (v - b) / (c - b)], "v" + (i + 1) + "," + j];
+          const bottom = () => [[i + 0.5 + (v - d) / (c - d), j + 1.5], "h" + i + "," + (j + 1)];
+          const left = () => [[i + 0.5, j + 0.5 + (v - a) / (d - a)], "v" + i + "," + j];
+          const seg = function (p, q) { add(k, p[1], p[0], q[1], q[0]); };
+          switch (idx) {
+            case 1: case 14: seg(left(), top()); break;
+            case 2: case 13: seg(top(), right()); break;
+            case 3: case 12: seg(left(), right()); break;
+            case 4: case 11: seg(right(), bottom()); break;
+            case 6: case 9: seg(top(), bottom()); break;
+            case 7: case 8: seg(left(), bottom()); break;
+            case 5: case 10: {            // silla: se decide por el centro
+              const mid = (a + b + c + d) / 4 >= v;
+              if ((idx === 5) === mid) { seg(left(), bottom()); seg(top(), right()); }
+              else { seg(left(), top()); seg(right(), bottom()); }
+              break;
+            }
+          }
+        }
+      }
+    }
+    const out = [];
+    segs.forEach(function (L, k) {
+      const lev = k * minor;
+      const nSeg = L.length / 6;
+      const byKey = new Map();             // clave de arista → segmentos que la tocan
+      for (let s = 0; s < nSeg; s++)
+        for (const e of [L[6 * s], L[6 * s + 3]]) {
+          const arr = byKey.get(e);
+          if (arr) arr.push(s); else byKey.set(e, [s]);
+        }
+      const used = new Uint8Array(nSeg);
+      /* siguiente segmento libre que comparte `key`, o -1 */
+      const nextAt = function (key) {
+        const arr = byKey.get(key);
+        if (arr) for (const q of arr) if (!used[q]) return q;
+        return -1;
+      };
+      /* extremo del segmento s que NO es `key` → [clave, x, y] */
+      const far = function (s, key) {
+        const o = L[6 * s] === key ? 3 : 0;
+        return [L[6 * s + o], L[6 * s + o + 1], L[6 * s + o + 2]];
+      };
+      for (let s0 = 0; s0 < nSeg; s0++) {
+        if (used[s0]) continue;
+        used[s0] = 1;
+        const fwd = [L[6 * s0 + 1], L[6 * s0 + 2], L[6 * s0 + 4], L[6 * s0 + 5]];
+        // hacia delante desde B
+        let key = L[6 * s0 + 3], s;
+        while ((s = nextAt(key)) >= 0) {
+          used[s] = 1;
+          const f = far(s, key);
+          fwd.push(f[1], f[2]);
+          key = f[0];
+        }
+        // hacia atrás desde A
+        const back = [];
+        key = L[6 * s0];
+        while ((s = nextAt(key)) >= 0) {
+          used[s] = 1;
+          const f = far(s, key);
+          back.push(f[1], f[2]);
+          key = f[0];
+        }
+        const pts = new Float32Array(back.length + fwd.length);
+        for (let q = 0; q < back.length; q += 2) {          // en orden inverso
+          pts[back.length - 2 - q] = back[q];
+          pts[back.length - 1 - q] = back[q + 1];
+        }
+        pts.set(fwd, back.length);
+        out.push({ level: lev, major: major > 0 && Math.abs(lev % major) < 1e-6, pts: pts });
+      }
+    });
+    return out;
+  }
+
+  return { TERRARIUM, N, levelsFor, decodeTerrarium, grid, trace };
+})();
+
 /* ==== js/panels/map_window.js ====
  * Vista de mapa: mapas base gratuitos de Esri (World Imagery, Topo,
  * Street, relieve…), rasters propios (GeoTIFF, MBTiles, PMTiles — ver
@@ -16029,6 +16191,8 @@ SW.mapWindow = (function () {
       attr: "Esri, HERE, Garmin, USGS, OpenStreetMap contributors" },
     { id: "natgeo", label: "Esri National Geographic", path: "NatGeo_World_Map", max: 16,
       attr: "National Geographic, Esri, Garmin, HERE, UNEP-WCMC, USGS, NASA" },
+    { id: "hillshade", label: "Esri Hillshade", path: "Elevation/World_Hillshade", max: 16,
+      attr: "Esri, Airbus DS, USGS, NGA, NASA" },
     { id: "relief", label: "Esri Shaded Relief", path: "World_Shaded_Relief", max: 13,
       attr: "Esri, USGS, NOAA", labels: true },
     { id: "terrain", label: "Esri World Terrain", path: "World_Terrain_Base", max: 13,
@@ -16099,7 +16263,7 @@ SW.mapWindow = (function () {
     try {
       window.localStorage.setItem(VIEW_KEY, JSON.stringify({
         cx: st.cx, cy: st.cy, zoom: st.zoom, base: st.base, labels: st.labels,
-        follow: st.follow, mode: st.mode, dockH: st.dockH,
+        follow: st.follow, contours: st.contours, mode: st.mode, dockH: st.dockH,
       }));
     } catch (e) { /* nada */ }
   }
@@ -16145,6 +16309,7 @@ SW.mapWindow = (function () {
     base: BASEMAPS.find(b => b.id === saved.base) ? saved.base : "imagery",
     labels: saved.labels !== false,
     follow: saved.follow !== false,
+    contours: saved.contours === true,
     mode: "hidden",               // hidden | dock | popup
     dockH: +saved.dockH > 80 ? +saved.dockH : 0,
     drawing: false, draft: [], hover: null, cursor: null,
@@ -16312,6 +16477,121 @@ SW.mapWindow = (function () {
     return ss.map(lonLatAt);
   }
 
+  /* -- curvas de nivel (SW.contours) ----------------------------------------
+   * Teselas terrarium → cotas (cache) → curvas por tesela (cache, a lo más 2
+   * por cuadro para no trabar el arrastre) → líneas finas y maestras, estas
+   * últimas rotuladas sobre la propia curva. Se piden también las teselas
+   * vecinas derecha / abajo / diagonal: la rejilla de una tesela las necesita
+   * para que sus curvas empalmen con las de al lado. */
+  const dems = new Map();         // "z/x/y" → {ok, failed, data}
+  const cont = new Map();         // "z/x/y/minor" → [{level, major, pts}]
+  function demTile(z, x, y) {
+    const k = z + "/" + x + "/" + y;
+    let t = dems.get(k);
+    if (t) return t;
+    t = { ok: false, failed: false, data: null };
+    dems.set(k, t);
+    if (dems.size > 160) dems.delete(dems.keys().next().value);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function () {
+      try {
+        const c = document.createElement("canvas");
+        c.width = c.height = SW.contours.N;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.drawImage(img, 0, 0);
+        t.data = SW.contours.decodeTerrarium(g.getImageData(0, 0, c.width, c.height).data);
+        t.ok = true;
+      } catch (e) { t.failed = true; }
+      request();
+    };
+    img.onerror = function () { t.failed = true; request(); };
+    img.src = SW.contours.TERRARIUM.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+    return t;
+  }
+  /* curvas de la tesela (z, x, y), o null si aún faltan datos */
+  function contourTile(z, x, y, lv, budget) {
+    const k = z + "/" + x + "/" + y + "/" + lv[0];
+    const have = cont.get(k);
+    if (have) return have;
+    const n = Math.pow(2, z);
+    const part = function (xx, yy) {
+      if (yy >= n) return { ok: false, failed: true };          // más allá del polo
+      return demTile(z, ((xx % n) + n) % n, yy);
+    };
+    const t = part(x, y), r = part(x + 1, y), b = part(x, y + 1), d = part(x + 1, y + 1);
+    if (t.failed) { cont.set(k, []); return []; }
+    if (!t.ok || [r, b, d].some(q => !q.ok && !q.failed)) return null;
+    if (budget.n <= 0) { budget.more = true; return null; }
+    budget.n--;
+    const out = SW.contours.trace(SW.contours.grid(t.data, r.ok ? r.data : null,
+      b.ok ? b.data : null, d.ok ? d.data : null), lv[0], lv[1]);
+    cont.set(k, out);
+    if (cont.size > 120) cont.delete(cont.keys().next().value);
+    return out;
+  }
+  function drawContours() {
+    const lv = SW.contours.levelsFor(st.zoom);
+    if (!lv) return;
+    const tz = Math.max(9, Math.min(13, Math.round(st.zoom)));
+    const n = Math.pow(2, tz), sz = scale() / n, k = sz / SW.contours.N;
+    const a = toWorld(0, 0), b = toWorld(W, H);
+    const i0 = Math.floor(a[0] * n), i1 = Math.floor(b[0] * n);
+    const j0 = Math.max(0, Math.floor(a[1] * n)), j1 = Math.min(n - 1, Math.floor(b[1] * n));
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 80) return;
+    const budget = { n: 2, more: false };
+    const minor = [], major = [], labels = [];
+    for (let j = j0; j <= j1; j++)
+      for (let i = i0; i <= i1; i++) {
+        const lines = contourTile(tz, ((i % n) + n) % n, j, lv, budget);
+        if (!lines) continue;
+        const o = toScreen([i / n, j / n]);
+        for (const L of lines) {
+          const p = L.pts;
+          if (p.length < 4) continue;
+          const path = L.major ? major : minor;
+          path.push([o, p]);
+          if (L.major && p.length >= 20) labels.push([o, p, L.level]);
+        }
+      }
+    if (budget.more) request();
+    const stroke = function (list, color, width) {
+      if (!list.length) return;
+      ctx.beginPath();
+      for (const [o, p] of list) {
+        ctx.moveTo(o[0] + p[0] * k, o[1] + p[1] * k);
+        for (let q = 2; q < p.length; q += 2) ctx.lineTo(o[0] + p[q] * k, o[1] + p[q + 1] * k);
+      }
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+    };
+    ctx.save();
+    ctx.lineJoin = "round";
+    stroke(minor, "rgba(141,91,45,.65)", 0.8);
+    stroke(major, "rgba(122,74,30,.9)", 1.5);
+    // rótulos: uno por curva maestra larga, en su punto medio, derecho
+    ctx.font = "10px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const placed = [];
+    for (const [o, p, level] of labels) {
+      const m = (p.length / 4) | 0, mi = m * 2;
+      const x = o[0] + p[mi] * k, y = o[1] + p[mi + 1] * k;
+      if (x < 20 || y < 10 || x > W - 20 || y > H - 10) continue;
+      if (placed.some(q => Math.abs(q[0] - x) < 70 && Math.abs(q[1] - y) < 16)) continue;
+      let ang = Math.atan2((p[Math.min(p.length - 1, mi + 5)] - p[Math.max(1, mi - 3)]),
+                           (p[Math.min(p.length - 2, mi + 4)] - p[Math.max(0, mi - 4)]));
+      if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+      placed.push([x, y]);
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(ang);
+      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,.9)";
+      const txt = level + " m";
+      ctx.strokeText(txt, 0, 0);
+      ctx.fillStyle = "#5c3512"; ctx.fillText(txt, 0, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   function draw() {
     raf = 0;
     if (!cv || st.mode === "hidden") return;
@@ -16336,6 +16616,7 @@ SW.mapWindow = (function () {
       if (ras.kind === "tiles") drawTiles(ras.src, ras.opacity);
       else { drawImageRaster(ras, dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
     }
+    if (st.contours) drawContours();
     if (st.labels && bm.path) drawTiles(esriOf(LABELS, 19));
 
     const sec = SW.model.state.sec;
@@ -16859,6 +17140,14 @@ SW.mapWindow = (function () {
     lab.appendChild(lc); lab.appendChild(document.createTextNode("Places"));
     lab.title = "Place names and boundaries over the basemap";
     bar.appendChild(lab);
+    const cl = U.el("label", "map-check");
+    const cc = document.createElement("input");
+    cc.type = "checkbox"; cc.checked = st.contours;
+    cc.addEventListener("change", function () { st.contours = cc.checked; saveView(); request(); });
+    cl.appendChild(cc); cl.appendChild(document.createTextNode("Contours"));
+    cl.title = "Contour lines computed here from the free Terrarium DEM (AWS Open Data, ~30 m; needs internet): " +
+               "thin every minor step, thicker and labelled every major one, with steps chosen by zoom (from zoom 9)";
+    bar.appendChild(cl);
     const lay = U.el("button", "mini", "Layers");
     lay.title = "Your rasters: GeoTIFF, MBTiles, PMTiles — add, show/hide, opacity, order";
     lay.addEventListener("click", function () {
@@ -16920,10 +17209,12 @@ SW.mapWindow = (function () {
     attrEl = U.el("div", "map-attr");
     const setAttr = () => {
       const bm = BASEMAPS.find(b => b.id === st.base);
-      attrEl.textContent = bm.path ? "Tiles © Esri — " + bm.attr : "";
-      attrEl.style.display = bm.path ? "" : "none";
+      attrEl.textContent = (bm.path ? "Tiles © Esri — " + bm.attr : "") +
+        (st.contours ? (bm.path ? " · " : "") + "Contours: Terrarium DEM (Mapzen, USGS, SRTM, …)" : "");
+      attrEl.style.display = attrEl.textContent ? "" : "none";
     };
     setAttr();
+    cc.addEventListener("change", setAttr);
     bmSel.addEventListener("change", function () { st.base = bmSel.value; setAttr(); request(); });
     wrapEl.appendChild(attrEl);
     layersBox = U.el("div", "map-layers hidden");
