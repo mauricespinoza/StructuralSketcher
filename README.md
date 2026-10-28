@@ -168,8 +168,16 @@ puts it back, and closing that window hides the map. The map shows:
   contoured with a one-sample margin from their neighbours, so the lines
   join across tile edges. Nice over the Hillshade basemap.
 - **Your rasters** (**+ Raster**, **Layers**, or drop the files on the map
-  or the section), read from disk — nothing is uploaded, and they are not
-  saved with the project:
+  or the section), read from disk — nothing is uploaded. **They are saved
+  inside the project**: Save / Save as / Drive embed the original files
+  (the `.tif` with its `.tfw` / `.prj`, the `.mbtiles`, the `.pmtiles`) as
+  base64 in the `.sketch.json` (`map_rasters`), with each layer's
+  visibility, opacity, style and order, and opening the project brings
+  them back (the map opens if it was closed). The embedded total is capped
+  at ~200 MB — a JSON text can't hold much more — so a bigger raster is
+  not embedded: it is listed in the status bar and must be loaded again
+  after opening. The browser's autosave does not carry them (its quota is a
+  few MB); a reload brings back the drawing but not the rasters:
   - **GeoTIFF** (`.tif`, plus its `.tfw` world file and `.prj` if it has
     them): classic or BigTIFF, strips or tiles, uncompressed, LZW,
     Deflate, PackBits, JPEG or WebP, predictors 2 and 3, 8–64-bit integer
