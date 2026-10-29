@@ -8573,9 +8573,16 @@ window.SW = window.SW || {};
     const keepThickness = opts && "keepThickness" in opts
       ? opts.keepThickness : keepThicknessChecked();
 
+    // Las fallas nunca entran al grupo "espesor constante": cada una se
+    // suaviza por separado sobre su propia posición y forma.
+    const faults = lines.filter(l => l.kind === "fault");
+    const beds = keepThickness ? lines.filter(l => l.kind !== "fault") : [];
+    const indiv = !keepThickness ? lines
+      : faults.concat(beds.length === 1 ? beds : []);
+
     const redo = [], undo = [];
-    if (keepThickness && lines.length > 1) {
-      const ordered = lines.slice().sort((a, b) => meanZ(b) - meanZ(a));
+    if (beds.length > 1) {
+      const ordered = beds.slice().sort((a, b) => meanZ(b) - meanZ(a));
       const offsets = [];
       for (let i = 1; i < ordered.length; i++)
         offsets.push(avgSignedOffset(ordered[i - 1], ordered[i]));
@@ -8591,13 +8598,12 @@ window.SW = window.SW || {};
                     vertices: ordered[i].vertices });
         prevOut = out;
       }
-    } else {
-      for (const line of lines) {
-        const out = SW.geom.chaikin(line.vertices, it);
-        redo.push({ op: "replace_vertices", id: line.id, vertices: out });
-        undo.push({ op: "replace_vertices", id: line.id,
-                    vertices: line.vertices });
-      }
+    }
+    for (const line of indiv) {
+      const out = SW.geom.chaikin(line.vertices, it);
+      redo.push({ op: "replace_vertices", id: line.id, vertices: out });
+      undo.push({ op: "replace_vertices", id: line.id,
+                  vertices: line.vertices });
     }
     SW.undo.push({
       label: redo.length > 1 ? "Smooth " + redo.length + " lines"
@@ -8605,8 +8611,9 @@ window.SW = window.SW || {};
       redo: redo, undo: undo,
     });
     SW.view.status("Smoothed " + redo.length + " line(s)" +
-                   (keepThickness && lines.length > 1
-                     ? " (bed thickness kept constant)." : "."));
+                   (beds.length > 1
+                     ? " (bed thickness kept constant; faults smoothed individually)."
+                     : "."));
     SW.view.requestDraw();
   };
 
@@ -25499,6 +25506,13 @@ SW.panels.properties = (function () {
     body.appendChild(btns);
   }
 
+  const FAULT_SENSE_LABELS = { none: "— no symbol —",
+                               reverse: "Reverse (hangingwall up)",
+                               normal: "Normal (hangingwall down)",
+                               inverted: "Inverted / reactivated",
+                               dextral: "Dextral strike-slip",
+                               sinistral: "Sinistral strike-slip" };
+
   /* -- varias líneas ---------------------------------------------------------- */
   function renderMultiLine(body, lines) {
     const info = document.createElement("div");
@@ -25550,6 +25564,43 @@ SW.panels.properties = (function () {
     rowEl(body, "Type (all)", kindSel,
           "Assign every selected line to Fault, Horizon, Contact, " +
           "Topography, Axial trace or Sketch");
+
+    // Fault sense colectivo: sólo actúa sobre las fallas no bloqueadas de la
+    // selección (cada una conserva su propio resto de fault_style).
+    const faults = lines.filter(l => l.kind === "fault" && !l.locked);
+    if (faults.length) {
+      const senses = Array.from(new Set(faults.map(
+        l => (l.fault_style || {}).sense || "none")));
+      const senseSel = document.createElement("select");
+      if (senses.length > 1) {
+        const mixed = document.createElement("option");
+        mixed.value = ""; mixed.textContent = "— mixed —";
+        senseSel.appendChild(mixed);
+      }
+      for (const k of Object.keys(FAULT_SENSE_LABELS)) {
+        const o = document.createElement("option");
+        o.value = k; o.textContent = FAULT_SENSE_LABELS[k];
+        senseSel.appendChild(o);
+      }
+      senseSel.value = senses.length === 1 ? senses[0] : "";
+      senseSel.addEventListener("change", function () {
+        if (!senseSel.value) return;
+        const redo = [], undo = [];
+        for (const l of faults) {
+          redo.push({ op: "set_line_props", id: l.id,
+                      props: { fault_style: { sense: senseSel.value } } });
+          undo.push({ op: "set_line_props", id: l.id,
+                      props: { fault_style: {
+                        sense: (l.fault_style || {}).sense || "none" } } });
+        }
+        SW.undo.push({ label: "Fault sense (" + faults.length + ")",
+                       redo: redo, undo: undo });
+        render();
+        SW.view.requestDraw();
+      });
+      rowEl(body, "Fault sense (all)", senseSel,
+            "Set the sense of every selected fault at once");
+    }
 
     const width = document.createElement("input");
     width.type = "number"; width.min = "0.4"; width.step = "0.2";
@@ -25623,15 +25674,9 @@ SW.panels.properties = (function () {
       // etiquetas explícitas sobre el movimiento RELATIVO: en perfil el
       // símbolo es una media flecha en el bloque colgante, no el símbolo de
       // planta (bola-y-palito / dientes).
-      const senseLabels = { none: "— no symbol —",
-                            reverse: "Reverse (hangingwall up)",
-                            normal: "Normal (hangingwall down)",
-                            inverted: "Inverted / reactivated",
-                            dextral: "Dextral strike-slip",
-                            sinistral: "Sinistral strike-slip" };
+      const senseLabels = FAULT_SENSE_LABELS;
       const sense = document.createElement("select");
-      for (const k of ["none", "reverse", "normal", "inverted",
-                       "dextral", "sinistral"]) {
+      for (const k of Object.keys(senseLabels)) {
         const o = document.createElement("option");
         o.value = k; o.textContent = senseLabels[k];
         if (fs.sense === k) o.selected = true;
