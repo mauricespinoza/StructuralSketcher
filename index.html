@@ -843,7 +843,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
        uso puntual, fuera del riel de dibujo/edición. -->
   <div class="bgroup utility" aria-label="Measure &amp; build">
     <button data-tool="measure" title="Ruler — real length (M)"><svg class="ic"><use href="#i-ruler"/></svg>Ruler</button>
-    <button data-tool="fault_throw" title="Fault throw (F)"><svg class="ic"><use href="#i-throw"/></svg>Throw</button>
+    <button data-tool="fault_throw" title="Fault throw (H)"><svg class="ic"><use href="#i-throw"/></svg>Throw</button>
     <button data-tool="calibrate" title="Calibrate scale — calibrate H and V separately (G)"><svg class="ic"><use href="#i-scale"/></svg>Calibrate</button>
     <button data-tool="image" title="Move / resize imported images (I)"><svg class="ic"><use href="#i-image"/></svg>Image</button>
     <button id="layer-cake-btn" title="Create a stack of parallel beds (layer cake)"><svg class="ic"><use href="#i-layers"/></svg>Create beds</button>
@@ -856,7 +856,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="seg seg-3">
         <button data-tool="pan" title="Pan (P)"><svg class="ic"><use href="#i-pan"/></svg></button>
         <button data-tool="select" title="Select — Ctrl+click adds (V)"><svg class="ic"><use href="#i-select"/></svg></button>
-        <button data-tool="lasso" title="Lasso — Shift = rectangle (L)"><svg class="ic"><use href="#i-lasso"/></svg></button>
+        <button data-tool="lasso" title="Lasso — Shift = rectangle (S)"><svg class="ic"><use href="#i-lasso"/></svg></button>
       </div>
       <select id="select-filter" title="Selection filter">
         <option value="all" selected>Select: all</option>
@@ -870,8 +870,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="rail-title" data-group>Add</div>
       <div class="rail-group-body">
         <input type="hidden" id="line-kind" value="horizon">
-        <button class="add-btn add-layer" data-tool="digitize" data-kind="horizon" title="Add layer (D)"><svg class="ic"><use href="#i-add-layer"/></svg>Layer</button>
-        <button class="add-btn add-fault" data-tool="digitize" data-kind="fault" title="Add fault"><svg class="ic"><use href="#i-add-fault"/></svg>Fault</button>
+        <button class="add-btn add-layer" data-tool="digitize" data-kind="horizon" title="Add layer (L)"><svg class="ic"><use href="#i-add-layer"/></svg>Layer</button>
+        <button class="add-btn add-fault" data-tool="digitize" data-kind="fault" title="Add fault (F)"><svg class="ic"><use href="#i-add-fault"/></svg>Fault</button>
         <button class="add-btn add-topo" data-tool="digitize" data-kind="topography" title="Add topography"><svg class="ic"><use href="#i-add-topo"/></svg>Topography</button>
         <label class="rail-field" id="fault-sense-field" title="Symbol for new faults">Fault sense
           <select id="fault-sense">
@@ -1561,7 +1561,9 @@ SW.settings = (function () {
       deleteSelection: "Delete",
       "tool:pan": "p",
       "tool:select": "v",
-      "tool:lasso": "l",
+      "tool:lasso": "s",
+      addLayer: "l",
+      addFault: "f",
       "tool:digitize": "d",
       "tool:vertex": "x",
       "tool:drag": "j",
@@ -1571,7 +1573,7 @@ SW.settings = (function () {
       "tool:extend": "e",
       "tool:kink": "k",
       "tool:measure": "m",
-      "tool:fault_throw": "f",
+      "tool:fault_throw": "h",
       "tool:dip": "a",
       "tool:calibrate": "g",
     },
@@ -1589,6 +1591,8 @@ SW.settings = (function () {
     "tool:pan": "Tool: Pan",
     "tool:select": "Tool: Select",
     "tool:lasso": "Tool: Lasso",
+    addLayer: "Add layer",
+    addFault: "Add fault",
     "tool:digitize": "Tool: Add line (current type)",
     "tool:vertex": "Tool: Vertices",
     "tool:drag": "Tool: Drag",
@@ -27415,6 +27419,16 @@ SW.view = (function () {
       return true;
     }
     switch (action) {
+      case "addLayer":
+      case "addFault": {
+        // equivale a pulsar el botón Layer / Fault del riel
+        const btn = document.querySelector(
+          'button[data-tool="digitize"][data-kind="' +
+          (action === "addLayer" ? "horizon" : "fault") + '"]');
+        if (!btn) return false;
+        btn.click();
+        return true;
+      }
       case "undo": SW.undo.undo(); requestDraw(); return true;
       case "redo": SW.undo.redo(); requestDraw(); return true;
       case "duplicate": SW.actions.duplicateSelected(); return true;
