@@ -496,6 +496,30 @@ end labels, the others in their own colour with their name):
 
 Rasters on the map belong to the project, not to a section.
 
+**Renaming a section**: the pencil (✎) next to the selector, a double click on
+the section name at the top, or *Rename…* in the trace's menu all open a small
+box with the name selected — type, Enter accepts, Esc cancels.
+
+### Pictures of sections (image formats)
+
+The Image button, drag and drop on the section, Google Drive and the trace's
+*Add vertical image…* all go through the same importer, which recognises the
+format from the file's first bytes (so a PNG named `.jpg`, a `.JPEG`, or a
+TIFF with no extension still load):
+
+- **PNG, JPG, GIF, WebP, BMP, SVG** (and AVIF/HEIC where the browser decodes
+  them) — decoded by the browser and checked before accepting.
+- **TIFF** — no browser shows it, so it is decoded here: RGB, gray, palette
+  and bilevel (1/2/4 bits), CMYK, 16-bit, with alpha; classic or BigTIFF, either
+  byte order, strips or tiles; uncompressed, LZW, Deflate, PackBits, JPEG and
+  **CCITT fax** (Huffman, Group 3, Group 4 — what a black-and-white scanner
+  writes). It is stored in the project as PNG (JPEG for very large opaque
+  ones), at most 5000 px on the longest side.
+- A **TIFF dropped on the section** goes to the map if it is georeferenced (GeoTIFF
+  tags or a `.tfw` alongside); otherwise it is the section's picture.
+- A file that can't be read is reported in a dialog, with the reason (e.g.
+  *damaged CCITT data*, *CMYK JPEG*), not just in the status bar.
+
 ## Profile traces from the map
 
 In the map view (see *Map view* above), **Draw trace** + **Use as section

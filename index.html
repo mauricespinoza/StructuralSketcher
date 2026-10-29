@@ -819,6 +819,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 <div class="bar2">
   <div class="bgroup" id="sections-group">
     <select id="section-select" class="section-select" title="Sections in this project"></select>
+    <button id="section-rename" class="icon-only" title="Rename this section (or double-click its name at the top)">&#9998;</button>
     <button id="section-add" class="icon-only" title="New section">+</button>
     <button id="section-del" class="icon-only" title="Delete this section" disabled>&#10005;</button>
   </div>
@@ -1262,7 +1263,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.31.0",
+  version: "0.32.0",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1274,6 +1275,23 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.32.0", date: "2026-10-29", highlights: [
+      "Importing a picture of a section is now robust: PNG, JPG, GIF, " +
+        "WebP, BMP, SVG and TIFF all work, from the Image button, drag and " +
+        "drop, Google Drive or the trace's right-click menu. The format is " +
+        "recognised from the file's own bytes (not its name), so a mislabelled " +
+        "or extension-less file still loads. TIFF — which browsers can't " +
+        "show — is decoded here: RGB, gray, palette, bilevel, CMYK, 16-bit, " +
+        "alpha; uncompressed, LZW, Deflate, PackBits, JPEG and CCITT fax " +
+        "(G3/G4, the scanner format). A file that can't be read now shows a " +
+        "dialog with the reason.",
+      "Dropping a TIFF on the section: with georeferencing (or a .tfw) it " +
+        "goes to the map as a raster; without it, it is the section's picture.",
+      "Renaming a section is one step away: the pencil next to the selector, " +
+        "a double click on the name at the top, or Rename… in the trace's " +
+        "menu — a small box with the name selected; Enter accepts, Esc " +
+        "cancels.",
+    ] },
     { version: "0.31.0", date: "2026-10-28", highlights: [
       "A project can now hold several sections. Selector (+ / ✕) in the " +
         "second bar; each section keeps its own drawing, images, trace, " +
@@ -10989,40 +11007,47 @@ window.SW = window.SW || {};
    * desde la traza en el mapa): se estira al largo de la sección, con su
    * proporción, colgando de su cota máxima; el usuario la encaja después con
    * las herramientas de imagen. */
+  const IMG_ACCEPT = "image/*,.tif,.tiff,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg";
+  SW.actions.IMG_ACCEPT = IMG_ACCEPT;
+  const IS_PICTURE = /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|tiff?)$/i;
+
+  /* Lo que se ve cuando una imagen no entra: una ventana (la barra de estado
+   * se pierde de vista) con la razón y los formatos que sí sirven. */
+  function importFailed(f, err) {
+    const msg = err && err.message ? err.message : String(err);
+    SW.view.status("Could not import " + f.name + ": " + msg + ".");
+    SW.ui.modal({
+      title: "Couldn't import the image",
+      build: function (body) {
+        SW.ui.note(body, f.name + " — " + msg + ".");
+        SW.ui.note(body, "Supported: PNG, JPG, GIF, WebP, BMP, SVG and TIFF " +
+          "(RGB, gray, palette or bilevel; uncompressed, LZW, Deflate, PackBits, " +
+          "CCITT fax or JPEG; GeoTIFF too).");
+      },
+      buttons: [{ label: "Close", primary: true }],
+    });
+  }
+
   SW.actions.importImageFile = function (f, opts) {
     if (!f) return;
-    if (f.size > MAX_BYTES) {
-      // El archivo se embebe en el proyecto; pasado cierto tamaño el
-      // autoguardado del navegador deja de aceptarlo y el .json se vuelve
-      // incómodo de mover. Se avisa antes, no después.
-      if (!window.confirm(
-            "That image is " + (f.size / 1048576).toFixed(1) + " MB. It " +
-            "gets embedded in the project, so autosave will stop working " +
-            "and the saved file will be large. Import it anyway?"))
+    SW.view.status("Reading " + f.name + "…");
+    SW.rasters.loadPicture(f).then(function (pic) {
+      // el data: URL se embebe en el proyecto: se avisa antes de pasarse
+      const bytes = pic.url.length * 0.75;
+      if (bytes > MAX_BYTES && !window.confirm(
+            "That image is " + (bytes / 1048576).toFixed(1) + " MB once embedded. " +
+            "It goes inside the project, so autosave will stop working and the " +
+            "saved file will be large. Import it anyway?"))
         return;
-    }
-    const reader = new FileReader();
-    reader.onload = function () {
-      const url = String(reader.result);
-      const probe = new Image();
-      probe.onload = function () {
-        placeImage(f.name, url, probe.naturalWidth, probe.naturalHeight, opts);
-      };
-      probe.onerror = function () {
-        SW.view.status("Could not decode that image file.");
-      };
-      probe.src = url;
-    };
-    reader.onerror = function () {
-      SW.view.status("Could not read that image file.");
-    };
-    reader.readAsDataURL(f);
+      placeImage(f.name, pic.url, pic.w, pic.h, opts);
+      if (pic.note) SW.view.status(pic.note + ".");
+    }).catch(function (err) { importFailed(f, err); });
   };
 
   SW.actions.importImage = function () {
     const inp = document.createElement("input");
     inp.type = "file";
-    inp.accept = "image/*";
+    inp.accept = IMG_ACCEPT;
     inp.addEventListener("change", function () {
       SW.actions.importImageFile(inp.files && inp.files[0]);
     });
@@ -11038,20 +11063,24 @@ window.SW = window.SW || {};
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
     });
-    el.addEventListener("drop", function (e) {
-      const files = e.dataTransfer && e.dataTransfer.files;
-      if (!files || !files.length) return;
+    el.addEventListener("drop", async function (e) {
+      const files = e.dataTransfer ? [...e.dataTransfer.files] : [];
+      if (!files.length) return;
       e.preventDefault();
-      // rasters georreferenciados y teselas: a la vista de mapa (el
-      // navegador no sabe mostrar un TIFF como imagen de la sección)
-      if ([...files].some(f => /\.(tiff?|mbtiles|pmtiles)$/i.test(f.name)) && SW.actions.addMapRasters) {
-        SW.actions.addMapRasters(files);
+      // un TIFF georreferenciado (o con .tfw), un MBTiles o un PMTiles son del
+      // mapa; un TIFF sin georreferencia es la figura de una sección
+      const tifs = files.filter(f => /\.tiff?$/i.test(f.name));
+      const plain = [];
+      for (const t of tifs) if (!(await SW.rasters.isGeoTiff(t, files))) plain.push(t);
+      const forMap = files.filter(f => !plain.includes(f));
+      if (forMap.some(f => /\.(tiff?|mbtiles|pmtiles)$/i.test(f.name)) && SW.actions.addMapRasters) {
+        SW.actions.addMapRasters(forMap);
         return;
       }
-      const img = [...files].find(f => /^image\//.test(f.type));
+      const img = files.find(f => /^image\//.test(f.type) || IS_PICTURE.test(f.name));
       if (img) SW.actions.importImageFile(img);
       else if (SW.actions.importDataFiles && SW.actions.importDataFiles(files)) return;
-      else SW.view.status("Drop an image to trace over, a shapefile " +
+      else SW.view.status("Drop an image to trace over (PNG, JPG, TIFF…), a shapefile " +
                           "(.shp + .dbf/.prj, optional .lyr), a SEG-Y, or a GeoTIFF / " +
                           "MBTiles / PMTiles for the map.");
     });
@@ -15628,6 +15657,166 @@ SW.rasters = (function () {
     return { le: le, ifds: ifds };
   }
 
+  /* CCITT Grupo 3 / Grupo 4 / Huffman modificado (TIFF compresión 3, 4 y 2).
+ * Tablas de códigos de ITU-T T.4 (terminantes 0–63 y de relleno 64–2560). */
+const CCITT_W = "0:00110101,1:000111,2:0111,3:1000,4:1011,5:1100,6:1110,7:1111,8:10011,9:10100,10:00111,11:01000,12:001000,13:000011,14:110100,15:110101,16:101010,17:101011,18:0100111,19:0001100,20:0001000,21:0010111,22:0000011,23:0000100,24:0101000,25:0101011,26:0010011,27:0100100,28:0011000,29:00000010,30:00000011,31:00011010,32:00011011,33:00010010,34:00010011,35:00010100,36:00010101,37:00010110,38:00010111,39:00101000,40:00101001,41:00101010,42:00101011,43:00101100,44:00101101,45:00000100,46:00000101,47:00001010,48:00001011,49:01010010,50:01010011,51:01010100,52:01010101,53:00100100,54:00100101,55:01011000,56:01011001,57:01011010,58:01011011,59:01001010,60:01001011,61:00110010,62:00110011,63:00110100,64:11011,128:10010,192:010111,256:0110111,320:00110110,384:00110111,448:01100100,512:01100101,576:01101000,640:01100111,704:011001100,768:011001101,832:011010010,896:011010011,960:011010100,1024:011010101,1088:011010110,1152:011010111,1216:011011000,1280:011011001,1344:011011010,1408:011011011,1472:010011000,1536:010011001,1600:010011010,1664:011000,1728:010011011,1792:00000001000,1856:00000001100,1920:00000001101,1984:000000010010,2048:000000010011,2112:000000010100,2176:000000010101,2240:000000010110,2304:000000010111,2368:000000011100,2432:000000011101,2496:000000011110,2560:000000011111";
+const CCITT_B = "0:0000110111,1:010,2:11,3:10,4:011,5:0011,6:0010,7:00011,8:000101,9:000100,10:0000100,11:0000101,12:0000111,13:00000100,14:00000111,15:000011000,16:0000010111,17:0000011000,18:0000001000,19:00001100111,20:00001101000,21:00001101100,22:00000110111,23:00000101000,24:00000010111,25:00000011000,26:000011001010,27:000011001011,28:000011001100,29:000011001101,30:000001101000,31:000001101001,32:000001101010,33:000001101011,34:000011010010,35:000011010011,36:000011010100,37:000011010101,38:000011010110,39:000011010111,40:000001101100,41:000001101101,42:000011011010,43:000011011011,44:000001010100,45:000001010101,46:000001010110,47:000001010111,48:000001100100,49:000001100101,50:000001010010,51:000001010011,52:000000100100,53:000000110111,54:000000111000,55:000000100111,56:000000101000,57:000001011000,58:000001011001,59:000000101011,60:000000101100,61:000001011010,62:000001100110,63:000001100111,64:0000001111,128:000011001000,192:000011001001,256:000001011011,320:000000110011,384:000000110100,448:000000110101,512:0000001101100,576:0000001101101,640:0000001001010,704:0000001001011,768:0000001001100,832:0000001001101,896:0000001110010,960:0000001110011,1024:0000001110100,1088:0000001110101,1152:0000001110110,1216:0000001110111,1280:0000001010010,1344:0000001010011,1408:0000001010100,1472:0000001010101,1536:0000001011010,1600:0000001011011,1664:0000001100100,1728:0000001100101,1792:00000001000,1856:00000001100,1920:00000001101,1984:000000010010,2048:000000010011,2112:000000010100,2176:000000010101,2240:000000010110,2304:000000010111,2368:000000011100,2432:000000011101,2496:000000011110,2560:000000011111";
+const CCITT = (function () {
+  const mk = function (txt) {
+    const byLen = [];
+    for (const e of txt.split(",")) {
+      const i = e.indexOf(":"), run = +e.slice(0, i), bits = e.slice(i + 1);
+      (byLen[bits.length] || (byLen[bits.length] = new Map())).set(parseInt(bits, 2), run);
+    }
+    return byLen;
+  };
+  const MODES = { "1": "V0", "011": "VR1", "010": "VL1", "001": "H", "0001": "P",
+                  "000011": "VR2", "000010": "VL2", "0000011": "VR3", "0000010": "VL3" };
+  const modeBy = [];
+  for (const k of Object.keys(MODES))
+    (modeBy[k.length] || (modeBy[k.length] = new Map())).set(parseInt(k, 2), MODES[k]);
+  return { white: mk(CCITT_W), black: mk(CCITT_B), modes: modeBy };
+})();
+
+/* Decodifica un flujo CCITT a filas empaquetadas de 1 bit (bit 1 = negro si
+ * !whiteIs1, bit 1 = blanco si whiteIs1). o: {k: <0 G4, 0 G3 1D, >0 G3 2D (T4Options bit 0),
+ * rowAlign (G3 con relleno / Huffman modificado: cada fila empieza en byte)}.
+ * Lanza Error si el flujo está dañado; si se acaba antes de `rows` filas, el resto queda blanco. */
+function ccittDecode(src, width, rows, o) {
+  const rowBytes = (width + 7) >> 3;
+  const out = new Uint8Array(rowBytes * rows);
+  let pos = 0;
+  const nbits = src.length * 8;
+  const bit = function () {
+    if (pos >= nbits) throw new Error("eof");
+    const b = (src[pos >> 3] >> (7 - (pos & 7))) & 1;
+    pos++;
+    return b;
+  };
+  const run = function (table) {
+    let total = 0;
+    for (;;) {
+      let code = 0, len = 0, v;
+      for (;;) {
+        code = (code << 1) | bit(); len++;
+        const m = table[len];
+        if (m && (v = m.get(code)) !== undefined) break;
+        if (len > 13) throw new Error("bad CCITT code");
+      }
+      total += v;
+      if (v < 64) return total;
+    }
+  };
+  const mode = function () {
+    let code = 0, len = 0;
+    for (;;) {
+      code = (code << 1) | bit(); len++;
+      const m = CCITT.modes[len], v = m && m.get(code);
+      if (v) return v;
+      if (len > 7) {
+        // 0000001xxx = extensión (sin soporte); 000000000001 = EOL / EOFB
+        if (code === 0 && len >= 7) {
+          // más ceros: puede ser EOL → se consume hasta el 1 y se avisa
+          let n = len;
+          while (n < 12) { if (bit()) break; n++; }
+          return "EOL";
+        }
+        throw new Error("unsupported CCITT mode");
+      }
+    }
+  };
+  const skipEol = function () {   // ceros de relleno + 000000000001, si están
+    const save = pos;
+    let z = 0;
+    while (pos < nbits) {
+      const b = bit();
+      if (b) { if (z >= 11) return true; break; }
+      z++;
+    }
+    pos = save;
+    return false;
+  };
+  let ref = [width, width];       // línea de referencia: posiciones de los cambios (blanco→negro, negro→blanco, …)
+  const oneD = function () {
+    const cur = [];
+    let x = 0, color = 0;
+    while (x < width) {
+      const r = run(color ? CCITT.black : CCITT.white);
+      x += r;
+      if (x > width) x = width;
+      cur.push(x);
+      color ^= 1;
+    }
+    return cur;
+  };
+  const twoD = function () {
+    const cur = [];
+    let a0 = -1, color = 0;
+    const b1of = function () {
+      let i = color;                    // cambio hacia el color opuesto: índice par si el actual es blanco
+      while (i < ref.length && ref[i] <= a0 && ref[i] < width) i += 2;
+      return i;
+    };
+    while (a0 < width) {
+      const m = mode();
+      if (m === "EOL") return null;
+      let i = b1of();
+      const b1 = i < ref.length ? ref[i] : width;
+      if (m === "P") {
+        const b2 = i + 1 < ref.length ? ref[i + 1] : width;
+        a0 = b2;
+      } else if (m === "H") {
+        const r1 = run(color ? CCITT.black : CCITT.white), r2 = run(color ? CCITT.white : CCITT.black);
+        const s = a0 < 0 ? 0 : a0;
+        const x1 = Math.min(width, s + r1), x2 = Math.min(width, x1 + r2);
+        cur.push(x1, x2);
+        a0 = x2;
+      } else {
+        const d = m === "V0" ? 0 : m === "VR1" ? 1 : m === "VL1" ? -1 : m === "VR2" ? 2 : m === "VL2" ? -2 : m === "VR3" ? 3 : -3;
+        const a1 = Math.max(0, Math.min(width, b1 + d));
+        cur.push(a1);
+        a0 = a1; color ^= 1;
+        if (a0 >= width) break;
+      }
+      if (a0 >= width) break;
+    }
+    return cur;
+  };
+  const paint = function (y, cur) {
+    // cambios → bits: blanco hasta cur[0], negro hasta cur[1], …
+    let x = 0, black = 0;
+    for (const c of cur) {
+      if (black) for (let k = x; k < c; k++) out[y * rowBytes + (k >> 3)] |= 0x80 >> (k & 7);
+      x = c; black ^= 1;
+    }
+    if (black) for (let k = x; k < width; k++) out[y * rowBytes + (k >> 3)] |= 0x80 >> (k & 7);
+  };
+  try {
+    for (let y = 0; y < rows; y++) {
+      let cur;
+      if (o.k < 0) {                                  // Grupo 4
+        cur = twoD();
+        if (cur === null) break;                      // EOFB
+      } else {
+        if (o.rowAlign) pos = (pos + 7) & ~7;
+        skipEol();
+        if (o.k > 0) {
+          const tag = bit();                           // 1 = fila de 1 dimensión
+          cur = tag ? oneD() : twoD();
+          if (cur === null) break;
+        } else cur = oneD();
+      }
+      // dedupe: pares de cambios iguales no cambian nada, pero ref debe quedar normalizado
+      ref = cur.concat([width, width]);
+      paint(y, cur);
+    }
+  } catch (e) {
+    if (e.message !== "eof") throw e;
+  }
+  if (o.whiteIs1) for (let i = 0; i < out.length; i++) out[i] ^= 0xff;
+  return out;
+}
+
   function lzw(src, expected) {
     const prefix = new Int16Array(4096), suffix = new Uint8Array(4096),
           first = new Uint8Array(4096), len = new Uint16Array(4096);
@@ -15795,12 +15984,32 @@ SW.rasters = (function () {
       if (img.close) img.close();
       return { rgba: g.getImageData(0, 0, w, h).data, w: w };
     }
-    const expected = ctx.cw * ctx.chRows(idx) * ctx.sppC * ctx.bps / 8;
+    const rowBytes = Math.ceil(ctx.cw * ctx.sppC * ctx.bps / 8);
+    const expected = ctx.chRows(idx) * rowBytes;
     if (comp === 5) raw = lzw(raw, expected);
     else if (comp === 8 || comp === 32946) raw = await inflate(raw, "deflate");
     else if (comp === 32773) raw = packbits(raw, expected);
+    else if (comp === 2 || comp === 3 || comp === 4) {
+      // fax en blanco y negro (escáneres): Huffman modificado, Grupo 3 y Grupo 4
+      const t4 = t[292] ? t[292][0] : 0;
+      let fx = raw;
+      if (t[266] && t[266][0] === 2) fx = raw.map(v => { let r = 0; for (let k = 0; k < 8; k++) r |= ((v >> k) & 1) << (7 - k); return r; });
+      try {
+        raw = ccittDecode(fx, ctx.cw, ctx.chRows(idx),
+          { k: comp === 4 ? -1 : (t4 & 1 ? 1 : 0), rowAlign: comp === 2 || !!(t4 & 4) });
+      } catch (e) { throw new Error("the CCITT fax data is damaged (" + e.message + ")"); }
+    }
     else if (comp !== 1)
-      throw new Error("TIFF compression " + comp + " is not supported (none, LZW, Deflate, PackBits, JPEG, WebP)");
+      throw new Error("TIFF compression " + comp + " is not supported (none, LZW, Deflate, PackBits, CCITT fax, JPEG, WebP)");
+    if (ctx.bps < 8) {
+      // 1, 2 ó 4 bits: filas empaquetadas y rellenadas al byte → un valor por muestra
+      const per = 8 / ctx.bps, mask = (1 << ctx.bps) - 1, n = ctx.cw * ctx.sppC;
+      const rows = Math.floor(raw.length / rowBytes), outB = new Uint8Array(rows * n);
+      for (let r = 0; r < rows; r++)
+        for (let i = 0; i < n; i++)
+          outB[r * n + i] = (raw[r * rowBytes + ((i / per) | 0)] >> (8 - ctx.bps * ((i % per) + 1))) & mask;
+      return outB;
+    }
     if (ctx.pred === 3) {
       raw = unpredictFloat(raw.slice(), ctx.cw, ctx.sppC, ctx.bps);
       return typed(raw, ctx.bps, ctx.fmt, false);
@@ -15835,7 +16044,7 @@ SW.rasters = (function () {
       chRows: idx => tiled ? chH : Math.min(chH, Hh - (idx % perPlane) * chH),
     };
     if (!ctx.offsets) throw new Error("the TIFF has no image data offsets");
-    if (bps !== 8 && bps !== 16 && bps !== 32 && bps !== 64)
+    if (bps !== 1 && bps !== 2 && bps !== 4 && bps !== 8 && bps !== 16 && bps !== 32 && bps !== 64)
       throw new Error(bps + "-bit TIFF samples are not supported");
     const nb = mode.bands;
     const out = mode.u8 ? new Uint8ClampedArray(ow * oh * 4) : new Float32Array(ow * oh * nb).fill(NaN);
@@ -15971,48 +16180,14 @@ SW.rasters = (function () {
 
   /* files: el .tif y, opcionalmente, su .tfw y su .prj. askCrs(defaultText)
    * → Promise<texto de CRS> cuando el archivo no declara uno. */
-  async function openGeoTiff(files, askCrs, progress) {
-    const tif = files.find(f => /\.tiff?$/i.test(f.name)) || files[0];
-    const stem = tif.name.replace(/\.[^.]+$/, "").toLowerCase();
-    const side = ext => files.find(f => f !== tif && f.name.toLowerCase().replace(/\.[^.]+$/, "") === stem &&
-                                       ext.test(f.name));
-    const read = reader(tif);
-    const T = await tiffIfds(read, tif.size);
-    const main = T.ifds[0];
-    if (!main[256] || !main[257]) throw new Error("the TIFF has no image size");
-    const W = main[256][0], Hh = main[257][0];
-    const keys = geoKeys(main);
-
-    // georreferencia: píxel (col, fila) → (x, y) del CRS
-    let M = null;
-    const tfw = side(/\.(tfw|tifw|tiffw|wld)$/i);
-    if (tfw) M = worldFile(await tfw.text());
-    if (!M && main[34264] && main[34264].length >= 8) {
-      const m = main[34264];
-      M = { a: m[0], b: m[1], c: m[3], d: m[4], e: m[5], f: m[7] };
-    }
-    if (!M && main[33922] && main[33550]) {
-      const tp = main[33922], sc = main[33550];
-      M = { a: sc[0], b: 0, c: tp[3] - tp[0] * sc[0], d: 0, e: -sc[1], f: tp[4] + tp[1] * sc[1] };
-    }
-    if (!M) throw new Error("no georeferencing (GeoTIFF tags or a .tfw world file)");
-    if (keys[1025] === 2 && !tfw) {     // PixelIsPoint: el tiepoint es el centro del píxel
-      M.c -= (M.a + M.b) / 2; M.f -= (M.d + M.e) / 2;
-    }
-
-    let crsText = crsFromKeys(keys);
-    const prj = side(/\.prj$/i);
-    if (prj) crsText = (await prj.text()).trim() || crsText;
-    let crs = SW.shp.parsePrj(crsText);
-    if (!SW.shp.toLonLat(crs)) {
-      crsText = await askCrs(crsText, crs);
-      if (!crsText) throw new Error("cancelled");
-      crs = SW.shp.parsePrj(crsText);
-      if (!SW.shp.toLonLat(crs)) throw new Error("can't place that coordinate system on the map (" +
-        SW.shp.crsLabel(crs) + ")");
-    }
-
+  /* Decodifica la imagen de un TIFF (el IFD principal o el overview más chico
+   * que alcance) a un canvas de a lo más `maxPx` por lado. Sirve tanto a un
+   * GeoTIFF (con `geo`: {M, crs}, para escalar un DEM) como a una imagen
+   * cualquiera (sin `geo`: la figura de una sección). o: {progress, geo, maxPx}. */
+  async function renderTiff(read, T, main, o) {
     // qué IFD leer: el overview más chico que no baje de la resolución pedida
+    const W = main[256][0], Hh = main[257][0];
+    const geo = o.geo;
     const spp = main[277] ? main[277][0] : 1;
     const bps = main[258] ? main[258][0] : 1;
     const fmt = main[339] ? main[339][0] : 1;
@@ -16021,9 +16196,9 @@ SW.rasters = (function () {
     const comp = main[259] ? main[259][0] : 1;
     const jpegLike = comp === 7 || comp === 50001;
     const single = (spp === 1 || (spp === 2 && phot <= 1)) && !cmap && !jpegLike;
-    const u8 = bps === 8 && !(single && fmt === 3);
+    const u8 = bps <= 8 && !(single && fmt === 3);
     const isBand = single && !u8;
-    const MAX = isBand ? 3072 : (u8 ? 4096 : 2048);
+    const MAX = o.maxPx || (isBand ? 3072 : (u8 ? 4096 : 2048));
     const f = Math.min(1, MAX / Math.max(W, Hh));
     const ow = Math.max(1, Math.round(W * f)), oh = Math.max(1, Math.round(Hh * f));
     let pick = main;
@@ -16049,12 +16224,17 @@ SW.rasters = (function () {
           const n = 1 << bps, v = d[s];
           out[p] = cmap[v] >> 8; out[p + 1] = cmap[n + v] >> 8; out[p + 2] = cmap[2 * n + v] >> 8;
           out[p + 3] = nd8 !== null && v === nd8 ? 0 : 255;
+        } else if (phot === 5 && spp >= 4) {            // CMYK → RGB
+          const k = 255 - d[s + 3];
+          out[p] = (255 - d[s]) * k / 255; out[p + 1] = (255 - d[s + 1]) * k / 255;
+          out[p + 2] = (255 - d[s + 2]) * k / 255; out[p + 3] = 255;
         } else if (spp >= 3) {
           out[p] = d[s]; out[p + 1] = d[s + 1]; out[p + 2] = d[s + 2];
           out[p + 3] = spp >= 4 && extra ? d[s + 3]
             : nd8 !== null && d[s] === nd8 && d[s + 1] === nd8 && d[s + 2] === nd8 ? 0 : 255;
         } else {
-          const g = inv ? 255 - d[s] : d[s];
+          let g = bps < 8 ? d[s] * 255 / ((1 << bps) - 1) : d[s];
+          if (inv) g = 255 - g;
           out[p] = out[p + 1] = out[p + 2] = g;
           out[p + 3] = spp === 2 ? d[s + 1] : nd8 !== null && d[s] === nd8 ? 0 : 255;
         }
@@ -16068,28 +16248,36 @@ SW.rasters = (function () {
         } else { out[p] = out[p + 1] = out[p + 2] = v; out[p + 3] = 255; }
       };
     }
-    const data = await readIfd(read, T.le, pick, ow, oh, mode, progress);
+    const data = await readIfd(read, T.le, pick, ow, oh, mode, o.progress);
 
     const canvas = newCanvas(ow, oh), g = canvas.getContext("2d");
-    const r = { w: ow, h: oh, canvas: canvas, ctx: g, crs: crs, crsText: crsText, nodata: nodata,
-                single: isBand, srcInfo: { w: W, h: Hh, bps: bps, spp: spp, fmt: fmt } };
+    const r = { w: ow, h: oh, canvas: canvas, ctx: g, nodata: nodata,
+                single: isBand, srcInfo: { w: W, h: Hh, bps: bps, spp: spp, fmt: fmt },
+                desc: (spp >= 3 ? "RGB" : isBand ? "1 band" : "") + " " + bps + "-bit" +
+                      (pick !== main ? " (overview " + pick[256][0] + " px)" : "") };
     if (mode.u8) {
       g.putImageData(new ImageData(data, ow, oh), 0, 0);
     } else if (isBand) {
       r.vals = data;
       r.stats = stretch(data, 1, 0, nodata);
-      const geo = crs.kind === "geographic";
-      const lat = geo ? (M.f + M.e * Hh / 2) * D2R : 0;
-      const px = Math.hypot(M.a, M.d) * W / ow, py = Math.hypot(M.b, M.e) * Hh / oh;
-      r.pixM = geo ? [px * 111320 * Math.cos(lat), py * 110540] : [px * (crs.unit || 1), py * (crs.unit || 1)];
-      r.style = fmt === 3 || fmt === 2 ? "hillshade" : "gray";
+      if (geo) {
+        const M = geo.M, crs = geo.crs, isGeo = crs.kind === "geographic";
+        const lat = isGeo ? (M.f + M.e * Hh / 2) * D2R : 0;
+        const px = Math.hypot(M.a, M.d) * W / ow, py = Math.hypot(M.b, M.e) * Hh / oh;
+        r.pixM = isGeo ? [px * 111320 * Math.cos(lat), py * 110540] : [px * (crs.unit || 1), py * (crs.unit || 1)];
+      } else r.pixM = [1, 1];
+      r.style = geo && (fmt === 3 || fmt === 2) ? "hillshade" : "gray";
       r.render = function () { renderBand(r); };
       renderBand(r);
     } else {
       // varias bandas de 16/32 bits: cada una estirada a 8 bits
       const nb = mode.bands, img = g.createImageData(ow, oh), d = img.data;
       const st = [];
-      for (let b = 0; b < Math.min(nb, 3); b++) st.push(stretch(data, nb, b, nodata));
+      // enteros de 16 bits en color (escáner de 48 bits): escala fija, que
+      // conserva el color; el resto, estirado por banda
+      const fixed16 = bps === 16 && (fmt === 1 || fmt === 2) && nb >= 3;
+      for (let b = 0; b < Math.min(nb, 3); b++)
+        st.push(fixed16 ? (fmt === 2 ? [-32768, 32767] : [0, 65535]) : stretch(data, nb, b, nodata));
       for (let i = 0; i < ow * oh; i++) {
         let bad = false;
         for (let b = 0; b < 3; b++) {
@@ -16101,13 +16289,162 @@ SW.rasters = (function () {
       }
       g.putImageData(img, 0, 0);
     }
+    return r;
+  }
+
+  async function openGeoTiff(files, askCrs, progress) {
+    const tif = files.find(f => /\.tiff?$/i.test(f.name)) || files[0];
+    const stem = tif.name.replace(/\.[^.]+$/, "").toLowerCase();
+    const side = ext => files.find(f => f !== tif && f.name.toLowerCase().replace(/\.[^.]+$/, "") === stem &&
+                                       ext.test(f.name));
+    const read = reader(tif);
+    const T = await tiffIfds(read, tif.size);
+    const main = T.ifds[0];
+    if (!main[256] || !main[257]) throw new Error("the TIFF has no image size");
+    const W = main[256][0], Hh = main[257][0];
+    const keys = geoKeys(main);
+
+    // georreferencia: píxel (col, fila) → (x, y) del CRS
+    let M = null;
+    const tfw = side(/\.(tfw|tifw|tiffw|wld)$/i);
+    if (tfw) M = worldFile(await tfw.text());
+    if (!M && main[34264] && main[34264].length >= 8) {
+      const m = main[34264];
+      M = { a: m[0], b: m[1], c: m[3], d: m[4], e: m[5], f: m[7] };
+    }
+    if (!M && main[33922] && main[33550]) {
+      const tp = main[33922], sc = main[33550];
+      M = { a: sc[0], b: 0, c: tp[3] - tp[0] * sc[0], d: 0, e: -sc[1], f: tp[4] + tp[1] * sc[1] };
+    }
+    if (!M) throw new Error("no georeferencing (GeoTIFF tags or a .tfw world file) — " +
+      "to use it as a picture of a section, import it with the Image button instead");
+    if (keys[1025] === 2 && !tfw) {     // PixelIsPoint: el tiepoint es el centro del píxel
+      M.c -= (M.a + M.b) / 2; M.f -= (M.d + M.e) / 2;
+    }
+
+    let crsText = crsFromKeys(keys);
+    const prj = side(/\.prj$/i);
+    if (prj) crsText = (await prj.text()).trim() || crsText;
+    let crs = SW.shp.parsePrj(crsText);
+    if (!SW.shp.toLonLat(crs)) {
+      crsText = await askCrs(crsText, crs);
+      if (!crsText) throw new Error("cancelled");
+      crs = SW.shp.parsePrj(crsText);
+      if (!SW.shp.toLonLat(crs)) throw new Error("can't place that coordinate system on the map (" +
+        SW.shp.crsLabel(crs) + ")");
+    }
+
+    const r = await renderTiff(read, T, main, { progress: progress, geo: { M: M, crs: crs } });
+    r.crs = crs; r.crsText = crsText;
+    const ow = r.w, oh = r.h;
     // píxel de salida → CRS
-    const sx = W / ow, sy = Hh / oh;
+    const sx = r.srcInfo.w / ow, sy = r.srcInfo.h / oh;
     r.toCrs = (x, y) => [M.a * x * sx + M.b * y * sy + M.c, M.d * x * sx + M.e * y * sy + M.f];
     r.kind = "image";
-    r.format = "GeoTIFF " + (spp >= 3 ? "RGB" : isBand ? "1 band" : "") + " " + bps + "-bit" +
-      (pick !== main ? " (overview " + pick[256][0] + " px)" : "");
+    r.format = "GeoTIFF " + r.desc;
     return r;
+  }
+
+  /* TIFF "de foto": cualquier TIFF a un canvas, sin georreferencia. */
+  async function tiffToCanvas(file, o) {
+    const read = reader(file);
+    const T = await tiffIfds(read, file.size);
+    const main = T.ifds[0];
+    if (!main[256] || !main[257]) throw new Error("the TIFF has no image size");
+    const r = await renderTiff(read, T, main, { maxPx: (o && o.maxPx) || 5000, progress: o && o.progress });
+    return { canvas: r.canvas, w: r.w, h: r.h, fullW: r.srcInfo.w, fullH: r.srcInfo.h, desc: r.desc };
+  }
+
+  /* ¿el TIFF trae georreferencia (o un .tfw al lado)? Decide si un TIFF
+   * soltado es un raster del mapa o la figura de una sección. */
+  async function isGeoTiff(file, siblings) {
+    try {
+      const T = await tiffIfds(reader(file), file.size), m = T.ifds[0];
+      if ((m[33550] && m[33922]) || m[34264]) return true;
+    } catch (e) { return false; }
+    const stem = file.name.replace(/\.[^.]+$/, "").toLowerCase();
+    return (siblings || []).some(f => f !== file &&
+      f.name.toLowerCase().replace(/\.[^.]+$/, "") === stem && /\.(tfw|tifw|tiffw|wld)$/i.test(f.name));
+  }
+
+  /* -- imágenes para una sección: cualquier formato razonable → data: URL ---
+   * El tipo se decide por los PRIMEROS BYTES, no por el nombre ni por el
+   * `type` que da el navegador (vacío o equivocado con frecuencia: .jpeg en
+   * mayúsculas, .tif sin tipo…). TIFF se decodifica aquí, porque ningún
+   * navegador lo muestra; el resto lo decodifica el navegador, pero se verifica
+   * antes de aceptarlo y el error dice por qué. */
+  async function sniffKind(f) {
+    const b = new Uint8Array(await f.slice(0, 32).arrayBuffer());
+    const ascii = String.fromCharCode.apply(null, b);
+    if (b[0] === 0x89 && ascii.slice(1, 4) === "PNG") return "png";
+    if (b[0] === 0xff && b[1] === 0xd8) return "jpeg";
+    if (ascii.startsWith("GIF8")) return "gif";
+    if (ascii.startsWith("RIFF") && ascii.slice(8, 12) === "WEBP") return "webp";
+    if (ascii.startsWith("BM")) return "bmp";
+    if ((b[0] === 0x49 && b[1] === 0x49 && (b[2] === 42 || b[2] === 43) && b[3] === 0) ||
+        (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0 && (b[3] === 42 || b[3] === 43))) return "tiff";
+    if (ascii.slice(4, 8) === "ftyp") return /avif|avis/.test(ascii.slice(8, 20)) ? "avif" : "heic";
+    const head = new TextDecoder().decode(b).trimStart().toLowerCase();
+    if (head.startsWith("<svg") || head.startsWith("<?xml") || /\.svg$/i.test(f.name)) return "svg";
+    const ext = (/\.([a-z0-9]+)$/i.exec(f.name) || [])[1];
+    return ext ? ext.toLowerCase().replace("jpg", "jpeg").replace("tif", "tiff") : null;
+  }
+  const MIMES = { png: "image/png", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+                  bmp: "image/bmp", svg: "image/svg+xml", avif: "image/avif", heic: "image/heic" };
+
+  function readDataUrl(blob) {
+    return new Promise(function (ok, bad) {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result));
+      r.onerror = () => bad(new Error("the file could not be read"));
+      r.readAsDataURL(blob);
+    });
+  }
+  function probeImage(url) {
+    return new Promise(function (ok, bad) {
+      const im = new Image();
+      im.onload = () => ok({ w: im.naturalWidth, h: im.naturalHeight });
+      im.onerror = () => bad(new Error("decode"));
+      im.src = url;
+    });
+  }
+
+  /* → {url, w, h, note, kind} o lanza Error con la razón */
+  async function loadPicture(file, o) {
+    o = o || {};
+    const kind = await sniffKind(file);
+    if (kind === "tiff") {
+      let t;
+      try { t = await tiffToCanvas(file, { maxPx: o.maxPx || 5000 }); }
+      catch (e) {
+        throw new Error("this TIFF can't be read (" + (e && e.message ? e.message : e) + "). " +
+          "Re-save it as PNG, JPG or an LZW / uncompressed TIFF");
+      }
+      let alpha = false;
+      const d = t.canvas.getContext("2d").getImageData(0, 0, t.w, t.h).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i] !== 255) { alpha = true; break; }
+      let url = t.canvas.toDataURL("image/png");
+      let fmt = "PNG";
+      if (!alpha && url.length > 24e6) { url = t.canvas.toDataURL("image/jpeg", 0.92); fmt = "JPEG"; }
+      const shrunk = t.fullW > t.w || t.fullH > t.h;
+      return { url: url, w: t.w, h: t.h, kind: kind,
+               note: "TIFF " + t.desc.trim() + " converted to " + fmt + (shrunk
+                 ? ", reduced from " + t.fullW + "×" + t.fullH + " to " + t.w + "×" + t.h : "") };
+    }
+    const mime = MIMES[kind] || (file.type && /^image\//.test(file.type) ? file.type : "");
+    if (!mime) throw new Error("this isn't a picture the program recognises (" +
+      (file.type || (/\.([^.]+)$/.exec(file.name) || [])[1] || "unknown type") + ")");
+    const url = await readDataUrl(new Blob([file], { type: mime }));
+    let dim;
+    try { dim = await probeImage(url); }
+    catch (e) {
+      throw new Error("this browser can't decode this " + kind.toUpperCase() + " file" +
+        (kind === "heic" || kind === "avif" ? " — convert it to PNG or JPG first" :
+         kind === "jpeg" ? " (a CMYK or damaged JPEG? re-save it as RGB)" : ""));
+    }
+    if (!(dim.w > 0 && dim.h > 0)) throw new Error("the picture has no pixel size" +
+      (kind === "svg" ? " (give the SVG width and height, or export it as PNG)" : ""));
+    return { url: url, w: dim.w, h: dim.h, kind: kind, note: "" };
   }
 
   /* ¿qué es este archivo? por extensión y, si no, por la firma */
@@ -16126,7 +16463,8 @@ SW.rasters = (function () {
     return Object.assign(await openGeoTiff(files, askCrs, progress), { name: name });
   }
 
-  return { open, openPmtiles, openMbtiles, openGeoTiff, zxyToId, decodeImage, lzw };
+  return { open, openPmtiles, openMbtiles, openGeoTiff, zxyToId, decodeImage, lzw,
+           tiffToCanvas, isGeoTiff, loadPicture, sniffKind };
 })();
 
 /* ==== js/io/contours.js ====
@@ -17089,7 +17427,8 @@ SW.mapWindow = (function () {
       if (!active) items.push({ text: "Open section view", run: function () {
         noRefit = true; SW.sections.switchTo(id); noRefit = false; } });
       items.push({ text: "Rename…", run: function () {
-        const n = window.prompt("Section name:", x2.name || ""); if (n) SW.sections.rename(id, n); } });
+        try { window.focus(); } catch (e) { /* nada */ }
+        SW.sections.promptRename(id); } });
       if (SW.model.sections().length > 1)
         items.push({ text: "Delete section…", danger: true, run: function () {
           if (window.confirm("Delete the section \"" + (x2.name || "Untitled section") +
@@ -17119,7 +17458,7 @@ SW.mapWindow = (function () {
     const doc = root.ownerDocument;
     const inp = doc.createElement("input");
     inp.type = "file";
-    inp.accept = "image/*";
+    inp.accept = SW.actions.IMG_ACCEPT || "image/*";
     inp.addEventListener("change", function () {
       const f = inp.files && inp.files[0];
       if (!f) return;
@@ -28202,10 +28541,44 @@ SW.sections = (function () {
     return true;
   }
 
+  /* Cambiar el nombre de una sección (la activa por omisión) en una ventanita
+   * con el texto ya seleccionado: se escribe y Enter. */
+  function promptRename(id) {
+    const M = SW.model, U = SW.ui;
+    const x = M.sections().find(y => y.id === (id || M.state.sec.id));
+    if (!x) return;
+    let inp;
+    U.modal({
+      title: "Rename section",
+      build: function (body, api) {
+        inp = U.textInput(x.name || "");
+        inp.style.width = "100%";
+        inp.addEventListener("keydown", function (e) {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          rename(x.id, inp.value);
+          api.close();
+        });
+        body.appendChild(inp);
+        setTimeout(function () { inp.focus(); inp.select(); }, 0);
+      },
+      buttons: [{ label: "Cancel" },
+                { label: "Rename", primary: true, action: function () { rename(x.id, inp.value); } }],
+    });
+  }
+
   function init() {
     const sel = $("section-select");
     if (!sel) return;
     sel.addEventListener("change", function () { switchTo(sel.value); });
+    $("section-rename").addEventListener("click", function () { promptRename(); });
+    // doble clic sobre el nombre de la cabecera: lo mismo, sin buscar el botón
+    const nm = $("doc-name");
+    if (nm) {
+      nm.style.cursor = "text";
+      nm.title = "Double-click to rename the section";
+      nm.addEventListener("dblclick", function () { promptRename(); });
+    }
     $("section-add").addEventListener("click", function () {
       add();
       SW.view.status("New section — draw on it, or import an image to trace over.");
@@ -28222,7 +28595,7 @@ SW.sections = (function () {
     refresh();
   }
 
-  return { list, refresh, switchTo, add, remove, rename, reset, changed, init };
+  return { list, refresh, switchTo, add, remove, rename, promptRename, reset, changed, init };
 })();
 
 /* ==== js/project.js ==== */
@@ -28365,12 +28738,12 @@ SW.project = (function () {
     const label = document.getElementById("doc-name");
     if (label) {
       label.textContent = name + (dirty ? " •" : "");
-      label.title = fileHandle
+      label.title = "Double-click to rename the section. " + (fileHandle
         ? "File: " + fileName + " — Save overwrites it"
         : drive ? "Google Drive: " + drive.name + " — Save updates it"
         : fileName ? "Last written as: " + fileName +
                      " — Save cannot overwrite it in place"
-                   : "Not saved to a file yet";
+                   : "Not saved to a file yet");
     }
   }
 
@@ -28633,7 +29006,7 @@ SW.project = (function () {
       });
     }
     const img = files.find(f => /^image\//.test(f.type) ||
-                                /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name));
+                                /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|tiff?)$/i.test(f.name));
     if (img) { SW.actions.importImageFile(img); return; }
     if (SW.actions.importDataFiles && SW.actions.importDataFiles(files)) return;
     SW.view.status("Google Drive: choose a project (.json), an image, a " +
