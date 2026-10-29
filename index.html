@@ -1264,7 +1264,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
 window.SW = window.SW || {};
 SW.APP = {
   name: "StructuralSketcher",
-  version: "0.32.0",
+  version: "0.32.1",
   stage: "beta",
   author: "Mauricio Espinoza",
   org: "Universidad de Concepción",
@@ -1276,6 +1276,15 @@ SW.APP = {
     "and must be checked by a qualified geologist before being relied " +
     "upon.",
   changelog: [
+    { version: "0.32.1", date: "2026-10-29", highlights: [
+      "Map rasters are embedded in the saved project reliably: they are " +
+        "copied into memory when loaded, so re-exporting, moving or " +
+        "deleting the GeoTIFF / MBTiles / PMTiles on disk no longer makes " +
+        "the save fail or drop them; saving right after opening a project " +
+        "waits for its rasters to be restored instead of overwriting the " +
+        "file without them; a raster that can't be embedded is named with " +
+        "the reason, and the rest of the project is still saved.",
+    ] },
     { version: "0.32.0", date: "2026-10-29", highlights: [
       "Importing a picture of a section is now robust: PNG, JPG, GIF, " +
         "WebP, BMP, SVG and TIFF all work, from the Image button, drag and " +
@@ -17878,6 +17887,19 @@ SW.mapWindow = (function () {
   }
 
   const dirtyProject = () => { if (SW.project && SW.project.touch) SW.project.touch(); };
+
+  /* Copia en memoria de los archivos de un raster (si caben en el tope de
+   * incrustado; uno más grande no se incrustará igual y se queda como
+   * referencia al disco). Si la lectura falla, también. */
+  async function snapshotFiles(group) {
+    if (group.reduce((t, f) => t + f.size, 0) > EMBED_MAX) return group;
+    try {
+      const out = [];
+      for (const f of group) out.push(new File([await f.arrayBuffer()], f.name));
+      return out;
+    } catch (e) { return group; }
+  }
+
   async function addRasterFiles(list, opts) {
     const o = opts || {};
     const files = Array.from(list || []);
@@ -17899,7 +17921,10 @@ SW.mapWindow = (function () {
           if (!o.quiet) SW.view.status("Reading " + m.name + "… " + Math.round(p * 100) + "%");
         });
         r.id = ++rasterSeq;
-        r.files = group;                 // los archivos originales: es lo que se incrusta al guardar
+        // los archivos originales: es lo que se incrusta al guardar. Se copian
+        // a memoria ya: el File del disco deja de poder leerse (NotReadableError)
+        // si el archivo se modifica, mueve o borra después de cargarlo.
+        r.files = o.restore ? group : await snapshotFiles(group);
         r.crsAsked = asked || (o.restore && o.restore.crs) || null;
         const rs = o.restore;
         r.visible = !rs || rs.visible !== false;
@@ -18004,24 +18029,42 @@ SW.mapWindow = (function () {
       const meta = { name: r.name, format: r.format, visible: r.visible, opacity: r.opacity,
                      style: r.single ? r.style : null, crs: r.crsAsked || null, size: size };
       if (n) parts.push(",");
-      if (!files.length || total + size > EMBED_MAX) {
-        skipped.push(r.name);
+      const why = !files.length ? "no source file" : total + size > EMBED_MAX ? "over the 200 MB limit" : null;
+      // se arma aparte: si un archivo no se puede leer, ese raster va sin
+      // datos y el resto del proyecto se guarda igual
+      let mine = null;
+      if (!why) {
+        try {
+          mine = [JSON.stringify(meta).slice(0, -1) + ',"embedded":true,"files":['];
+          for (let i = 0; i < files.length; i++) {
+            mine.push((i ? "," : "") + '{"name":' + JSON.stringify(files[i].name) +
+                      ',"size":' + files[i].size + ',"data":"');
+            for (const q of await b64Parts(files[i])) mine.push(q);
+            mine.push('"}');
+          }
+          mine.push("]}");
+        } catch (err) {
+          mine = null;
+          skipped.push(r.name + " (the file on disk can't be read any more" +
+                       (err && err.name ? ": " + err.name : "") + ")");
+        }
+      } else skipped.push(r.name + " (" + why + ")");
+      if (!mine) {
         parts.push(JSON.stringify(Object.assign(meta, { embedded: false })));
         continue;
       }
       total += size; embedded++;
-      parts.push(JSON.stringify(meta).slice(0, -1) + ',"embedded":true,"files":[');
-      for (let i = 0; i < files.length; i++) {
-        parts.push((i ? "," : "") + '{"name":' + JSON.stringify(files[i].name) +
-                   ',"size":' + files[i].size + ',"data":"');
-        for (const q of await b64Parts(files[i])) parts.push(q);
-        parts.push('"}');
-      }
-      parts.push("]}");
+      for (const q of mine) parts.push(q);
     }
     parts.push("]");
     return { parts: parts, embedded: embedded, bytes: total, skipped: skipped };
   }
+
+  /* Rasters que se están restaurando de un proyecto recién abierto: guardar
+   * antes de que terminen los perdería, así que serializeFull los espera. */
+  let restoring = Promise.resolve();
+  let restoreGen = 0;
+  function whenRestored() { return restoring; }
 
   function clearRasters() {
     for (const r of st.rasters)
@@ -18031,17 +18074,28 @@ SW.mapWindow = (function () {
 
   /* Reemplaza los rasters por los de un proyecto que se abre (lista de
    * `map_rasters`, o nada: un proyecto sin rasters deja el mapa limpio). */
-  async function restoreRasters(list) {
+  function restoreRasters(list) {
+    const gen = ++restoreGen;
+    const p = doRestore(list, gen);
+    restoring = p.catch(() => {});
+    return p;
+  }
+  async function doRestore(list, gen) {
     clearRasters();
     renderLayers(); request();
     if (!Array.isArray(list) || !list.length) return;
     SW.view.status("Restoring " + list.length + " map raster" + (list.length > 1 ? "s" : "") + "…");
     const missing = [];
     for (const e of list) {
+      if (gen !== restoreGen) return;    // se abrió otro proyecto mientras tanto
       if (!e || !e.embedded || !Array.isArray(e.files)) { if (e) missing.push(e.name || "raster"); continue; }
       try {
         const files = e.files.map(f => new File([unb64(f.data, f.size)], f.name));
+        const before = st.rasters.length;
         await addRasterFiles(files, { restore: e, quiet: true });
+        if (gen !== restoreGen) return;
+        // addRasterFiles no lanza: si no lo agregó, se avisa igual
+        if (st.rasters.length === before) missing.push((e.name || "raster") + " (couldn't be read)");
       } catch (err) {
         missing.push((e.name || "raster") + " (" + (err && err.message ? err.message : err) + ")");
       }
@@ -18500,7 +18554,7 @@ SW.mapWindow = (function () {
 
   SW.actions.openMap = toggle;
   SW.actions.addMapRasters = addRasterFiles;
-  return { packRasters: packRasters, restoreRasters: restoreRasters,
+  return { packRasters: packRasters, restoreRasters: restoreRasters, whenRestored: whenRestored,
            hasRasters: () => st.rasters.length > 0, open: toggle, show: show, init: init, toW: toW, fromW: fromW,
            setSectionCursor: setSectionCursor, onSectionDraw: onSectionDraw,
            onSectionsChanged: onSectionsChanged, hitTrace: hitTrace,
@@ -28953,9 +29007,13 @@ SW.project = (function () {
    * archivos incrustados. El autoguardado NO pasa por aquí: sigue siendo
    * serialize(). → Promise<{data: string | Blob, note}> */
   function serializeFull() {
-    const base = serialize();
     const M = SW.mapWindow;
-    if (!M || !M.hasRasters()) return Promise.resolve({ data: base, note: "" });
+    if (!M) return Promise.resolve({ data: serialize(), note: "" });
+    // si el proyecto recién abierto aún está restaurando sus rasters, se
+    // espera: si no, el archivo se sobrescribiría sin ellos
+    return M.whenRestored().then(function () {
+    const base = serialize();
+    if (!M.hasRasters()) return { data: base, note: "" };
     SW.view.status("Embedding the map rasters in the project…");
     return M.packRasters().then(function (p) {
       if (!p) return { data: base, note: "" };
@@ -28966,9 +29024,10 @@ SW.project = (function () {
         note = " " + p.embedded + " map raster" + (p.embedded > 1 ? "s" : "") +
                " embedded (" + (p.bytes / 1048576).toFixed(1) + " MB).";
       if (p.skipped.length)
-        note += " ⚠ Not embedded (over the " + (200) + " MB limit): " + p.skipped.join(", ") +
-                " — load them again after opening.";
+        note += " ⚠ Not embedded: " + p.skipped.join(", ") +
+                " — load them again (+ Raster) and save.";
       return { data: data, note: note };
+    });
     });
   }
 
@@ -29179,6 +29238,8 @@ SW.project = (function () {
         SW.view.status("Downloaded " + res.path +
                        " — this browser cannot overwrite files in place." + full.note);
       });
+    }).catch(function (e) {
+      SW.view.status("Could not save the project: " + (e && e.message ? e.message : e));
     });
   }
 
