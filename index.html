@@ -9097,8 +9097,9 @@ window.SW = window.SW || {};
 
   SW.tools.register("digitize", {
     cursor: "crosshair",
-    hint: "Click adds vertices · double/right click finishes · hold Shift " +
-          "for 0°/45°/90° segments · S snap · Esc cancels",
+    hint: "Click adds vertices · Del/Backspace removes the last one · " +
+          "double/right click finishes · hold Shift for 0°/45°/90° " +
+          "segments · S snap · Esc cancels",
     hasPending: function () { return pts.length > 0; },
     deactivate: function () { pts = []; preview = null; snapMark = null; angleReadout(null, null); },
     onClick: function (e, pos) {
@@ -9123,6 +9124,19 @@ window.SW = window.SW || {};
     onKey: function (e) {
       if (e.key === "Escape") { cancel(); return true; }
       if (e.key === "Shift") { reshape(true); return false; }
+      // Del / Retroceso: quita el último nodo puesto y sigue dibujando
+      if ((e.key === "Delete" || e.key === "Backspace") && pts.length &&
+          !e.ctrlKey && !e.metaKey && !e.altKey) {
+        pts.pop();
+        if (pts.length && lastPos) {
+          preview = pointFor(lastPos, e.shiftKey);
+          angleReadout(pts[pts.length - 1], preview);
+        } else { preview = null; angleReadout(null, null); }
+        SW.view.status(pts.length ? "Last vertex removed (" + pts.length +
+                       " left)." : "Last vertex removed — line is empty.");
+        SW.view.requestDraw();
+        return true;
+      }
       // "S" alterna el snap sin soltar el trazo ni ir al riel — el gesto
       // habitual cuando hay que colocar UN vértice libre entre varios
       // enganchados.
@@ -9226,6 +9240,37 @@ window.SW = window.SW || {};
   let drag = null;       // {line, index, before, joint}
   let snapMark = null;
   let addMark = null;    // dónde caería el vértice nuevo (modo agregar)
+  let selVertex = null;  // {line, index}: último vértice tocado (Del lo borra)
+
+  function selectedVertex() {
+    if (!selVertex) return null;
+    const ok = SW.model.getLine(selVertex.line.id) === selVertex.line &&
+               selVertex.index < selVertex.line.vertices.length &&
+               SW.view.selectedLines().indexOf(selVertex.line) >= 0;
+    return ok ? selVertex : null;
+  }
+
+  /* Borra el vértice `hit` ({line, index}) —y su homólogo en los
+   * acompañantes de la edición conjunta— como un paso de undo. */
+  function deleteVertex(hit) {
+    if (!hit || hit.line.locked || hit.line.vertices.length <= 2) return false;
+    const before = hit.line.vertices.map(v => v.slice());
+    const after = before.slice();
+    after.splice(hit.index, 1);
+    const joint = beginJoint(hit.line);
+    hit.line.vertices = after.map(v => v.slice());
+    for (const p of joint.list) {
+      if (joint.mode === "parallel") {
+        p.line.vertices = SW.geom.offsetPolyline(hit.line.vertices, p.d);
+      } else {
+        const v = p.before.map(x => x.slice());
+        v.splice(hit.index, 1);
+        p.line.vertices = v;
+      }
+    }
+    commitJoint("Delete vertex", hit.line, before, after, joint);
+    return true;
+  }
 
   function addMode(e) {
     const el = document.getElementById("vertex-add");
@@ -9533,13 +9578,26 @@ window.SW = window.SW || {};
 
   SW.tools.register("vertex", {
     cursor: "pointer",
-    hint: "Drag vertices (snaps to terrain and other lines); double click, " +
-          "Alt+press or \"Add vertices\" inserts (click past an end extends); " +
-          "right click deletes a vertex. With several lines selected, " +
+    hint: "Drag vertices (snaps to terrain and other lines); click on a " +
+          "selected line adds a vertex there (Alt+press or \"Add vertices\" " +
+          "also drags it; click past an end extends); Del or right click " +
+          "deletes the touched vertex. With several lines selected, " +
           "\"Joint edit\" propagates the change to all of them.",
     deactivate: function () {
       if (drag && drag.joint) revertJoint(drag.joint);
-      drag = null; snapMark = null; addMark = null;
+      drag = null; snapMark = null; addMark = null; selVertex = null;
+    },
+    onKey: function (e) {
+      if ((e.key !== "Delete" && e.key !== "Backspace") ||
+          e.ctrlKey || e.metaKey || e.altKey || drag) return false;
+      const sv = selectedVertex();
+      if (!sv) return false;
+      selVertex = null;
+      if (!deleteVertex(sv))
+        SW.view.status(sv.line.locked ? "The line is locked."
+                       : "A line needs at least 2 vertices.");
+      SW.view.requestDraw();
+      return true;
     },
     /* onDown SOLO declara captura de arrastre; toda acción de un solo click
      * (borrar vértice, seleccionar línea al azar) vive en onClick para no
@@ -9581,28 +9639,23 @@ window.SW = window.SW || {};
     },
     onClick: function (e, pos) {
       if (e.button === 2) {
-        const hit = vertexAt(pos);
-        if (hit && hit.line.vertices.length > 2 && !hit.line.locked) {
-          const before = hit.line.vertices.map(v => v.slice());
-          const after = before.slice();
-          after.splice(hit.index, 1);
-          const joint = beginJoint(hit.line);
-          hit.line.vertices = after.map(v => v.slice());
-          for (const p of joint.list) {
-            if (joint.mode === "parallel") {
-              p.line.vertices = SW.geom.offsetPolyline(hit.line.vertices, p.d);
-            } else {
-              const v = p.before.map(x => x.slice());
-              v.splice(hit.index, 1);
-              p.line.vertices = v;
-            }
-          }
-          commitJoint("Delete vertex", hit.line, before, after, joint);
-        }
+        deleteVertex(vertexAt(pos));
+        selVertex = null;
         SW.view.requestDraw();
         return;
       }
       if (e.button !== 0) return;
+      // click sobre el trazo de una línea seleccionada, donde no hay nodo:
+      // se crea uno ahí (y queda tocado, listo para Del)
+      if (!addMode(e) && !e.ctrlKey && !e.metaKey && !vertexAt(pos)) {
+        const target = segmentAt(pos);
+        if (target) {
+          const idx = insertVertex(target.line, target.hit);
+          selVertex = { line: target.line, index: idx };
+          SW.view.requestDraw();
+          return;
+        }
+      }
       if (addMode(e) && SW.view.selectedLines().length &&
           !segmentAt(pos) && !vertexAt(pos)) {
         const lhit = SW.view.hitLine(pos, 8);
@@ -9663,16 +9716,12 @@ window.SW = window.SW || {};
       } else {
         revertJoint(drag.joint);
       }
+      selVertex = { line: drag.line, index: drag.index };
       drag = null;
       SW.view.requestDraw();
     },
-    onDblClick: function (e, pos) {
-      // en modo agregar, la primera pulsación ya insertó el vértice
-      if (addMode(e)) return;
-      const target = segmentAt(pos);
-      if (!target) return;
-      insertVertex(target.line, target.hit);
-      SW.view.requestDraw();
+    onDblClick: function () {
+      // el primer click ya insertó el vértice (y el segundo cayó sobre él)
     },
     drawOverlay: function (ctx) {
       const V = SW.view;
@@ -9686,6 +9735,14 @@ window.SW = window.SW || {};
         ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y);
         ctx.moveTo(x, y - 3); ctx.lineTo(x, y + 3);
         ctx.stroke();
+        ctx.restore();
+      }
+      const sv = selectedVertex();
+      if (sv) {
+        const v = sv.line.vertices[sv.index];
+        ctx.save();
+        ctx.strokeStyle = "#e07818"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(V.sx(v[0]), V.zy(v[1]), 6, 0, 7); ctx.stroke();
         ctx.restore();
       }
       if (!snapMark) return;
