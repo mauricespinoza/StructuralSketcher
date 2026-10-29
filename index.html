@@ -843,7 +843,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
        uso puntual, fuera del riel de dibujo/edición. -->
   <div class="bgroup utility" aria-label="Measure &amp; build">
     <button data-tool="measure" title="Ruler — real length (M)"><svg class="ic"><use href="#i-ruler"/></svg>Ruler</button>
-    <button data-tool="fault_throw" title="Fault throw (F)"><svg class="ic"><use href="#i-throw"/></svg>Throw</button>
+    <button data-tool="fault_throw" title="Fault throw (H)"><svg class="ic"><use href="#i-throw"/></svg>Throw</button>
     <button data-tool="calibrate" title="Calibrate scale — calibrate H and V separately (G)"><svg class="ic"><use href="#i-scale"/></svg>Calibrate</button>
     <button data-tool="image" title="Move / resize imported images (I)"><svg class="ic"><use href="#i-image"/></svg>Image</button>
     <button id="layer-cake-btn" title="Create a stack of parallel beds (layer cake)"><svg class="ic"><use href="#i-layers"/></svg>Create beds</button>
@@ -856,7 +856,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="seg seg-3">
         <button data-tool="pan" title="Pan (P)"><svg class="ic"><use href="#i-pan"/></svg></button>
         <button data-tool="select" title="Select — Ctrl+click adds (V)"><svg class="ic"><use href="#i-select"/></svg></button>
-        <button data-tool="lasso" title="Lasso — Shift = rectangle (L)"><svg class="ic"><use href="#i-lasso"/></svg></button>
+        <button data-tool="lasso" title="Lasso — Shift = rectangle (S)"><svg class="ic"><use href="#i-lasso"/></svg></button>
       </div>
       <select id="select-filter" title="Selection filter">
         <option value="all" selected>Select: all</option>
@@ -870,8 +870,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="rail-title" data-group>Add</div>
       <div class="rail-group-body">
         <input type="hidden" id="line-kind" value="horizon">
-        <button class="add-btn add-layer" data-tool="digitize" data-kind="horizon" title="Add layer (D)"><svg class="ic"><use href="#i-add-layer"/></svg>Layer</button>
-        <button class="add-btn add-fault" data-tool="digitize" data-kind="fault" title="Add fault"><svg class="ic"><use href="#i-add-fault"/></svg>Fault</button>
+        <button class="add-btn add-layer" data-tool="digitize" data-kind="horizon" title="Add layer (L)"><svg class="ic"><use href="#i-add-layer"/></svg>Layer</button>
+        <button class="add-btn add-fault" data-tool="digitize" data-kind="fault" title="Add fault (F)"><svg class="ic"><use href="#i-add-fault"/></svg>Fault</button>
         <button class="add-btn add-topo" data-tool="digitize" data-kind="topography" title="Add topography"><svg class="ic"><use href="#i-add-topo"/></svg>Topography</button>
         <label class="rail-field" id="fault-sense-field" title="Symbol for new faults">Fault sense
           <select id="fault-sense">
@@ -1561,7 +1561,9 @@ SW.settings = (function () {
       deleteSelection: "Delete",
       "tool:pan": "p",
       "tool:select": "v",
-      "tool:lasso": "l",
+      "tool:lasso": "s",
+      addLayer: "l",
+      addFault: "f",
       "tool:digitize": "d",
       "tool:vertex": "x",
       "tool:drag": "j",
@@ -1571,7 +1573,7 @@ SW.settings = (function () {
       "tool:extend": "e",
       "tool:kink": "k",
       "tool:measure": "m",
-      "tool:fault_throw": "f",
+      "tool:fault_throw": "h",
       "tool:dip": "a",
       "tool:calibrate": "g",
     },
@@ -1589,6 +1591,8 @@ SW.settings = (function () {
     "tool:pan": "Tool: Pan",
     "tool:select": "Tool: Select",
     "tool:lasso": "Tool: Lasso",
+    addLayer: "Add layer",
+    addFault: "Add fault",
     "tool:digitize": "Tool: Add line (current type)",
     "tool:vertex": "Tool: Vertices",
     "tool:drag": "Tool: Drag",
@@ -8569,9 +8573,16 @@ window.SW = window.SW || {};
     const keepThickness = opts && "keepThickness" in opts
       ? opts.keepThickness : keepThicknessChecked();
 
+    // Las fallas nunca entran al grupo "espesor constante": cada una se
+    // suaviza por separado sobre su propia posición y forma.
+    const faults = lines.filter(l => l.kind === "fault");
+    const beds = keepThickness ? lines.filter(l => l.kind !== "fault") : [];
+    const indiv = !keepThickness ? lines
+      : faults.concat(beds.length === 1 ? beds : []);
+
     const redo = [], undo = [];
-    if (keepThickness && lines.length > 1) {
-      const ordered = lines.slice().sort((a, b) => meanZ(b) - meanZ(a));
+    if (beds.length > 1) {
+      const ordered = beds.slice().sort((a, b) => meanZ(b) - meanZ(a));
       const offsets = [];
       for (let i = 1; i < ordered.length; i++)
         offsets.push(avgSignedOffset(ordered[i - 1], ordered[i]));
@@ -8587,13 +8598,12 @@ window.SW = window.SW || {};
                     vertices: ordered[i].vertices });
         prevOut = out;
       }
-    } else {
-      for (const line of lines) {
-        const out = SW.geom.chaikin(line.vertices, it);
-        redo.push({ op: "replace_vertices", id: line.id, vertices: out });
-        undo.push({ op: "replace_vertices", id: line.id,
-                    vertices: line.vertices });
-      }
+    }
+    for (const line of indiv) {
+      const out = SW.geom.chaikin(line.vertices, it);
+      redo.push({ op: "replace_vertices", id: line.id, vertices: out });
+      undo.push({ op: "replace_vertices", id: line.id,
+                  vertices: line.vertices });
     }
     SW.undo.push({
       label: redo.length > 1 ? "Smooth " + redo.length + " lines"
@@ -8601,8 +8611,9 @@ window.SW = window.SW || {};
       redo: redo, undo: undo,
     });
     SW.view.status("Smoothed " + redo.length + " line(s)" +
-                   (keepThickness && lines.length > 1
-                     ? " (bed thickness kept constant)." : "."));
+                   (beds.length > 1
+                     ? " (bed thickness kept constant; faults smoothed individually)."
+                     : "."));
     SW.view.requestDraw();
   };
 
@@ -25495,6 +25506,13 @@ SW.panels.properties = (function () {
     body.appendChild(btns);
   }
 
+  const FAULT_SENSE_LABELS = { none: "— no symbol —",
+                               reverse: "Reverse (hangingwall up)",
+                               normal: "Normal (hangingwall down)",
+                               inverted: "Inverted / reactivated",
+                               dextral: "Dextral strike-slip",
+                               sinistral: "Sinistral strike-slip" };
+
   /* -- varias líneas ---------------------------------------------------------- */
   function renderMultiLine(body, lines) {
     const info = document.createElement("div");
@@ -25546,6 +25564,43 @@ SW.panels.properties = (function () {
     rowEl(body, "Type (all)", kindSel,
           "Assign every selected line to Fault, Horizon, Contact, " +
           "Topography, Axial trace or Sketch");
+
+    // Fault sense colectivo: sólo actúa sobre las fallas no bloqueadas de la
+    // selección (cada una conserva su propio resto de fault_style).
+    const faults = lines.filter(l => l.kind === "fault" && !l.locked);
+    if (faults.length) {
+      const senses = Array.from(new Set(faults.map(
+        l => (l.fault_style || {}).sense || "none")));
+      const senseSel = document.createElement("select");
+      if (senses.length > 1) {
+        const mixed = document.createElement("option");
+        mixed.value = ""; mixed.textContent = "— mixed —";
+        senseSel.appendChild(mixed);
+      }
+      for (const k of Object.keys(FAULT_SENSE_LABELS)) {
+        const o = document.createElement("option");
+        o.value = k; o.textContent = FAULT_SENSE_LABELS[k];
+        senseSel.appendChild(o);
+      }
+      senseSel.value = senses.length === 1 ? senses[0] : "";
+      senseSel.addEventListener("change", function () {
+        if (!senseSel.value) return;
+        const redo = [], undo = [];
+        for (const l of faults) {
+          redo.push({ op: "set_line_props", id: l.id,
+                      props: { fault_style: { sense: senseSel.value } } });
+          undo.push({ op: "set_line_props", id: l.id,
+                      props: { fault_style: {
+                        sense: (l.fault_style || {}).sense || "none" } } });
+        }
+        SW.undo.push({ label: "Fault sense (" + faults.length + ")",
+                       redo: redo, undo: undo });
+        render();
+        SW.view.requestDraw();
+      });
+      rowEl(body, "Fault sense (all)", senseSel,
+            "Set the sense of every selected fault at once");
+    }
 
     const width = document.createElement("input");
     width.type = "number"; width.min = "0.4"; width.step = "0.2";
@@ -25619,15 +25674,9 @@ SW.panels.properties = (function () {
       // etiquetas explícitas sobre el movimiento RELATIVO: en perfil el
       // símbolo es una media flecha en el bloque colgante, no el símbolo de
       // planta (bola-y-palito / dientes).
-      const senseLabels = { none: "— no symbol —",
-                            reverse: "Reverse (hangingwall up)",
-                            normal: "Normal (hangingwall down)",
-                            inverted: "Inverted / reactivated",
-                            dextral: "Dextral strike-slip",
-                            sinistral: "Sinistral strike-slip" };
+      const senseLabels = FAULT_SENSE_LABELS;
       const sense = document.createElement("select");
-      for (const k of ["none", "reverse", "normal", "inverted",
-                       "dextral", "sinistral"]) {
+      for (const k of Object.keys(senseLabels)) {
         const o = document.createElement("option");
         o.value = k; o.textContent = senseLabels[k];
         if (fs.sense === k) o.selected = true;
@@ -27415,6 +27464,16 @@ SW.view = (function () {
       return true;
     }
     switch (action) {
+      case "addLayer":
+      case "addFault": {
+        // equivale a pulsar el botón Layer / Fault del riel
+        const btn = document.querySelector(
+          'button[data-tool="digitize"][data-kind="' +
+          (action === "addLayer" ? "horizon" : "fault") + '"]');
+        if (!btn) return false;
+        btn.click();
+        return true;
+      }
       case "undo": SW.undo.undo(); requestDraw(); return true;
       case "redo": SW.undo.redo(); requestDraw(); return true;
       case "duplicate": SW.actions.duplicateSelected(); return true;
