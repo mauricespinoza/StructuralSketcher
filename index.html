@@ -709,6 +709,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-smooth" viewBox="0 0 24 24"><path d="M2 16c3-8 6-8 9 0s6 8 11-4"/></symbol>
   <symbol id="i-bezier" viewBox="0 0 24 24"><path d="M3 18C3 9 9 6 12 6s9 3 9 12"/><rect x="1" y="16" width="4" height="4"/><rect x="19" y="16" width="4" height="4"/><rect x="10" y="4" width="4" height="4"/></symbol>
   <symbol id="i-ruler" viewBox="0 0 24 24"><rect x="1" y="8" width="22" height="8" rx="1" transform="rotate(-20 12 12)"/><path d="M6.5 8.7l1.2 3M10.4 7.3l1.2 3M14.3 5.9l1.2 3M18.2 4.6l1.2 3"/></symbol>
+  <symbol id="i-project" viewBox="0 0 24 24"><path d="M3 20L21 4"/><circle cx="5" cy="6" r="1.8"/><path d="M6.4 7.4l5.2 5.2m-3.2.4h3.4V9.6"/></symbol>
   <symbol id="i-throw" viewBox="0 0 24 24"><path d="M4 8h7M13 16h7"/><path d="M12 3v18m-3-15l3-3 3 3m-6 12l3 3 3-3"/></symbol>
   <symbol id="i-dip" viewBox="0 0 24 24"><circle cx="7" cy="8" r="3"/><path d="M9.5 9.8L20 17"/><path d="M3 20h18"/></symbol>
   <symbol id="i-scale" viewBox="0 0 24 24"><path d="M2 12h20"/><path d="M2 8v8M22 8v8"/><path d="M8 10v4M16 10v4"/></symbol>
@@ -733,7 +734,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <symbol id="i-open" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
   <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M8 3v6h7V3M8 21v-6h8v6"/></symbol>
   <symbol id="i-save-as" viewBox="0 0 24 24"><path d="M12 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l3 3v5"/><path d="M8 3v6h7V3"/><path d="M14 19h8"/><path d="M19 16l3 3-3 3"/></symbol>
-  <symbol id="i-setup" viewBox="0 0 24 24"><path d="M4 20V8m6 12V4m6 16v-8m-14 8h18"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6"/></symbol>
   <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2M8 11h6M11 8v6"/></symbol>
   <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2M8 11h6"/></symbol>
   <symbol id="i-cancel" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
@@ -790,7 +791,6 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
     <button id="import-image-btn" class="icon-only" title="Import image to trace over"><svg class="ic"><use href="#i-image"/></svg></button>
     <button id="import-data-btn" class="icon-only" title="Import data: shapefile (2D/3D points, polylines, polygons + .lyr symbology) projected onto the section, or a SEG-Y line"><svg class="ic"><use href="#i-import"/></svg></button>
     <button id="map-btn" title="Map view above the section (⧉ moves it to its own window, e.g. another screen): Esri basemaps, your GeoTIFF / MBTiles / PMTiles rasters and the section trace, which follows the cursor on the section; draw a new profile trace on it"><svg class="ic"><use href="#i-map"/></svg>Map</button>
-    <button id="setup-btn" class="icon-only" title="Section setup: name, extent, units, end labels"><svg class="ic"><use href="#i-setup"/></svg></button>
   </div>
   <span class="sep"></span>
   <div class="hgroup">
@@ -807,7 +807,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="panel-body" id="panel-versions-body"></div>
     </div>
   </div>
-  <span class="grow"></span>
+  <button id="about-btn" title="About StructuralSketcher: author, contact, disclaimer, what's new"><svg class="ic"><use href="#i-info"/></svg>About</button>
+  <span class="sep"></span>
   <div class="hgroup">
     <button id="toggle-rail" class="icon-only active" title="Tool rail (F9)"><svg class="ic"><use href="#i-rail"/></svg></button>
     <button id="toggle-panels" class="icon-only active" title="Side panels (F10)"><svg class="ic"><use href="#i-panels"/></svg></button>
@@ -842,8 +843,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
   <!-- Botonera aparte: medir, escalar y construir. Son tools/acciones de
        uso puntual, fuera del riel de dibujo/edición. -->
   <div class="bgroup utility" aria-label="Measure &amp; build">
+    <button id="project-trace-btn" title="Project to trace: project the selected lines and dips onto another section's trace — orthogonally or along a trend/plunge"><svg class="ic"><use href="#i-project"/></svg>Project</button>
     <button data-tool="measure" title="Ruler — real length (M)"><svg class="ic"><use href="#i-ruler"/></svg>Ruler</button>
-    <button data-tool="fault_throw" title="Fault throw (H)"><svg class="ic"><use href="#i-throw"/></svg>Throw</button>
     <button data-tool="calibrate" title="Calibrate scale — calibrate H and V separately (G)"><svg class="ic"><use href="#i-scale"/></svg>Calibrate</button>
     <button data-tool="image" title="Move / resize imported images (I)"><svg class="ic"><use href="#i-image"/></svg>Image</button>
     <button id="layer-cake-btn" title="Create a stack of parallel beds (layer cake)"><svg class="ic"><use href="#i-layers"/></svg>Create beds</button>
@@ -856,7 +857,7 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
       <div class="seg seg-3">
         <button data-tool="pan" title="Pan (P)"><svg class="ic"><use href="#i-pan"/></svg></button>
         <button data-tool="select" title="Select — Ctrl+click adds (V)"><svg class="ic"><use href="#i-select"/></svg></button>
-        <button data-tool="lasso" title="Lasso — Shift = rectangle (S)"><svg class="ic"><use href="#i-lasso"/></svg></button>
+        <button data-tool="lasso" title="Lasso — Shift = rectangle (Q)"><svg class="ic"><use href="#i-lasso"/></svg></button>
       </div>
       <select id="select-filter" title="Selection filter">
         <option value="all" selected>Select: all</option>
@@ -969,8 +970,8 @@ body.touch-input .ctxmenu-item { padding: 11px 14px; }
           </label>
         </div>
         <div class="tiles tiles-actions">
-          <button id="smooth-btn" title="Smooth selected lines"><svg class="ic"><use href="#i-smooth"/></svg>Smooth</button>
-          <button id="simplify-btn" title="Simplify selected lines"><svg class="ic"><use href="#i-simplify"/></svg>Simplify</button>
+          <button id="smooth-btn" title="Smooth selected lines (O)"><svg class="ic"><use href="#i-smooth"/></svg>Smooth</button>
+          <button id="simplify-btn" title="Simplify selected lines (U)"><svg class="ic"><use href="#i-simplify"/></svg>Simplify</button>
           <button id="resample-btn" title="Densify selected lines"><svg class="ic"><use href="#i-resample"/></svg>Resample</button>
           <button id="join-btn" title="Join selected lines"><svg class="ic"><use href="#i-join"/></svg>Join</button>
           <button id="duplicate-btn" title="Duplicate selection (Ctrl+Shift+D)"><svg class="ic"><use href="#i-duplicate"/></svg>Duplicate</button>
@@ -1561,9 +1562,11 @@ SW.settings = (function () {
       deleteSelection: "Delete",
       "tool:pan": "p",
       "tool:select": "v",
-      "tool:lasso": "s",
+      "tool:lasso": "q",
       addLayer: "l",
       addFault: "f",
+      smooth: "o",
+      simplify: "u",
       "tool:digitize": "d",
       "tool:vertex": "x",
       "tool:drag": "j",
@@ -1593,6 +1596,8 @@ SW.settings = (function () {
     "tool:lasso": "Tool: Lasso",
     addLayer: "Add layer",
     addFault: "Add fault",
+    smooth: "Smooth selected lines",
+    simplify: "Simplify selected lines",
     "tool:digitize": "Tool: Add line (current type)",
     "tool:vertex": "Tool: Vertices",
     "tool:drag": "Tool: Drag",
@@ -15049,7 +15054,175 @@ SW.actions = SW.actions || {};
     });
   };
 
-  SW.shpExport = { build: build, makeLocator: makeLocator, line3D: line3D };
+  SW.shpExport = { build: build, makeLocator: makeLocator, line3D: line3D,
+                   crsOf: crsOf };
+})();
+
+/* ==== js/actions/project_trace.js ====
+ * "Project to trace": las líneas y dips seleccionados se llevan a 3D con la
+ * traza de la sección activa (s, z → x, y, z) y se proyectan sobre la traza
+ * de OTRA sección del proyecto:
+ *   - ortogonal: cada punto viaja en planta perpendicular a la traza de
+ *     destino y conserva su cota;
+ *   - trend/plunge: cada punto viaja a lo largo de la recta de ese rumbo e
+ *     inmersión hasta cortar el plano vertical de la traza de destino; la
+ *     cota cambia en (recorrido horizontal) · tan(plunge).
+ * Las copias se agregan a la sección de destino (con su propio undo), que
+ * queda activa. Los dips se reproyectan como un tramo corto para recalcular
+ * su buzamiento aparente en el nuevo plano. */
+(function () {
+  "use strict";
+  const D2R = Math.PI / 180;
+
+  function targets() {
+    const cur = SW.model.state.sec;
+    return SW.model.sections().filter(x => x.id !== cur.id && x.geo_trace);
+  }
+
+  /* (s, z) de la sección de origen → {s, z} en la de destino. */
+  function makeMapper(srcGt, dstGt, opts) {
+    const S = SW.shp, E = SW.shpExport;
+    const cs = E.crsOf(srcGt), cd = E.crsOf(dstGt);
+    const tf = S.layerTransform(cs, cd);
+    if (!tf) throw new Error("the two traces use coordinate systems that can't be converted");
+    const loc = E.makeLocator(srcGt, cs);
+    const oblique = opts.mode === "trend";
+    const P = S.makeProjector(
+      Object.assign({}, dstGt, { proj_az: oblique ? opts.trend : null }), cd,
+      { correct: dstGt.mercator_correction !== false });
+    const tanP = oblique ? Math.tan(opts.plunge * D2R) : 0;
+    function map3(p) {
+      const q = tf(p[0], p[1]);
+      const r = P.project(q[0], q[1]);
+      // en oblicua r[1] = −(recorrido horizontal en el sentido del trend): al
+      // avanzar en ese sentido la recta baja tan(plunge) por metro
+      return [r[0], p[2] + (oblique ? r[1] * tanP : 0)];
+    }
+    return {
+      point: function (s, z) { const q = loc.at(s); return map3([q[0], q[1], z]); },
+      line: verts => E.line3D(verts, loc).map(map3),
+    };
+  }
+
+  function projectDip(d, map) {
+    const a = map.point(d.s, d.z);
+    // notación del dip: |dip| horario desde la horizontal, signo = volcado
+    const th = Math.min(180, Math.abs(d.dip)) * D2R, eps = 10;
+    const b = map.point(d.s + Math.cos(th) * eps, d.z - Math.sin(th) * eps);
+    let deg = Math.abs(d.dip);
+    const ds = b[0] - a[0], dz = b[1] - a[1];
+    if (Math.hypot(ds, dz) > 1e-6) {
+      deg = Math.atan2(-dz, ds) / D2R;
+      if (deg < 0) deg += 180;
+      if (deg >= 180) deg -= 180;
+    }
+    const nd = SW.model.clone(d);
+    nd.id = SW.model.genId();
+    nd.s = a[0]; nd.z = a[1];
+    nd.dip = (d.dip < 0 ? -1 : 1) * Math.round(deg * 10) / 10;
+    nd.unit_id = null;
+    return nd;
+  }
+
+  function run(dstId, opts) {
+    const M = SW.model, src = M.state.sec;
+    const dst = M.sections().find(x => x.id === dstId);
+    const lines = SW.view.selectedLines().filter(l => (l.vertices || []).length >= 1);
+    const dips = SW.view.selectedDips ? SW.view.selectedDips() : [];
+    let map;
+    try { map = makeMapper(src.geo_trace, dst.geo_trace, opts); }
+    catch (err) { SW.view.status("Project to trace: " + (err && err.message ? err.message : err)); return; }
+
+    const redo = [], undo = [], refs = [];
+    for (const l of lines) {
+      const verts = map.line(l.vertices.map(v => [v[0], v[1]]))
+        .filter(v => isFinite(v[0]) && isFinite(v[1]));
+      if (!verts.length) continue;
+      const nl = M.clone(l);
+      nl.id = M.genId();
+      nl.vertices = verts;
+      nl.unit_id = null; nl.locked = false; nl.visible = true;
+      nl.origin = "projected";
+      nl.name = (l.name || l.kind || "Line") + " (proj. " + (src.name || "section") + ")";
+      redo.push({ op: "add_line", line: nl });
+      undo.unshift({ op: "delete_line", id: nl.id });
+      refs.push({ type: "line", id: nl.id });
+    }
+    for (const d of dips) {
+      if (!isFinite(d.s) || !isFinite(d.z)) continue;
+      const nd = projectDip(d, map);
+      if (!isFinite(nd.s) || !isFinite(nd.z)) continue;
+      redo.push({ op: "add_dip", dip: nd });
+      undo.unshift({ op: "delete_dip", id: nd.id });
+      refs.push({ type: "dip", id: nd.id });
+    }
+    if (!redo.length) { SW.view.status("Project to trace: nothing could be projected."); return; }
+
+    const how = opts.mode === "trend"
+      ? "along " + opts.trend + "/" + opts.plunge : "orthogonally";
+    // el undo de cada sección es propio: se cambia a la de destino y la
+    // operación queda en SU historia
+    SW.sections.switchTo(dst.id);
+    SW.undo.push({ label: "Project " + refs.length + " item(s) from " + (src.name || "section"),
+                   redo: redo, undo: undo });
+    SW.view.setSelection(refs);
+    SW.view.requestDraw();
+    SW.view.status("Projected " + refs.length + " item(s) from " + (src.name || "section") +
+                   " onto " + (dst.name || "section") + " " + how + ".");
+  }
+
+  SW.actions.projectToTrace = function () {
+    const src = SW.model.state.sec, U = SW.ui;
+    if (!src.geo_trace) {
+      SW.view.status("Project to trace: this section has no georeferenced trace " +
+                     "(draw one on the Map, or import a 3D shapefile / SEG-Y).");
+      return;
+    }
+    const nSel = SW.view.selectedLines().length +
+                 (SW.view.selectedDips ? SW.view.selectedDips().length : 0);
+    if (!nSel) { SW.view.status("Project to trace: select the lines and/or dips to project first."); return; }
+    const T = targets();
+    if (!T.length) {
+      SW.view.status("Project to trace: no other section with a trace — add one from the Map " +
+                     "(\"Add as new section\").");
+      return;
+    }
+    let dstSel, modeSel, trendInp, plungeInp;
+    U.modal({
+      title: "Project to trace",
+      build: function (body) {
+        U.note(body, nSel + " selected item(s) from \"" + (src.name || "section") +
+          "\" will be copied onto the chosen section's trace. Orthogonal keeps " +
+          "each point's elevation; trend/plunge moves it along that line " +
+          "(plunge positive downwards) until it meets the trace's vertical plane.");
+        dstSel = U.select(T.map(x => ({ value: x.id, label: x.name || "Untitled section" })));
+        U.row(body, "Target section", dstSel);
+        modeSel = U.select([{ value: "ortho", label: "Orthogonal" },
+                            { value: "trend", label: "Along trend / plunge" }], "ortho");
+        U.row(body, "Projection", modeSel);
+        trendInp = U.numberInput(0, "any", 0, 360);
+        const tr = U.row(body, "Trend (°)", trendInp, "Azimuth of the projection line, 0–360° from north");
+        plungeInp = U.numberInput(0, "any", -90, 90);
+        const pr = U.row(body, "Plunge (°)", plungeInp,
+                         "Inclination of the projection line below the horizontal, towards the trend");
+        const sync = function () {
+          const on = modeSel.value === "trend";
+          tr.style.display = on ? "" : "none";
+          pr.style.display = on ? "" : "none";
+        };
+        modeSel.addEventListener("change", sync);
+        sync();
+      },
+      buttons: [
+        { label: "Cancel" },
+        { label: "Project", primary: true, action: function () {
+            const trend = ((+trendInp.value || 0) % 360 + 360) % 360;
+            const plunge = Math.max(-89.9, Math.min(89.9, +plungeInp.value || 0));
+            run(dstSel.value, { mode: modeSel.value, trend: trend, plunge: plunge });
+          } },
+      ],
+    });
+  };
 })();
 
 /* ==== js/io/rasters.js ====
@@ -27474,6 +27647,8 @@ SW.view = (function () {
         btn.click();
         return true;
       }
+      case "smooth": SW.actions.smoothSelected(); return true;
+      case "simplify": SW.actions.simplifySelected(); return true;
       case "undo": SW.undo.undo(); requestDraw(); return true;
       case "redo": SW.undo.redo(); requestDraw(); return true;
       case "duplicate": SW.actions.duplicateSelected(); return true;
@@ -27570,8 +27745,12 @@ SW.view = (function () {
     const settingsBtn = $("settings-btn");
     if (settingsBtn) settingsBtn.addEventListener("click",
                                                   () => SW.settings.open("symbols"));
-    const setupBtn = $("setup-btn");
-    if (setupBtn) setupBtn.addEventListener("click", SW.project.sectionSetup);
+    const aboutBtn = $("about-btn");
+    if (aboutBtn) aboutBtn.addEventListener("click",
+                                            () => SW.settings.open("about"));
+    const projectBtn = $("project-trace-btn");
+    if (projectBtn) projectBtn.addEventListener("click",
+                                                () => SW.actions.projectToTrace());
 
     $("new-btn").addEventListener("click", SW.project.newProject);
     $("open-btn").addEventListener("click", SW.project.openFile);
@@ -29138,115 +29317,6 @@ SW.project = (function () {
     });
   }
 
-  /* -- diálogo de sección --------------------------------------------------- */
-  function sectionSetup() {
-    const s = sec();
-    const U = SW.ui;
-    const du = s.display_units || { h: "km", v: "km" };
-    let name, len, zmin, zmax, left, right, uh, uv, notes;
-
-    U.modal({
-      title: "Section setup",
-      build: function (body) {
-        U.note(body, "The box below is the nominal frame of the section: it " +
-          "sets what \"Zoom extent\" shows and where auto-extended lines " +
-          "stop. You can always draw outside it. Values are entered in the " +
-          "display units chosen here; internally everything is metres.");
-
-        name = U.textInput(s.name);
-        U.row(body, "Name", name);
-
-        uh = U.unitSelect(du.h);
-        U.row(body, "Horizontal unit", uh);
-        uv = U.unitSelect(du.v);
-        U.row(body, "Vertical unit", uv);
-
-        len = U.numberInput(SW.units.toDisplay(s.length, du.h), "any", 0.0001);
-        U.row(body, "Length", len);
-        zmax = U.numberInput(SW.units.toDisplay(s.z_max, du.v), "any");
-        U.row(body, "Top elevation", zmax);
-        zmin = U.numberInput(SW.units.toDisplay(s.z_min, du.v), "any");
-        U.row(body, "Bottom elevation", zmin);
-
-        left = U.textInput(s.label_left);
-        U.row(body, "Left-hand label", left,
-              "Shown above the left edge — e.g. W, SW, or A");
-        right = U.textInput(s.label_right);
-        U.row(body, "Right-hand label", right,
-              "Shown above the right edge — e.g. E, NE, or A'");
-        // cambiar un extremo cambia solo el otro (W->E, SW->NE, A->A')
-        left.addEventListener("input", function () {
-          right.value = SW.orientation.opposite(left.value);
-        });
-        right.addEventListener("input", function () {
-          left.value = SW.orientation.opposite(right.value);
-        });
-
-        notes = document.createElement("textarea");
-        notes.rows = 3;
-        notes.style.cssText = "width:100%;font:inherit;padding:4px 6px;" +
-          "border:1px solid var(--grid-strong);border-radius:4px;";
-        notes.value = s.notes || "";
-        const r = document.createElement("div");
-        r.className = "row";
-        r.style.flexDirection = "column";
-        r.style.alignItems = "stretch";
-        const lab = document.createElement("label");
-        lab.textContent = "Notes";
-        r.appendChild(lab);
-        r.appendChild(notes);
-        body.appendChild(r);
-
-        // Cambiar la unidad re-expresa los valores YA escritos en la nueva
-        // unidad, en vez de reinterpretarlos: si el usuario venía viendo
-        // 40 km y pasa a m, tiene que leer 40000, no 40.
-        function reexpress(inp, oldU, newU) {
-          const m = SW.units.toMetres(+inp.value || 0, oldU);
-          inp.value = SW.units.toDisplay(m, newU);
-        }
-        let curH = du.h, curV = du.v;
-        uh.addEventListener("change", function () {
-          reexpress(len, curH, uh.value); curH = uh.value;
-        });
-        uv.addEventListener("change", function () {
-          reexpress(zmax, curV, uv.value);
-          reexpress(zmin, curV, uv.value);
-          curV = uv.value;
-        });
-      },
-      buttons: [
-        { label: "Cancel" },
-        { label: "Apply", primary: true, action: function () {
-            const hu = uh.value, vu = uv.value;
-            const before = {
-              name: s.name, length: s.length, z_min: s.z_min, z_max: s.z_max,
-              label_left: s.label_left, label_right: s.label_right,
-              display_units: SW.model.clone(s.display_units),
-              notes: s.notes || "",
-            };
-            let zLo = SW.units.toMetres(+zmin.value || 0, vu);
-            let zHi = SW.units.toMetres(+zmax.value || 0, vu);
-            if (zHi < zLo) { const t = zLo; zLo = zHi; zHi = t; }
-            const after = {
-              name: name.value.trim() || "Untitled section",
-              length: Math.max(1, SW.units.toMetres(+len.value || 0, hu)),
-              z_min: zLo, z_max: zHi,
-              label_left: left.value, label_right: right.value,
-              display_units: { h: hu, v: vu },
-              notes: notes.value,
-            };
-            SW.undo.push({
-              label: "Section setup",
-              redo: [{ op: "set_section_props", props: after }],
-              undo: [{ op: "set_section_props", props: before }],
-            });
-            SW.view.syncFromDocument(true);
-            updateTitle();
-          } },
-      ],
-    });
-  }
-
   /* -- arranque ------------------------------------------------------------ */
   function boot() {
     const saved = loadAutosaved();
@@ -29285,7 +29355,7 @@ SW.project = (function () {
 
   return { boot, touch, newProject, openFile, saveFile, saveFileAs,
            openFromDrive, saveToDrive, driveFile: () => drive,
-           sectionSetup, adopt,
+           adopt,
            clearAutosave, updateTitle, serialize, serializeFull,
            isDirty: () => dirty };
 })();
